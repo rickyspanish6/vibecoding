@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	App Sandbox is intentionally disabled: creating aggregate devices and
+	setting the system default output device via the CoreAudio HAL is not
+	permitted inside the App Store sandbox. This app targets Developer ID
+	distribution (hardened runtime on, sandbox off). See README for the
+	sandbox research notes.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

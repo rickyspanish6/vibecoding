@@ -1,0 +1,3556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>25B — Experience Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0c0c0e;
+  --bg-card:   #131316;
+  --bg-hover:  #1a1a1f;
+  --bg-modal:  #111114;
+  --border:    rgba(255,255,255,0.06);
+  --border-md: rgba(255,255,255,0.10);
+  --border-hi: rgba(255,255,255,0.18);
+  --text:      #ededeb;
+  --text-2:    #888886;
+  --text-3:    #505050;
+  --gold:      #c9a96e;
+  --gold-lt:   #e2c998;
+  --gold-dim:  rgba(201,169,110,0.10);
+  --gold-glow: rgba(201,169,110,0.22);
+  --teal:      #5ecfbe;
+  --teal-dim:  rgba(94,207,190,0.10);
+  --red:       #e05a52;
+  --red-dim:   rgba(224,90,82,0.12);
+  --green:     #5ecf7a;
+  --green-dim: rgba(94,207,122,0.12);
+  --amber:     #f5a623;
+  --amber-dim: rgba(245,166,35,0.12);
+  --white-dim: rgba(255,255,255,0.04);
+  --radius:    10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --sidebar-w: 204px;
+  --topbar-h:  60px;
+  --ease:      cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+.shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: var(--topbar-h) 1fr; height: 100vh; overflow: hidden; }
+
+/* ── TOPBAR ── */
+.topbar { grid-column: 1 / -1; display: flex; align-items: center; background: var(--bg); border-bottom: 1px solid var(--border); z-index: 50; }
+
+.topbar-brand { width: var(--sidebar-w); padding: 0 20px; display: flex; align-items: center; gap: 11px; flex-shrink: 0; border-right: 1px solid var(--border); height: 100%; }
+
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(145deg, #c9a96e 0%, #7a5a2a 100%); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 600; color: #0c0c0e; flex-shrink: 0; letter-spacing: 0.02em; }
+
+.brand-name { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; line-height: 1.2; }
+.brand-sub  { font-size: 10px; color: var(--text-3); letter-spacing: 0.04em; margin-top: 1px; }
+
+.topbar-body { flex: 1; display: flex; align-items: center; padding: 0 24px; gap: 6px; }
+
+/* Tab switcher in topbar */
+.tab-bar { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
+
+.tab-btn { padding: 5px 16px; border-radius: 6px; border: none; background: none; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.18s; letter-spacing: 0.02em; white-space: nowrap; }
+.tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+.tab-btn.active { background: var(--bg-card); color: var(--text); border: 1px solid var(--border-md); }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; padding-right: 24px; margin-left: auto; }
+
+.now-pill { display: flex; align-items: center; gap: 8px; padding: 6px 14px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 40px; font-size: 11px; color: var(--text-2); max-width: 210px; }
+
+.now-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; transition: background 0.3s; }
+.now-dot.live { background: var(--gold); animation: nowpulse 2.4s ease-in-out infinite; }
+@keyframes nowpulse { 0%,100%{box-shadow:0 0 0 0 var(--gold-glow)} 50%{box-shadow:0 0 0 5px transparent} }
+
+.now-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ip-wrap { display: flex; align-items: center; gap: 7px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; height: 32px; }
+.ip-tag   { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+.ip-input { background: none; border: none; outline: none; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11px; width: 114px; }
+.ip-input::placeholder { color: var(--text-3); }
+
+.settings-btn { display: flex; align-items: center; gap: 6px; padding: 0 14px; height: 32px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.18s; letter-spacing: 0.02em; white-space: nowrap; }
+.settings-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+
+/* ── SIDEBAR ── */
+.sidebar { background: var(--bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 0 0; overflow-y: auto; }
+.sidebar::-webkit-scrollbar { width: 0; }
+
+.nav-group-label { font-size: 9px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-3); padding: 0 18px 8px; }
+
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 9px 18px; cursor: pointer; font-size: 12.5px; font-weight: 400; color: var(--text-2); border: none; background: none; width: 100%; text-align: left; transition: color 0.15s, background 0.15s; position: relative; text-decoration: none; }
+.nav-item::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%) scaleY(0); width: 2px; height: 16px; background: var(--gold); border-radius: 0 2px 2px 0; transition: transform 0.22s var(--ease); }
+.nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.nav-item.active { color: var(--gold-lt); }
+.nav-item.active::before { transform: translateY(-50%) scaleY(1); }
+.nav-icon { width: 14px; height: 14px; opacity: 0.35; flex-shrink: 0; transition: opacity 0.15s; }
+.nav-item:hover .nav-icon, .nav-item.active .nav-icon { opacity: 0.85; }
+
+.sidebar-spacer { flex: 1; min-height: 20px; }
+.sidebar-footer { padding: 14px 18px 18px; border-top: 1px solid var(--border); }
+.footer-label { font-size: 9px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); margin-bottom: 7px; }
+.footer-scene { font-size: 12px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.footer-time  { font-size: 10px; color: var(--text-3); }
+
+/* ── MAIN PANELS ── */
+.main { overflow-y: auto; padding: 30px 28px 64px; display: none; }
+.main.active { display: block; }
+.main::-webkit-scrollbar { width: 3px; }
+.main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ── SECTION ── */
+.section { margin-bottom: 48px; }
+.section-hd { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.section-title { font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 500; color: var(--text); white-space: nowrap; }
+.section-rule { flex: 1; height: 1px; background: var(--border); }
+.section-ct { font-size: 10px; color: var(--text-3); white-space: nowrap; }
+
+/* ── GRIDS ── */
+.grid   { display: grid; gap: 12px; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* ── SCENE CARD ── */
+.scene-btn { position: relative; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; overflow: hidden; transition: border-color 0.22s, transform 0.22s var(--ease), box-shadow 0.22s; display: flex; flex-direction: column; text-align: left; padding: 0; user-select: none; }
+.scene-btn:hover { border-color: var(--border-md); transform: translateY(-2px); box-shadow: 0 12px 36px rgba(0,0,0,0.45); }
+.scene-btn:active { transform: scale(0.99); box-shadow: none; }
+.scene-btn.active { border-color: rgba(201,169,110,0.5); box-shadow: 0 0 0 1px rgba(201,169,110,0.12), 0 8px 32px rgba(201,169,110,0.08); }
+.scene-btn.triggering { animation: cardflash 0.55s var(--ease); }
+@keyframes cardflash { 0%{box-shadow:0 0 0 0 var(--gold-glow)} 55%{box-shadow:0 0 0 12px transparent} 100%{box-shadow:0 0 0 1px rgba(201,169,110,0.12)} }
+
+.scene-thumb { width: 100%; aspect-ratio: 16/9; background: #090909; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; }
+.scene-thumb-ph { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 400; color: rgba(255,255,255,0.06); letter-spacing: 0.12em; user-select: none; }
+.scene-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0.72; transition: opacity 0.3s, transform 0.45s var(--ease); }
+.scene-btn:hover .scene-thumb img { opacity: 0.92; transform: scale(1.03); }
+.scene-btn.active .scene-thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(145deg, rgba(201,169,110,0.07) 0%, transparent 55%); pointer-events: none; }
+.live-badge { position: absolute; top: 8px; right: 8px; background: var(--gold); color: #0c0c0e; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 5px; display: none; }
+.scene-btn.active .live-badge { display: block; }
+.scene-info { padding: 11px 13px 13px; }
+.scene-name { font-size: 12px; font-weight: 500; color: var(--text); margin-bottom: 3px; }
+.scene-meta { font-size: 10px; color: var(--text-3); }
+.scene-meta.ok { color: rgba(94,207,190,0.7); }
+
+/* ── SCENE TAGS ── */
+.scene-tags-row { display: flex; align-items: center; gap: 4px; margin-top: 6px; flex-wrap: wrap; min-height: 18px; }
+.scene-tags { display: contents; }
+.tag-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 9px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; padding: 2px 7px 2px 8px; border-radius: 20px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09); color: var(--text-3); cursor: pointer; transition: all 0.15s; user-select: none; white-space: nowrap; }
+.tag-pill:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18); color: var(--text-2); }
+.tag-pill.filter-active { background: rgba(201,169,110,0.14); border-color: rgba(201,169,110,0.4); color: var(--gold-lt); }
+.tag-remove { font-size: 9px; line-height: 1; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+.tag-editing .tag-remove { opacity: 0.5; pointer-events: auto; }
+.tag-editing .tag-remove:hover { opacity: 1; }
+.scene-tag-edit-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; background: none; color: var(--text-3); cursor: pointer; opacity: 0; transition: opacity 0.15s; padding: 0; margin-left: auto; flex-shrink: 0; font-size: 11px; }
+.scene-btn:hover .scene-tag-edit-btn,
+.text-btn:hover .scene-tag-edit-btn,
+.demo-btn:hover .scene-tag-edit-btn { opacity: 0.6; }
+.scene-tag-edit-btn:hover { opacity: 1 !important; color: var(--gold-lt); }
+.tag-editing .scene-tag-edit-btn { opacity: 1; color: var(--gold-lt); }
+.scene-tag-add { display: none; align-items: center; font-size: 9px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-3); cursor: pointer; padding: 2px 7px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 20px; background: none; white-space: nowrap; transition: all 0.15s; }
+.scene-tag-add:hover { border-color: var(--border-md); color: var(--text-2); }
+.tag-editing .scene-tag-add { display: inline-flex; }
+.scene-tag-input { font-size: 9px; background: rgba(255,255,255,0.06); border: 1px solid var(--gold); border-radius: 20px; color: var(--text); padding: 2px 8px; outline: none; width: 72px; font-family: 'Inter',sans-serif; display: none; }
+
+/* ── TAG FILTER BAR ── */
+.tag-filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 24px; padding: 10px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.tag-filter-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-right: 2px; white-space: nowrap; }
+.tag-pill-wrap { display: inline-flex; align-items: center; gap: 3px; }
+.tag-filter-pill { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; padding: 4px 12px; border-radius: 20px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-3); cursor: pointer; transition: all 0.15s; user-select: none; white-space: nowrap; }
+.tag-filter-pill:hover { background: rgba(255,255,255,0.08); border-color: var(--border-md); color: var(--text-2); }
+.tag-filter-pill.active { background: rgba(201,169,110,0.14); border-color: rgba(201,169,110,0.4); color: var(--gold-lt); }
+.tag-rename-icon { display: none; margin-left: 5px; font-size: 10px; color: var(--text-3); cursor: pointer; transition: color 0.15s; vertical-align: middle; }
+.tag-rename-icon.visible { display: inline; }
+.tag-rename-icon:hover { color: var(--gold-lt); }
+.tag-rename-input { font-size: 10px; font-family: 'Inter',sans-serif; font-weight: 600; letter-spacing: 0.07em; text-transform: lowercase; background: rgba(255,255,255,0.06); border: 1px solid var(--gold); border-radius: 20px; color: var(--text); padding: 3px 11px; outline: none; width: 90px; }
+.tag-filter-divider { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+.tag-filter-clear { font-size: 10px; font-weight: 500; color: var(--text-3); cursor: pointer; padding: 4px 10px; border-radius: 20px; border: 1px solid transparent; background: none; transition: all 0.15s; display: none; white-space: nowrap; }
+.tag-filter-clear:hover { border-color: var(--border); color: var(--text-2); }
+.tag-filter-clear.visible { display: block; }
+.tag-manage-btn { font-size: 10px; font-weight: 500; color: var(--text-3); cursor: pointer; padding: 4px 11px; border-radius: 20px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); transition: all 0.15s; white-space: nowrap; }
+.tag-manage-btn:hover { border-color: var(--border-md); color: var(--text-2); background: rgba(255,255,255,0.08); }
+.tag-inline-add-btn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.18); background: none; color: var(--text-3); cursor: pointer; font-size: 14px; line-height: 1; transition: all 0.15s; flex-shrink: 0; padding: 0; }
+.tag-inline-add-btn:hover { border-color: var(--gold); color: var(--gold-lt); background: rgba(201,169,110,0.08); }
+.tag-inline-input { display: none; font-size: 10px; font-family: 'Inter',sans-serif; background: rgba(255,255,255,0.06); border: 1px solid var(--gold); border-radius: 20px; color: var(--text); padding: 3px 10px; outline: none; width: 90px; }
+/* Flat tag view */
+.flat-tag-section .section-title { text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; font-weight: 600; }
+/* Tag manager modal */
+.tag-manager-box { width: 460px; max-width: 92vw; }
+.tag-manager-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.tag-manager-row:last-child { border-bottom: none; }
+.tag-manager-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'Inter',sans-serif; font-size: 12px; padding: 5px 10px; outline: none; transition: border-color 0.15s; min-width: 0; }
+.tag-manager-input:focus { border-color: var(--gold); }
+.tag-manager-count { font-size: 10px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; min-width: 56px; text-align: right; }
+.tag-manager-delete { width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent; background: none; color: var(--text-3); cursor: pointer; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+.tag-manager-delete:hover { background: rgba(220,50,50,0.12); border-color: rgba(220,50,50,0.3); color: #e06060; }
+.tag-manager-new { display: flex; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); align-items: center; }
+.tag-manager-new .cfg-input { flex: 1; }
+
+/* ── TEXT BUTTONS ── */
+.text-btn { display: flex; align-items: center; justify-content: space-between; padding: 10px 13px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; font-family: 'Inter', sans-serif; font-size: 12px; color: var(--text-2); text-align: left; transition: all 0.18s; user-select: none; }
+.text-btn:hover { border-color: var(--border-md); color: var(--text); background: var(--bg-hover); }
+.text-btn:active { transform: scale(0.99); }
+.text-btn.active { border-color: rgba(201,169,110,0.4); color: var(--gold-lt); background: var(--gold-dim); }
+.text-btn.triggering { animation: cardflash 0.55s var(--ease); }
+.tb-chevron { width: 13px; height: 13px; opacity: 0.2; flex-shrink: 0; transition: opacity 0.15s; }
+.text-btn:hover .tb-chevron { opacity: 0.5; }
+.text-btn.active .tb-chevron { opacity: 0.7; }
+
+/* ── DEMO BUTTONS ── */
+.demo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.demo-btn { padding: 16px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); cursor: pointer; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 400; color: var(--text-2); text-align: left; transition: all 0.2s var(--ease); display: flex; align-items: center; justify-content: space-between; gap: 10px; user-select: none; }
+.demo-btn:hover { border-color: var(--border-md); color: var(--text); background: var(--bg-hover); transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,0.35); }
+.demo-btn:active { transform: scale(0.99); }
+.demo-btn.featured { border-color: rgba(201,169,110,0.22); background: rgba(201,169,110,0.05); color: var(--gold-lt); font-weight: 500; }
+.demo-btn.featured:hover { border-color: rgba(201,169,110,0.45); background: rgba(201,169,110,0.10); }
+.demo-btn.active { border-color: rgba(201,169,110,0.5); background: var(--gold-dim); color: var(--gold-lt); }
+.demo-btn.triggering { animation: cardflash 0.55s var(--ease); }
+.demo-play { width: 30px; height: 30px; border-radius: 8px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.18s; }
+.demo-btn:hover .demo-play { background: rgba(255,255,255,0.08); }
+.demo-btn.featured .demo-play, .demo-btn.active .demo-play { background: var(--gold-dim); border-color: rgba(201,169,110,0.2); }
+.demo-play svg { opacity: 0.35; }
+.demo-btn.featured .demo-play svg, .demo-btn.active .demo-play svg { opacity: 0.75; }
+
+/* ── ALPHA LAYOUT ── */
+.alpha-layout { display: grid; grid-template-columns: 184px 1fr; gap: 12px; }
+.alpha-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── SYSTEM STATUS BAR ── */
+.sys-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 20px;
+}
+
+.sys-status-indicators {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sys-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+
+.sys-dot.ok         { background: var(--green); }
+.sys-dot.standby    { background: rgba(245,166,35,0.25); }
+.sys-dot.on         { background: var(--green); box-shadow: 0 0 5px rgba(94,207,122,0.6); }
+.sys-dot.ready      { background: rgba(245,166,35,0.25); }
+.sys-dot.error      { background: var(--red); animation: blink 1s infinite; }
+.sys-dot.unknown    { background: var(--text-3); animation: blink 1.5s infinite; }
+.sys-dot.offline    { background: var(--red); }
+
+.sys-status-power { font-size: 12px; color: var(--text-2); margin-left: 12px; }
+.sys-status-summary {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.sys-status-summary strong { color: var(--text); font-weight: 600; }
+.sys-status-summary .ok    { color: var(--green); font-weight: 500; }
+.sys-status-summary .warn  { color: var(--amber); font-weight: 500; }
+.sys-status-summary .on    { color: var(--teal); font-weight: 500; }
+
+/* ── FILTER BAR ── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  padding: 6px 28px 6px 12px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.18s, color 0.18s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23505050' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.filter-select:hover { border-color: var(--border-md); color: var(--text); }
+.filter-select:focus { border-color: var(--border-hi); }
+.filter-select.active { border-color: var(--gold); color: var(--gold-lt); background-color: var(--gold-dim); }
+
+.filter-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.filter-clear {
+  padding: 6px 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-3);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: none;
+}
+
+.filter-clear.visible { display: block; }
+.filter-clear:hover { border-color: var(--border-md); color: var(--text); }
+
+.filter-results {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
+/* ── PROJECTOR TAB ── */
+.proj-section { margin-bottom: 40px; }
+
+.proj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+
+.proj-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.proj-card-head {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.proj-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.proj-model {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.proj-ip {
+  font-size: 10px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+/* State indicators */
+.proj-status-row {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  transition: all 0.3s;
+}
+
+.status-badge .badge-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+/* Power states */
+.badge-on      { background: var(--green-dim); border-color: rgba(94,207,122,0.25); color: var(--green); }
+.badge-on .badge-dot { background: var(--green); }
+.badge-ready   { background: var(--teal-dim); border-color: rgba(94,207,190,0.25); color: var(--teal); }
+.badge-ready .badge-dot { background: var(--teal); }
+.badge-standby { background: var(--amber-dim); border-color: rgba(245,166,35,0.25); color: var(--amber); }
+.badge-standby .badge-dot { background: var(--amber); }
+.badge-off     { background: var(--white-dim); border-color: var(--border); color: var(--text-3); }
+.badge-off .badge-dot { background: var(--text-3); }
+.badge-transitioning { background: var(--amber-dim); border-color: rgba(245,166,35,0.25); color: var(--amber); }
+.badge-transitioning .badge-dot { background: var(--amber); animation: blink 0.8s ease-in-out infinite; }
+.badge-error   { background: var(--red-dim); border-color: rgba(224,90,82,0.25); color: var(--red); }
+.badge-error .badge-dot { background: var(--red); }
+.badge-unknown { background: var(--white-dim); border-color: var(--border); color: var(--text-3); }
+.badge-unknown .badge-dot { background: var(--text-3); animation: blink 1.2s ease-in-out infinite; }
+
+/* Shutter states */
+.badge-open    { background: var(--teal-dim); border-color: rgba(94,207,190,0.25); color: var(--teal); }
+.badge-open .badge-dot { background: var(--teal); }
+.badge-closed  { background: var(--red-dim); border-color: rgba(224,90,82,0.25); color: var(--red); }
+.badge-closed .badge-dot { background: var(--red); }
+/* ConvertIP stream badge on projector cards */
+.badge-stream  { background: var(--teal-dim); border-color: rgba(94,207,190,0.25); color: var(--teal); }
+.badge-stream .badge-dot { background: var(--teal); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+@keyframes flash-red {
+  0%,100% { border-color: var(--border); background: var(--bg-card); }
+  50%      { border-color: rgba(224,90,82,0.8); background: rgba(224,90,82,0.08); box-shadow: 0 0 0 1px rgba(224,90,82,0.4); }
+}
+.proj-card.offline { animation: flash-red 1.4s ease-in-out infinite; }
+@keyframes flash-red {
+  0%,100% { border-color: var(--border); background: var(--bg-card); }
+  50%      { border-color: rgba(224,90,82,0.8); background: rgba(224,90,82,0.08); box-shadow: 0 0 0 1px rgba(224,90,82,0.4); }
+}
+.proj-card.offline { animation: flash-red 1.4s ease-in-out infinite; }
+
+.proj-divider { height: 1px; background: var(--border); }
+
+/* Controls row */
+.proj-controls {
+  padding: 10px 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.proj-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--white-dim);
+  color: var(--text-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.proj-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.proj-btn:active { transform: scale(0.97); }
+.proj-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+.proj-btn.power-on  { border-color: rgba(94,207,122,0.25); color: var(--green); background: var(--green-dim); flex: 1; height: 40px; padding: 0; font-size: 18px; justify-content: center; }
+.proj-btn.power-on:hover { background: rgba(94,207,122,0.18); border-color: rgba(94,207,122,0.4); }
+.proj-btn.power-off { border-color: rgba(224,90,82,0.2); color: var(--red); background: var(--red-dim); flex: 1; height: 40px; padding: 0; font-size: 18px; justify-content: center; }
+.proj-btn.power-off:hover { background: rgba(224,90,82,0.18); border-color: rgba(224,90,82,0.4); }
+.proj-btn.shutter   { border-color: rgba(94,207,190,0.2); color: var(--teal); background: var(--teal-dim); }
+.proj-btn.shutter:hover { background: rgba(94,207,190,0.18); border-color: rgba(94,207,190,0.4); }
+
+.proj-btn-shutter { flex: 0; font-size: 10px; padding: 0 10px; height: 40px; color: #4a3070; background: rgba(40,20,80,0.35); border-color: rgba(60,30,100,0.4); letter-spacing: 0.04em; }
+.proj-btn-shutter:hover { color: #7c5cbf; border-color: rgba(90,50,160,0.45); background: rgba(60,30,110,0.45); }
+
+/* ── PROJECTOR METRICS ROW ── */
+.proj-metrics {
+  padding: 2px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.proj-metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.metric-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.metric-value {
+  font-size: 11px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.metric-value.temp-ok   { color: var(--green); }
+.metric-value.temp-warn { color: var(--amber); }
+.metric-value.temp-hot  { color: var(--red); }
+
+.proj-expand-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+  font-family: 'Inter', sans-serif;
+}
+.proj-expand-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.proj-expand-btn.open  { color: var(--gold-lt); border-color: rgba(201,169,110,0.3); background: var(--gold-dim); }
+
+/* Projector tab toolbar */
+.proj-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.proj-toolbar-label {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-right: 4px;
+}
+
+.proj-poll-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--white-dim);
+  color: var(--text-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.proj-poll-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.proj-poll-btn.polling { color: var(--teal); border-color: rgba(94,207,190,0.3); background: var(--teal-dim); }
+.proj-poll-btn.polling .poll-icon { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.bulk-action-btn {
+  padding: 6px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--white-dim);
+  color: var(--text-2);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.bulk-action-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.bulk-action-btn.danger { color: var(--red); border-color: rgba(224,90,82,0.2); background: var(--red-dim); }
+.bulk-action-btn.danger:hover { background: rgba(224,90,82,0.18); }
+.bulk-action-btn.amber { color: var(--amber); border-color: rgba(245,166,35,0.25); background: var(--amber-dim); }
+.bulk-action-btn.amber:hover { background: rgba(245,166,35,0.18); }
+.bulk-action-btn.inactive { opacity: 0.35; pointer-events: none; }
+
+.poll-status { font-size: 10px; color: var(--text-3); }
+.poll-status.live { color: var(--teal); }
+
+/* ── TOAST ── */
+.toast { position: fixed; bottom: 26px; right: 26px; background: #1a1a1f; border: 1px solid var(--border-md); border-radius: var(--radius-lg); padding: 12px 18px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text); opacity: 0; transform: translateY(8px) scale(0.97); transition: all 0.28s var(--ease); pointer-events: none; z-index: 999; min-width: 190px; box-shadow: 0 20px 50px rgba(0,0,0,0.55); }
+.toast.show { opacity: 1; transform: translateY(0) scale(1); }
+.toast-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.toast.success .toast-dot { background: var(--gold); }
+.toast.error   .toast-dot { background: var(--red); }
+.toast.info    .toast-dot { background: var(--teal); }
+.toast-msg  { flex: 1; }
+.toast-time { font-size: 10px; color: var(--text-3); }
+
+/* ── MODAL ── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); z-index: 200; display: none; align-items: center; justify-content: center; padding: 24px; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--bg-modal); border: 1px solid var(--border-md); border-radius: var(--radius-xl); padding: 28px; width: 580px; max-height: 86vh; overflow-y: auto; box-shadow: 0 40px 80px rgba(0,0,0,0.65); }
+.modal::-webkit-scrollbar { width: 3px; }
+.modal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.modal-hd { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 5px; }
+.modal-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 500; color: var(--text); }
+.modal-x { width: 28px; height: 28px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-2); font-size: 13px; transition: all 0.15s; flex-shrink: 0; }
+.modal-x:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.modal-desc { font-size: 11px; color: var(--text-3); margin-bottom: 20px; line-height: 1.65; }
+.cfg-header { display: grid; grid-template-columns: 1fr 158px 78px; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.cfg-header span { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+.cfg-rows { display: flex; flex-direction: column; gap: 5px; max-height: 350px; overflow-y: auto; padding-right: 4px; }
+.cfg-rows::-webkit-scrollbar { width: 3px; }
+.cfg-rows::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.cfg-row { display: grid; grid-template-columns: 1fr 158px 78px; gap: 8px; align-items: center; }
+.cfg-lbl { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cfg-input { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: 'Inter', sans-serif; font-size: 11px; padding: 6px 9px; outline: none; width: 100%; transition: border-color 0.18s; }
+.cfg-input:focus { border-color: var(--border-hi); }
+.cfg-input::placeholder { color: var(--text-3); }
+.modal-rule { height: 1px; background: var(--border); margin: 20px 0; }
+.bulk-lbl { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); margin-bottom: 8px; }
+.bulk-ta { width: 100%; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 10.5px; padding: 10px 12px; outline: none; resize: vertical; min-height: 72px; transition: border-color 0.18s; line-height: 1.6; }
+.bulk-ta:focus { border-color: var(--border-hi); }
+.bulk-ta::placeholder { color: var(--text-3); }
+.modal-actions { display: flex; gap: 8px; margin-top: 20px; }
+.btn-gold  { flex: 1; padding: 10px 20px; background: var(--gold); border: none; border-radius: 8px; color: #0c0c0e; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; letter-spacing: 0.02em; transition: opacity 0.18s; }
+.btn-gold:hover { opacity: 0.87; }
+.btn-ghost { padding: 10px 16px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 12px; cursor: pointer; transition: all 0.18s; }
+.btn-ghost:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+.btn-teal { padding: 7px 14px; background: var(--teal-dim); border: 1px solid rgba(94,207,190,0.18); border-radius: 7px; color: var(--teal); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: all 0.18s; letter-spacing: 0.02em; }
+.btn-teal:hover { background: rgba(94,207,190,0.14); border-color: rgba(94,207,190,0.3); }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ── CONVERT IP TAB ── */
+.cip-section { margin-bottom: 36px; }
+
+.cip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.cip-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px 10px;
+  transition: border-color 0.2s;
+  position: relative;
+}
+
+.cip-card.online   { border-color: rgba(94,207,122,0.18); }
+.cip-card.offline  { border-color: rgba(224,90,82,0.25); background: rgba(224,90,82,0.03); }
+.cip-card.selected { border-color: var(--amber) !important; background: rgba(245,166,35,0.04); box-shadow: 0 0 0 1px rgba(245,166,35,0.18); cursor: pointer; }
+.cip-card { cursor: default; }
+
+.cip-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.cip-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cip-ip {
+  font-size: 9px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.cip-type-badge {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.cip-type-tx { background: rgba(201,169,110,0.12); color: var(--gold); border: 1px solid rgba(201,169,110,0.22); }
+.cip-type-rx { background: rgba(99,160,255,0.10); color: #7fb4ff; border: 1px solid rgba(99,160,255,0.22); }
+
+.cip-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.cip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.cip-badge-dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+
+.cip-badge-online  { background: var(--green-dim);  border-color: rgba(94,207,122,0.25);  color: var(--green); }
+.cip-badge-online  .cip-badge-dot { background: var(--green); }
+.cip-badge-offline { background: var(--red-dim);    border-color: rgba(224,90,82,0.25);   color: var(--red); }
+.cip-badge-offline .cip-badge-dot { background: var(--red); animation: blink 1s infinite; }
+.cip-badge-wait    { background: var(--white-dim);  border-color: var(--border);          color: var(--text-3); }
+.cip-badge-wait    .cip-badge-dot { background: var(--text-3); animation: blink 1.4s infinite; }
+
+.cip-badge-stream  { background: var(--teal-dim);   border-color: rgba(94,207,190,0.25);  color: var(--teal); }
+.cip-badge-stream  .cip-badge-dot { background: var(--teal); }
+.cip-badge-nostream { background: var(--white-dim); border-color: var(--border);          color: var(--text-3); }
+.cip-badge-nostream .cip-badge-dot { background: var(--text-3); }
+
+.cip-badge-ptp     { background: rgba(201,169,110,0.10); border-color: rgba(201,169,110,0.2); color: var(--gold); }
+.cip-badge-ptp     .cip-badge-dot { background: var(--gold); }
+.cip-badge-noptp   { background: var(--amber-dim); border-color: rgba(245,166,35,0.25);   color: var(--amber); }
+.cip-badge-noptp   .cip-badge-dot { background: var(--amber); animation: blink 1.2s infinite; }
+
+/* CIP toolbar */
+.cip-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  flex-wrap: wrap;
+}
+
+.cip-summary {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-left: auto;
+}
+
+.cip-summary .ok   { color: var(--green); font-weight: 500; }
+.cip-summary .warn { color: var(--amber); font-weight: 500; }
+.cip-summary .off  { color: var(--red);   font-weight: 500; }
+
+.cip-info {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 6px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.cip-info-item { display: flex; flex-direction: column; gap: 2px; }
+.cip-info-label {
+  font-size: 7.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+.cip-info-value {
+  font-size: 9.5px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cip-expand-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 1px 5px 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  user-select: none;
+}
+.cip-expand-btn:hover { color: var(--text); border-color: var(--border-md); background: var(--bg-hover); }
+.cip-expand-btn.open  { color: var(--text); border-color: var(--border-md); background: var(--bg-hover); }
+
+.cip-expand-panel {
+  display: none;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.cip-expand-panel.open { display: block; }
+
+/* ── CIP meta row (type badge + IP) — tile mode ───────────────────────────── */
+.cip-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+/* ── View toggle button group ─────────────────────────────────────────────── */
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.view-toggle-btn {
+  background: none;
+  border: none;
+  padding: 5px 8px;
+  cursor: pointer;
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.view-toggle-btn:hover  { color: var(--text); background: var(--bg-hover); }
+.view-toggle-btn.active { color: var(--text); background: var(--bg-hover); }
+
+/* ── Projector list view ──────────────────────────────────────────────────── */
+.proj-grid.list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.proj-grid.list-view .proj-card {
+  display: grid;
+  grid-template-columns: 175px 1fr auto;
+  grid-template-areas: "head status controls";
+  align-items: stretch;
+  overflow: visible;
+}
+.proj-grid.list-view .proj-card-head {
+  grid-area: head;
+  border-bottom: none;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px 14px;
+}
+.proj-grid.list-view .proj-status-row {
+  grid-area: status;
+  justify-content: flex-start;
+}
+.proj-grid.list-view .proj-metrics  { display: none !important; }
+.proj-grid.list-view .proj-divider  { display: none; }
+.proj-grid.list-view .proj-controls {
+  grid-area: controls;
+  border-top: none;
+  border-left: 1px solid var(--border);
+  padding: 8px 12px;
+}
+.proj-grid.list-view .proj-expand-btn { display: none; }
+.proj-grid.list-view .proj-btn { height: 34px; padding: 0 10px; font-size: 14px; }
+.proj-grid.list-view .proj-btn.power-on,
+.proj-grid.list-view .proj-btn.power-off { height: 34px; }
+
+/* ── ConvertIP list view ──────────────────────────────────────────────────── */
+.cip-grid.list-view {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cip-grid.list-view .cip-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0;
+}
+.cip-grid.list-view .cip-card-head {
+  width: 148px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  margin-bottom: 0;
+  align-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  border-right: 1px solid var(--border);
+}
+.cip-grid.list-view .cip-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cip-grid.list-view .cip-meta {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 4px;
+  width: 110px;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  margin-bottom: 0;
+  align-self: stretch;
+  border-right: 1px solid var(--border);
+}
+.cip-grid.list-view .cip-badges {
+  flex: 1;
+  min-width: 0;
+  padding: 0 10px;
+  align-self: center;
+  flex-wrap: nowrap;
+}
+.cip-grid.list-view .cip-info-block {
+  padding: 0 10px;
+  align-self: center;
+  border-left: 1px solid var(--border);
+}
+.cip-grid.list-view .cip-info-block .cip-info {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  grid-template-columns: unset;
+}
+.cip-grid.list-view .cip-info-block .cip-info .cip-info-item {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+}
+.cip-grid.list-view .cip-expand-panel {
+  flex-basis: 100%;
+  padding: 6px 12px;
+  margin-top: 0;
+  border-top: 1px solid var(--border);
+}
+.cip-nic-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0;
+}
+.cip-nic-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+.cip-nic-mac {
+  font-size: 9px;
+  color: var(--text-2);
+  font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.02em;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — desktop above 900 px is unchanged
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet / large phone (≤ 900 px) ──────────────────────────────────────── */
+@media (max-width: 900px) {
+  /* Single-column layout — sidebar hidden */
+  .shell   { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 100dvh; }
+  .sidebar { display: none; }
+
+  /* Topbar */
+  .topbar-brand { width: auto; border-right: none; padding: 0 14px; }
+  .brand-sub    { display: none; }
+  .topbar-body  { padding: 0 8px; }
+  .topbar-right { padding-right: 12px; gap: 6px; }
+  .ip-wrap      { display: none; }   /* CC IP accessible via Settings modal */
+  .now-pill     { max-width: 130px; }
+
+  /* Main panels */
+  .main { padding: 20px 16px 56px; }
+
+  /* Grids */
+  .proj-grid { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); }
+  .cip-grid  { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+  .grid-4    { grid-template-columns: repeat(2, 1fr); }
+
+  /* Toolbars & filter bar wrap */
+  .proj-toolbar, .cip-toolbar { flex-wrap: wrap; }
+  .filter-bar { flex-wrap: wrap; }
+}
+
+/* ── Phone (≤ 540 px) ─────────────────────────────────────────────────────── */
+@media (max-width: 540px) {
+  /* Topbar: compact */
+  .topbar-brand  { padding: 0 10px; gap: 8px; }
+  .brand-name    { font-size: 12px; }
+  .tab-btn       { padding: 5px 9px; font-size: 11px; }
+  .settings-text { display: none; }   /* icon-only on phone */
+  .now-pill      { display: none; }   /* no room */
+
+  /* Main */
+  .main { padding: 14px 10px 72px; }
+
+  /* Grids: 2-up */
+  .proj-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .cip-grid  { grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 6px; }
+  .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+
+  /* Scene cards: tighter */
+  .scene-info { padding: 8px 10px 10px; }
+
+  /* Toolbars: horizontal scroll strip */
+  .proj-toolbar, .cip-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+  .proj-toolbar::-webkit-scrollbar,
+  .cip-toolbar::-webkit-scrollbar { display: none; }
+  .bulk-action-btn, .proj-poll-btn, .view-toggle { flex-shrink: 0; }
+
+  /* Filter bar: horizontal scroll */
+  .filter-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 8px 10px;
+  }
+  .filter-bar::-webkit-scrollbar { display: none; }
+  .filter-select, .filter-clear,
+  .filter-label, .filter-results { flex-shrink: 0; }
+
+  /* Proj status row: allow badges to wrap */
+  .proj-status-row { flex-wrap: wrap; gap: 6px; }
+
+  /* ── Disable list view on phone — revert to tile ── */
+  .proj-grid.list-view { display: grid !important; }
+  .proj-grid.list-view .proj-card {
+    display: block;
+    grid-template-columns: unset;
+    grid-template-areas: unset;
+  }
+  .proj-grid.list-view .proj-card-head {
+    grid-area: unset;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 14px 10px;
+  }
+  .proj-grid.list-view .proj-status-row  { grid-area: unset; }
+  .proj-grid.list-view .proj-divider     { display: block; }
+  .proj-grid.list-view .proj-controls    { grid-area: unset; border-left: none; border-top: 1px solid var(--border); padding: 10px 12px; }
+  .proj-grid.list-view .proj-expand-btn  { display: flex !important; }
+
+  .cip-grid.list-view { display: grid !important; }
+  .cip-grid.list-view .cip-card {
+    display: block !important;
+    padding: 10px 12px;
+  }
+  .cip-grid.list-view .cip-card-head {
+    width: auto !important;
+    border-right: none !important;
+    padding: 0 !important;
+    margin-bottom: 7px;
+    align-self: unset;
+  }
+  .cip-grid.list-view .cip-meta {
+    display: flex !important;
+    flex-direction: row !important;
+    width: auto !important;
+    border-right: none !important;
+    padding: 0 !important;
+    margin-bottom: 6px;
+    align-self: unset;
+    justify-content: space-between;
+    gap: 0;
+  }
+  .cip-grid.list-view .cip-badges       { padding: 0 !important; }
+  .cip-grid.list-view .cip-info-block   { padding: 0 !important; border-left: none !important; }
+  .cip-grid.list-view .cip-info-block .cip-info {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    flex-direction: unset;
+    gap: 4px 6px;
+    margin-top: 7px;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+  .cip-grid.list-view .cip-info-block .cip-info .cip-info-item {
+    flex-direction: column !important;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .cip-grid.list-view .cip-expand-panel {
+    flex-basis: auto;
+    margin-top: 6px;
+    padding-top: 6px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-mark">25</div>
+      <div>
+        <div class="brand-name">25 Broadway</div>
+        <div class="brand-sub">Experience Control · v1.3</div>
+      </div>
+    </div>
+
+    <div class="topbar-body">
+      <div class="tab-bar">
+        <button class="tab-btn active" id="tab-scenes" onclick="switchTab('scenes')">Scene Library</button>
+        <button class="tab-btn"        id="tab-proj"   onclick="switchTab('proj')">Projectors</button>
+        <button class="tab-btn"        id="tab-matrox" onclick="switchTab('matrox')">ConvertIP</button>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="now-pill" id="nowPill" style="display:none">
+        <div class="now-dot" id="nowDot"></div>
+        <span class="now-label" id="nowLabel">No scene active</span>
+      </div>
+      <div class="ip-wrap">
+        <span class="ip-tag">CC</span>
+        <input class="ip-input" id="ccIp" type="text" placeholder="172.16.0.20" value="172.16.0.20" spellcheck="false">
+      </div>
+      <button class="settings-btn" onclick="openConfig()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span class="settings-text">Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="nav-group-label" id="nav-label-scenes">Navigate</div>
+
+    <a class="nav-item active" id="nav-tech"   href="#" onclick="navTo(event,'tech-looks')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Tech Looks
+    </a>
+    <a class="nav-item" id="nav-demos" href="#" onclick="navTo(event,'demos')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Demos
+    </a>
+    <a class="nav-item" id="nav-new"   href="#" onclick="navTo(event,'new-looks')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      New Looks 2026
+    </a>
+    <a class="nav-item" id="nav-alpha" href="#" onclick="navTo(event,'alpha-overlay')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      Alpha Overlay
+    </a>
+    <a class="nav-item" id="nav-multi" href="#" onclick="navTo(event,'multimedia')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+      Multimedia
+    </a>
+
+    <!-- Projector nav (hidden by default) -->
+    <div id="proj-nav" style="display:none">
+      <div class="nav-group-label" style="margin-top:8px">Projectors</div>
+      <a class="nav-item active" href="#" onclick="navToProj(event,'proj-main')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a7 7 0 0 1 14 0"/><rect x="2" y="12" width="20" height="6" rx="2"/><circle cx="12" cy="15" r="1"/></svg>
+        Multimedia (1–17)
+      </a>
+      <a class="nav-item" href="#" onclick="navToProj(event,'proj-north')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
+        North Show (18–19)
+      </a>
+    </div>
+
+    <!-- ConvertIP nav (hidden by default) -->
+    <div id="matrox-nav" style="display:none">
+      <div class="nav-group-label" style="margin-top:8px">ConvertIP</div>
+      <a class="nav-item active" href="#" onclick="navToSection(event,'cip-senders')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.69 3.4 2 2 0 0 1 3.66 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><path d="M23 7l-7 7"/><path d="M16 7h7v7"/></svg>
+        Senders (21)
+      </a>
+      <a class="nav-item" href="#" onclick="navToSection(event,'cip-receivers')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.69 3.4 2 2 0 0 1 3.66 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><path d="M23 14l-7-7"/><path d="M16 14h7V7"/></svg>
+        Receivers (17)
+      </a>
+    </div>
+
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-footer" id="scenes-footer">
+      <div class="footer-label">Active Scene</div>
+      <div class="footer-scene" id="lastSceneName">—</div>
+      <div class="footer-time"  id="lastSceneTime">No activity</div>
+    </div>
+  </nav>
+
+  <!-- ── SCENE LIBRARY PANEL ── -->
+  <main class="main active" id="panel-scenes">
+
+    <!-- System status glance — mirrored from projector tab -->
+    <div class="sys-status" style="margin-bottom:16px">
+      <div class="sys-status-indicators" id="sysIndicators2"></div>
+      <div class="sys-status-power" id="sysPower2">Waiting for data…</div>
+      <div style="flex:1"></div>
+      <div class="sys-status-summary" id="sysSummary2">—</div>
+    </div>
+
+    <!-- Tag filter bar -->
+    <div class="tag-filter-bar" id="tagFilterBar"></div>
+
+    <section class="section" id="tech-looks">
+      <div class="section-hd"><div class="section-title">Tech Looks</div><div class="section-rule"></div><div class="section-ct">6 scenes</div></div>
+      <div class="grid grid-4" id="tech-looks-grid"></div>
+    </section>
+
+    <section class="section" id="demos">
+      <div class="section-hd"><div class="section-title">Demos</div><div class="section-rule"></div><div class="section-ct">6 scenes</div></div>
+      <div class="demo-grid" id="demos-grid"></div>
+    </section>
+
+    <section class="section" id="new-looks">
+      <div class="section-hd"><div class="section-title">New Looks — 2026</div><div class="section-rule"></div></div>
+      <div class="grid grid-4" id="new-looks-grid"></div>
+    </section>
+
+    <section class="section" id="alpha-overlay">
+      <div class="section-hd"><div class="section-title">Alpha Overlay</div><div class="section-rule"></div></div>
+      <div class="alpha-layout">
+        <div class="alpha-list" id="alpha-list-grid"></div>
+        <div class="grid grid-3" id="alpha-thumb-grid"></div>
+      </div>
+    </section>
+
+    <section class="section" id="multimedia">
+      <div class="section-hd"><div class="section-title">Multimedia Looks</div><div class="section-rule"></div></div>
+      <div class="grid grid-4" id="multimedia-grid"></div>
+    </section>
+
+    <!-- Flat "By Tag" view — shown only when sort=bytag -->
+    <div id="flat-tag-view" style="display:none"></div>
+
+  </main>
+
+  <!-- ── TAG MANAGER MODAL ── -->
+  <div id="tagManagerOverlay" class="modal-overlay" style="display:none" onclick="closeTagManager()">
+    <div class="modal-box tag-manager-box" onclick="event.stopPropagation()">
+      <div class="modal-hd">
+        <div class="modal-title">Manage Tags</div>
+        <button class="modal-close" onclick="closeTagManager()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px 20px">
+        <div style="font-size:10px;color:var(--text-3);letter-spacing:0.06em;text-transform:uppercase;margin-bottom:10px">Click a name to rename · Enter to confirm · ✕ to delete</div>
+        <div id="tagManagerList"></div>
+        <div class="tag-manager-new">
+          <input id="newTagInput" class="cfg-input" placeholder="New tag name…" onkeydown="if(event.key==='Enter')createNewTag()">
+          <button class="cfg-save-btn" onclick="createNewTag()">Add Tag</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CONVERTIP PANEL ── -->
+  <main class="main" id="panel-matrox">
+
+    <div class="proj-toolbar">
+      <button class="bulk-action-btn amber inactive" id="cipRebootSelBtn" onclick="cipRebootSelected()">Reboot Selected</button>
+      <button class="bulk-action-btn danger" onclick="cipRebootAll()">Reboot All</button>
+      <div style="flex:1"></div>
+      <span class="poll-status" id="cipPollStatus">Not polling</span>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+      <button class="proj-poll-btn" id="cipPollBtn" onclick="toggleCipPolling()">
+        <svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Start Polling
+      </button>
+      <button class="proj-poll-btn" onclick="cipRefreshAll()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh All
+      </button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+      <div class="view-toggle">
+        <button class="view-toggle-btn cip-view-btn" data-view="tile" onclick="setCipView('tile')" title="Tile view">⊞</button>
+        <button class="view-toggle-btn cip-view-btn" data-view="list" onclick="setCipView('list')" title="List view">☰</button>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="sys-status" id="cipStatus">
+      <div class="sys-status-indicators" id="cipIndicators"></div>
+      <div style="flex:1"></div>
+      <div class="sys-status-summary" id="cipStatusSummary">Waiting…</div>
+    </div>
+
+    <!-- Filter / sort bar -->
+    <div class="filter-bar" id="cipFilterBar">
+      <span class="filter-label">Filter</span>
+      <select class="filter-select" id="cipFilterType" onchange="cipApplyFilters()">
+        <option value="">TX + RX</option>
+        <option value="tx">TX Only</option>
+        <option value="rx">RX Only</option>
+      </select>
+      <select class="filter-select" id="cipFilterZone" onchange="cipApplyFilters()">
+        <option value="">All Zones</option>
+      </select>
+      <select class="filter-select" id="cipFilterStatus" onchange="cipApplyFilters()">
+        <option value="">All Status</option>
+        <option value="online">Online</option>
+        <option value="offline">Offline</option>
+      </select>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <span class="filter-label">Sort</span>
+      <select class="filter-select" id="cipSortBy" onchange="cipApplyFilters()">
+        <option value="default">Default</option>
+        <option value="name">Name</option>
+        <option value="ip">IP</option>
+        <option value="zone">Zone</option>
+        <option value="status">Status</option>
+      </select>
+    </div>
+
+    <div class="cip-section" id="cip-senders">
+      <div class="section-hd">
+        <div class="section-title">Senders</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">21 devices</div>
+      </div>
+      <div class="cip-grid" id="cip-grid-tx"></div>
+    </div>
+
+    <div class="cip-section" id="cip-receivers">
+      <div class="section-hd">
+        <div class="section-title">Receivers</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">17 devices</div>
+      </div>
+      <div class="cip-grid" id="cip-grid-rx"></div>
+    </div>
+
+  </main>
+
+  <!-- ── PROJECTOR PANEL ── -->
+  <main class="main" id="panel-proj">
+
+    <!-- Toolbar -->
+    <div class="proj-toolbar">
+      <button class="bulk-action-btn" onclick="bulkPowerOn()">Power On All</button>
+      <button class="bulk-action-btn danger" onclick="bulkPowerOff()">Power Off All</button>
+      <button class="bulk-action-btn" onclick="toastOnly()" title="Power on PRJ11 only — power off all others" style="color:var(--gold);border-color:rgba(201,169,110,0.25);background:rgba(201,169,110,0.08)">Toast Only</button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+      <button class="bulk-action-btn" onclick="bulkShutterOpen()" style="color:var(--teal);border-color:rgba(94,207,190,0.2);background:var(--teal-dim)">Open All Shutters</button>
+      <button class="bulk-action-btn" onclick="bulkShutterClose()" style="color:var(--text-2)">Close All Shutters</button>
+      <div style="flex:1"></div>
+      <span class="poll-status" id="pollStatus" style="margin-left:0">Not polling</span>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+      <button class="proj-poll-btn" id="pollBtn" onclick="togglePolling()">
+        <svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Start Polling
+      </button>
+      <button class="proj-poll-btn" onclick="refreshAll()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh All
+      </button>
+      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
+      <div class="view-toggle">
+        <button class="view-toggle-btn proj-view-btn" data-view="tile" onclick="setProjView('tile')" title="Tile view">⊞</button>
+        <button class="view-toggle-btn proj-view-btn" data-view="list" onclick="setProjView('list')" title="List view">☰</button>
+      </div>
+    </div>
+
+    <!-- System status bar -->
+    <div class="sys-status" id="sysStatus">
+      <div class="sys-status-indicators" id="sysIndicators"></div>
+      <div class="sys-status-power" id="sysPower">Waiting for data…</div>
+      <div style="flex:1"></div>
+      <div class="sys-status-summary" id="sysSummary">Waiting for data…</div>
+    </div>
+
+    <!-- Filter / sort bar -->
+    <div class="filter-bar" id="filterBar">
+      <span class="filter-label">Filter</span>
+      <select class="filter-select" id="filterZone" onchange="applyFilters()">
+        <option value="">All Zones</option>
+        <option value="North">North</option>
+        <option value="South">South</option>
+        <option value="East">East</option>
+        <option value="West">West</option>
+        <option value="Dome">Dome</option>
+      </select>
+      <select class="filter-select" id="filterState" onchange="applyFilters()">
+        <option value="">All States</option>
+        <option value="on">On</option>
+        <option value="ready">Ready</option>
+        <option value="standby">Standby</option>
+        <option value="error">Error / Offline</option>
+      </select>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <span class="filter-label">Sort</span>
+      <select class="filter-select" id="sortBy" onchange="applyFilters()">
+        <option value="default">Default</option>
+        <option value="ip">IP</option>
+        <option value="state">State</option>
+        <option value="zone">Zone</option>
+        <option value="name">Name</option>
+      </select>
+      <button class="filter-clear" id="filterClear" onclick="clearFilters()">✕ Clear</button>
+      <span class="filter-results" id="filterResults"></span>
+    </div>
+
+    <!-- Multimedia projectors 1–17 -->
+    <div class="proj-section" id="proj-main">
+      <div class="section-hd">
+        <div class="section-title">Multimedia</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">17 projectors</div>
+      </div>
+      <div class="proj-grid" id="proj-grid-main"></div>
+    </div>
+
+    <!-- North show projectors 18–19 -->
+    <div class="proj-section" id="proj-north">
+      <div class="section-hd">
+        <div class="section-title">North Show</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">2 projectors</div>
+      </div>
+      <div class="proj-grid" id="proj-grid-north"></div>
+    </div>
+
+  </main>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-dot"></div>
+  <span class="toast-msg" id="toastMsg"></span>
+  <span class="toast-time" id="toastTime"></span>
+</div>
+
+<!-- CONFIG MODAL -->
+<div class="modal-backdrop" id="configModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Scene Settings</div>
+      <button class="modal-x" onclick="closeConfig()">✕</button>
+    </div>
+    <p class="modal-desc">Map each scene to its Control Center timeline key and value. Get IDs via CTRL+ALT+SHIFT+F1 in the Taskflow Editor.</p>
+    <div id="configForm"></div>
+    <div class="modal-actions">
+      <button class="btn-gold" onclick="saveConfig()">Save Changes</button>
+      <button class="btn-ghost" onclick="closeConfig()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENE CONTROL
+// ═══════════════════════════════════════════════════════════════════════════════
+const TASK_INTERNAL_NAME = 'playTimeline';
+const TASK_CATALOG_NAME  = '25b';
+const CC_PORT            = 3030;
+
+const SCENES = {
+  techLooks: [
+    { key: 'logo-reset',     label: 'Logo — Reset',           img: 'images/Logo_Reset.jpg',  tags: ['logo'] },
+    { key: 'logo-cmf',       label: 'Logo — CMF',             img: 'images/Logo_CMF.png',    tags: ['logo'] },
+    { key: 'logo-wistar',    label: 'Logo — Wistar',          img: 'images/logo_wistar.png', tags: ['logo'] },
+    { key: 'trompe-loeil',   label: "Trompe l'oeil",                                         tags: ['architectural'] },
+  ],
+  demos: [
+    { key: 'demo-corporate', label: 'Demo — Corporate',      featured: true,                 tags: ['demo', 'corporate'] },
+    { key: 'demo-nonprofit', label: 'Demo — Nonprofit',                                      tags: ['demo'] },
+    { key: 'demo-social',    label: 'Demo — Social',                                         tags: ['demo'] },
+    { key: 'demo-tech',      label: 'Demo — Tech',                                           tags: ['demo'] },
+    { key: 'demo-full',      label: 'Demo — Full',            img: 'images/demo_full.jpg',   tags: ['demo'] },
+    { key: 'demo-mf',        label: 'Demo — Moment Factory', featured: true,                 tags: ['demo'] },
+  ],
+  newLooks: [
+    { key: 'artnyc',         label: 'ArtNYC',                      img: 'images/ArtNYC.png',                        tags: ['urban'] },
+    { key: 'graffiti-paint', label: 'Graffiti Paint',               img: 'images/graffiti_paint.png',                tags: ['urban'] },
+    { key: 'campfire',       label: 'Campfire',                     img: 'images/campfire.png',                      tags: ['ambient', 'nature'] },
+    { key: 'neon-arcade',    label: 'Neon Arcade',                  img: 'images/neon_arcade.png',                   tags: ['neon', 'party'] },
+    { key: 'gala-ambient',   label: 'Gala Ambient Look',            img: 'images/gala_ambient_look.png',             tags: ['ambient', 'gala'] },
+    { key: 'embossed-logo',  label: 'Embossed Logo',                img: 'images/embossed_logo.png',                 tags: ['logo'] },
+    { key: 'repeated-logo',  label: 'Repeated Logo',                img: 'images/repeated_logo.png',                 tags: ['logo'] },
+    { key: 'cherry-blossom', label: 'Cherry Blossom',               img: 'images/cherry_blossom.png',                tags: ['ambient', 'nature'] },
+    { key: 'sequins',        label: 'Sequins',                      img: 'images/sequins.png',                       tags: ['party', 'gala'] },
+    { key: 'nyc-signage',    label: 'NYC Signage',                  img: 'images/nyc_signage.png',                   tags: ['urban'] },
+    { key: 'realtime-audio', label: 'Realtime Audio Interactive',   img: 'images/realtime_audio_interactive.png',    tags: ['interactive'] },
+    { key: 'generatives',    label: 'Generatives',                  img: 'images/generatives.png',                   tags: ['interactive'] },
+  ],
+  alphaList: [
+    { key: 'goldartdeco',   label: 'GoldArtDeco',          tags: ['overlay', 'gala'] },
+    { key: 'stars',         label: 'Stars',                tags: ['overlay', 'ambient'] },
+    { key: 'goldmetal',     label: 'Gold Metal Workers',   tags: ['overlay', 'gala'] },
+    { key: 'graffitilines', label: 'Graffiti Lines',       tags: ['overlay', 'urban'] },
+    { key: 'lightpass',     label: 'Light Pass',           tags: ['overlay', 'ambient'] },
+    { key: 'goldframe',     label: 'Gold Frame',           tags: ['overlay', 'gala'] },
+  ],
+  alphaThumb: [
+    { key: 'chandelier', label: 'Chandelier',          img: 'images/chandelier.png',  tags: ['overlay', 'gala'] },
+    { key: 'discoball',  label: 'Disco Ball',           img: 'images/disco_ball.png',  tags: ['overlay', 'party'] },
+    { key: 'glitters',   label: 'Glitters & Confettis', img: 'images/conffetis.png',   tags: ['overlay', 'party'] },
+  ],
+  multimedia: [
+    { key: 'curtains-beige', label: 'Curtains — Beige',        img: 'images/CurtainsBEIGE.png',        tags: ['ambient'] },
+    { key: 'curtains-red',   label: 'Curtains — Red',           img: 'images/CurtainsRED.png',          tags: ['ambient'] },
+    { key: 'curtains-green', label: 'Curtains — Green',         img: 'images/CurtainsGreen.png',        tags: ['ambient'] },
+    { key: 'curtains-blue',  label: 'Curtains — Blue',          img: 'images/CurtainsBLUE.png',         tags: ['ambient'] },
+    { key: 'corp-oro',       label: 'Corporate — Oro Sunset',   img: 'images/CorporateOroSunset.jpeg',  tags: ['corporate', 'ambient'] },
+    { key: 'gilded-door',    label: 'Gilded Age — Door',        img: 'images/GildedAge_Door.jpeg',      tags: ['architectural', 'gala'] },
+    { key: 'gilded-fresco',  label: 'Gilded Age — Fresco',      img: 'images/GildedAge_Fresco.jpeg',    tags: ['architectural', 'gala'] },
+    { key: 'sig-evening',    label: 'Signature — Evening',      img: 'images/signature_evening.jpg',    tags: ['ambient', 'signature'] },
+    { key: 'sig-dawn',       label: 'Signature — Dawn',         img: 'images/signature_dawn.jpg',       tags: ['ambient', 'signature'] },
+    { key: 'sig-midnight',   label: 'Signature — Midnight',     img: 'images/signature_midnight.jpg',   tags: ['ambient', 'signature'] },
+    { key: 'celestial',      label: 'Celestial — Planet',       img: 'images/celestial_planet.jpg',     tags: ['ambient', 'nature'] },
+  ],
+};
+
+// ── Scene tags (localStorage overrides default scene tags) ───────────────────
+let sceneTagOverrides = JSON.parse(localStorage.getItem('sceneTags') || '{}');
+let knownTags = new Set(JSON.parse(localStorage.getItem('knownTags') || '[]'));
+
+function getTagsFor(key) {
+  if (sceneTagOverrides[key] !== undefined) return [...sceneTagOverrides[key]];
+  return (allScenes().find(s => s.key === key)?.tags || []);
+}
+
+function saveTagsFor(key, tags) {
+  sceneTagOverrides[key] = tags;
+  localStorage.setItem('sceneTags', JSON.stringify(sceneTagOverrides));
+}
+
+function saveKnownTags() {
+  localStorage.setItem('knownTags', JSON.stringify([...knownTags]));
+}
+
+function getAllUniqueTags() {
+  const set = new Set([...knownTags]);
+  allScenes().forEach(s => getTagsFor(s.key).forEach(t => set.add(t)));
+  return [...set].sort();
+}
+
+// ── Sort state ────────────────────────────────────────────────────────────────
+let sortOrder = localStorage.getItem('sceneSortOrder') || 'default';
+
+// ── Tag filter state ──────────────────────────────────────────────────────────
+let activeTagFilters = new Set();
+
+function renderTagPills(key, tags) {
+  return tags.map(t =>
+    `<span class="tag-pill${activeTagFilters.has(t) ? ' filter-active' : ''}" data-tag="${t}"
+      onclick="event.stopPropagation();toggleTagFilter('${t}')">${t
+    }<span class="tag-remove" onclick="event.stopPropagation();removeTagFromScene('${key}','${t}')">✕</span></span>`
+  ).join('');
+}
+
+let activeScene = null;
+let ccIp        = localStorage.getItem('ccIp') || '172.16.0.20';
+let sceneMap    = JSON.parse(localStorage.getItem('sceneMap') || '{}');
+
+document.getElementById('ccIp').value = ccIp;
+document.getElementById('ccIp').addEventListener('change', e => {
+  ccIp = e.target.value.trim();
+  localStorage.setItem('ccIp', ccIp);
+});
+
+function allScenes() {
+  return [...SCENES.techLooks, ...SCENES.demos, ...SCENES.newLooks,
+          ...SCENES.alphaList, ...SCENES.alphaThumb, ...SCENES.multimedia];
+}
+
+function metaFor(key) {
+  const c = sceneMap[key];
+  if (!c || !c.tlKey) return { text: 'Not configured', cls: '' };
+  return { text: c.tlKey, cls: 'ok' };
+}
+
+function tagEditRow(key) {
+  return `<div class="scene-tags-row">
+    <div class="scene-tags" id="stags-${key}">${renderTagPills(key, getTagsFor(key))}</div>
+    <button class="scene-tag-edit-btn" title="Edit tags" onclick="event.stopPropagation();openTagEditor('${key}')">✎</button>
+    <button class="scene-tag-add" style="display:none" onclick="event.stopPropagation();showTagInput('${key}')">+ tag</button>
+    <input class="scene-tag-input" id="staginput-${key}" placeholder="tag…" onclick="event.stopPropagation()"
+      onkeydown="tagInputKey(event,'${key}')" onfocus="event.stopPropagation()">
+  </div>`;
+}
+
+function mkSceneBtn(s) {
+  const { text, cls } = metaFor(s.key);
+  const b = document.createElement('button');
+  b.className = 'scene-btn'; b.id = 'scene-' + s.key;
+  b.onclick = () => fire(s.key, s.label, b);
+  const imgTag = s.img ? `<img src="${s.img}" alt="${s.label}" loading="lazy">` : '';
+  b.innerHTML = `<div class="scene-thumb"><div class="scene-thumb-ph">${s.label.slice(0,2).toUpperCase()}</div>${imgTag}<div class="live-badge">Live</div></div>
+    <div class="scene-info">
+      <div class="scene-name">${s.label}</div>
+      <div class="scene-meta ${cls}">${text}</div>
+      ${tagEditRow(s.key)}
+    </div>`;
+  return b;
+}
+
+function mkTextBtn(s) {
+  const b = document.createElement('button');
+  b.className = 'text-btn'; b.id = 'scene-' + s.key;
+  b.onclick = () => fire(s.key, s.label, b);
+  b.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0;text-align:left">
+    <span>${s.label}</span>
+    ${tagEditRow(s.key)}
+  </div>
+  <svg class="tb-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+  return b;
+}
+
+function mkDemoBtn(s) {
+  const b = document.createElement('button');
+  b.className = 'demo-btn' + (s.featured ? ' featured' : ''); b.id = 'scene-' + s.key;
+  b.onclick = () => fire(s.key, s.label, b);
+  b.innerHTML = `<div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0;text-align:left">
+    <span style="font-weight:${s.featured?500:400}">${s.label}</span>
+    ${tagEditRow(s.key)}
+  </div>
+  <div class="demo-play"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>`;
+  return b;
+}
+
+function fill(id, arr, fn) {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = ''; arr.forEach(s => el.appendChild(fn(s)));
+}
+
+function renderAll() {
+  fill('tech-looks-grid',  SCENES.techLooks,  mkSceneBtn);
+  fill('demos-grid',       SCENES.demos,      mkDemoBtn);
+  fill('new-looks-grid',   SCENES.newLooks,   mkSceneBtn);
+  fill('alpha-list-grid',  SCENES.alphaList,  mkTextBtn);
+  fill('alpha-thumb-grid', SCENES.alphaThumb, mkSceneBtn);
+  fill('multimedia-grid',  SCENES.multimedia, mkSceneBtn);
+  buildTagFilterBar();
+  // Apply persisted sort (skip for 'default' since renderAll is already default order)
+  if (sortOrder !== 'default') setSortOrder(sortOrder);
+  else applyTagFilter();
+}
+renderAll();
+
+async function fire(key, label, el) {
+  const ip = document.getElementById('ccIp').value.trim();
+  if (!ip) { showToast('Set a Control Center IP first', 'error'); return; }
+  const cfg = sceneMap[key];
+  if (!cfg || !cfg.tlKey || cfg.tlValue === undefined) { showToast(`${label} — not configured`, 'error'); return; }
+  if (activeScene) { const p = document.getElementById('scene-' + activeScene); if (p) p.classList.remove('active'); }
+  el.classList.add('active', 'triggering'); activeScene = key;
+  setTimeout(() => el.classList.remove('triggering'), 600);
+  document.getElementById('lastSceneName').textContent = label;
+  document.getElementById('lastSceneTime').textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  document.getElementById('nowLabel').textContent = label;
+  document.getElementById('nowDot').classList.add('live');
+  try {
+    const res = await fetch(`http://${ip}:${CC_PORT}/sc-datastore/projectData/taskFlow`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc:'2.0', method:'Task.Execute', id:Date.now(), params: { taskInternalName: TASK_INTERNAL_NAME, taskCatalogName: TASK_CATALOG_NAME, taskParams:[{internalName:'timelines',value:[{Key:cfg.tlKey,Value:cfg.tlValue}]}] } })
+    });
+    showToast(res.ok ? label : `Server error ${res.status}`, res.ok ? 'success' : 'error');
+  } catch {
+    showToast('Could not reach Control Center', 'error');
+    el.classList.remove('active'); activeScene = null;
+    document.getElementById('nowDot').classList.remove('live');
+    document.getElementById('nowLabel').textContent = 'No scene active';
+  }
+}
+
+// ── Tag filter ────────────────────────────────────────────────────────────────
+function tagPillClick(tag, pillEl) {
+  // Hide all pencils, show only this one
+  document.querySelectorAll('.tag-rename-icon').forEach(b => b.classList.remove('visible'));
+  const wrap = pillEl.closest('.tag-pill-wrap');
+  wrap?.querySelector('.tag-rename-icon')?.classList.add('visible');
+  toggleTagFilter(tag);
+}
+
+function startTagRename(tag, pencilEl) {
+  const wrap = pencilEl.closest('.tag-pill-wrap');
+  if (!wrap) return;
+  // Replace pill + pencil with an input
+  const inp = document.createElement('input');
+  inp.className = 'tag-rename-input';
+  inp.value = tag;
+  inp.dataset.orig = tag;
+  inp.onkeydown = e => {
+    if (e.key === 'Enter')  { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { inp.dataset.orig = ''; inp.blur(); }
+  };
+  inp.onblur = () => {
+    const orig = inp.dataset.orig;
+    if (!orig) { buildTagFilterBar(); return; } // Escape — just rebuild
+    const newName = inp.value.trim().toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-');
+    if (!newName || newName === orig) { buildTagFilterBar(); return; }
+    if (getAllUniqueTags().includes(newName)) { showToast(`Tag "${newName}" already exists`, 'error'); buildTagFilterBar(); return; }
+    // Rename across all scenes
+    allScenes().forEach(s => {
+      const tags = getTagsFor(s.key);
+      if (tags.includes(orig)) saveTagsFor(s.key, tags.map(t => t === orig ? newName : t));
+    });
+    if (knownTags.has(orig)) { knownTags.delete(orig); knownTags.add(newName); saveKnownTags(); }
+    if (activeTagFilters.has(orig)) { activeTagFilters.delete(orig); activeTagFilters.add(newName); }
+    allScenes().forEach(s => refreshCardTags(s.key));
+    buildTagFilterBar();
+    if (sortOrder === 'bytag') renderFlatTagView(); else applyTagFilter();
+    renderTagManagerList();
+    showToast(`Renamed "${orig}" → "${newName}"`, 'success');
+  };
+  wrap.innerHTML = '';
+  wrap.appendChild(inp);
+  inp.focus();
+  inp.select();
+}
+
+function toggleTagFilter(tag) {
+  if (activeTagFilters.has(tag)) activeTagFilters.delete(tag);
+  else activeTagFilters.add(tag);
+  applyTagFilter();
+}
+
+function clearTagFilters() {
+  activeTagFilters.clear();
+  applyTagFilter();
+}
+
+function applyTagFilter() {
+  const active = activeTagFilters.size > 0;
+
+  // Sync filter bar pill state
+  document.querySelectorAll('.tag-filter-pill').forEach(p =>
+    p.classList.toggle('active', activeTagFilters.has(p.dataset.tag)));
+  const clrBtn = document.getElementById('tagFilterClear');
+  if (clrBtn) clrBtn.classList.toggle('visible', active);
+
+  // Sync tag pills on cards
+  document.querySelectorAll('.tag-pill[data-tag]').forEach(p =>
+    p.classList.toggle('filter-active', activeTagFilters.has(p.dataset.tag)));
+
+  // If By Tag view is active, re-render that instead
+  if (sortOrder === 'bytag') { renderFlatTagView(); return; }
+
+  // Show/hide each scene card
+  allScenes().forEach(s => {
+    const el = document.getElementById('scene-' + s.key);
+    if (!el) return;
+    el.style.display = (!active || getTagsFor(s.key).some(t => activeTagFilters.has(t))) ? '' : 'none';
+  });
+
+  // Collapse sections that become fully empty
+  ['tech-looks','demos','new-looks','alpha-overlay','multimedia'].forEach(secId => {
+    const sec = document.getElementById(secId);
+    if (!sec) return;
+    if (!active) { sec.style.display = ''; return; }
+    const any = [...sec.querySelectorAll('.scene-btn,.text-btn,.demo-btn')].some(c => c.style.display !== 'none');
+    sec.style.display = any ? '' : 'none';
+  });
+}
+
+function buildTagFilterBar() {
+  const bar = document.getElementById('tagFilterBar');
+  if (!bar) return;
+  const tags = getAllUniqueTags();
+  bar.innerHTML =
+    `<span class="tag-filter-label">Filter</span>` +
+    tags.map(t =>
+      `<span class="tag-pill-wrap">
+        <button class="tag-filter-pill${activeTagFilters.has(t)?' active':''}" data-tag="${t}" onclick="tagPillClick('${t}',this)">${t}<span class="tag-rename-icon" onclick="event.stopPropagation();startTagRename('${t}',this)" title="Rename tag">✎</span></button>
+      </span>`
+    ).join('') +
+    `<button class="tag-inline-add-btn" title="Add tag" onclick="showBarTagInput(this)">+</button>
+     <input class="tag-inline-input" id="barTagInput" placeholder="new tag…"
+       onkeydown="barTagInputKey(event)" onblur="hideBarTagInput()">
+     <span class="tag-filter-divider"></span>
+     <button class="tag-filter-clear${activeTagFilters.size>0?' visible':''}" id="tagFilterClear" onclick="clearTagFilters()">✕ Clear</button>
+     <span class="tag-filter-divider"></span>
+     <span class="tag-filter-label">Sort</span>
+     <select class="filter-select" onchange="setSortOrder(this.value)">
+       <option value="default"${sortOrder==='default'?' selected':''}>Default</option>
+       <option value="az"${sortOrder==='az'?' selected':''}>A → Z</option>
+       <option value="bytag"${sortOrder==='bytag'?' selected':''}>By Tag</option>
+     </select>
+     <span class="tag-filter-divider"></span>
+     <button class="tag-manage-btn" onclick="openTagManager()">More</button>`;
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+function setSortOrder(order) {
+  sortOrder = order;
+  localStorage.setItem('sceneSortOrder', order);
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === order));
+  const flat = document.getElementById('flat-tag-view');
+  const secs = document.querySelectorAll('#panel-scenes > .section');
+  if (order === 'bytag') {
+    secs.forEach(s => { s.style.display = 'none'; });
+    if (flat) { flat.style.display = ''; renderFlatTagView(); }
+  } else {
+    if (flat) flat.style.display = 'none';
+    if (order === 'default') {
+      renderAll(); // rebuilds cards in original order, calls applyTagFilter at end
+    } else {
+      secs.forEach(s => { s.style.display = ''; });
+      ['tech-looks-grid','demos-grid','new-looks-grid','alpha-list-grid','alpha-thumb-grid','multimedia-grid'].forEach(gid => {
+        const g = document.getElementById(gid);
+        if (!g) return;
+        [...g.children].sort((a, b) => {
+          const na = (a.querySelector('.scene-name,span')?.textContent || '').trim();
+          const nb = (b.querySelector('.scene-name,span')?.textContent || '').trim();
+          return na.localeCompare(nb);
+        }).forEach(c => g.appendChild(c));
+      });
+      applyTagFilter();
+    }
+  }
+}
+
+function renderFlatTagView() {
+  const container = document.getElementById('flat-tag-view');
+  if (!container) return;
+  container.innerHTML = '';
+  const activeFilters = activeTagFilters.size > 0;
+  getAllUniqueTags().forEach(tag => {
+    if (activeFilters && !activeTagFilters.has(tag)) return;
+    const matching = allScenes().filter(s => getTagsFor(s.key).includes(tag));
+    if (!matching.length) return;
+    const sec = document.createElement('div');
+    sec.className = 'section flat-tag-section';
+    sec.innerHTML = `<div class="section-hd"><div class="section-title">${tag}</div><div class="section-rule"></div></div>`;
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-4';
+    matching.forEach(s => {
+      const card = mkSceneBtn(s);
+      card.id = `flat-${tag}-${s.key}`;
+      if (activeScene === s.key) card.classList.add('active');
+      grid.appendChild(card);
+    });
+    sec.appendChild(grid);
+    container.appendChild(sec);
+  });
+  if (!container.children.length)
+    container.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:20px 0">No scenes match the active filters.</div>';
+}
+
+// ── Tag manager ───────────────────────────────────────────────────────────────
+function openTagManager() {
+  renderTagManagerList();
+  document.getElementById('tagManagerOverlay').style.display = 'flex';
+}
+
+function closeTagManager() {
+  document.getElementById('tagManagerOverlay').style.display = 'none';
+}
+
+function renderTagManagerList() {
+  const list = document.getElementById('tagManagerList');
+  const tags = getAllUniqueTags();
+  if (!tags.length) {
+    list.innerHTML = '<div style="color:var(--text-3);font-size:12px;padding:8px 0">No tags yet. Add one below.</div>';
+    return;
+  }
+  list.innerHTML = tags.map(t => {
+    const count = allScenes().filter(s => getTagsFor(s.key).includes(t)).length;
+    return `<div class="tag-manager-row">
+      <input class="tag-manager-input" value="${t}" data-orig="${t}"
+        onkeydown="if(event.key==='Enter'){this.blur()}"
+        onblur="commitTagRename(this)">
+      <span class="tag-manager-count">${count} scene${count!==1?'s':''}</span>
+      <button class="tag-manager-delete" onclick="deleteTagGlobal('${t}')" title="Delete tag">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function commitTagRename(input) {
+  const oldName = input.dataset.orig;
+  const newName = input.value.trim().toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-');
+  if (!newName || newName === oldName) { input.value = oldName; return; }
+  if (getAllUniqueTags().includes(newName)) { showToast(`Tag "${newName}" already exists`, 'error'); input.value = oldName; return; }
+  // Rename in all scene overrides
+  allScenes().forEach(s => {
+    const tags = getTagsFor(s.key);
+    if (tags.includes(oldName)) saveTagsFor(s.key, tags.map(t => t === oldName ? newName : t));
+  });
+  // Rename in knownTags
+  if (knownTags.has(oldName)) { knownTags.delete(oldName); knownTags.add(newName); saveKnownTags(); }
+  // Update active filters
+  if (activeTagFilters.has(oldName)) { activeTagFilters.delete(oldName); activeTagFilters.add(newName); }
+  allScenes().forEach(s => refreshCardTags(s.key));
+  buildTagFilterBar();
+  if (sortOrder === 'bytag') renderFlatTagView(); else applyTagFilter();
+  renderTagManagerList();
+  showToast(`Renamed "${oldName}" → "${newName}"`, 'success');
+}
+
+function deleteTagGlobal(tag) {
+  allScenes().forEach(s => {
+    const tags = getTagsFor(s.key);
+    if (tags.includes(tag)) saveTagsFor(s.key, tags.filter(t => t !== tag));
+  });
+  knownTags.delete(tag); saveKnownTags();
+  activeTagFilters.delete(tag);
+  allScenes().forEach(s => refreshCardTags(s.key));
+  buildTagFilterBar();
+  if (sortOrder === 'bytag') renderFlatTagView(); else applyTagFilter();
+  renderTagManagerList();
+}
+
+function showBarTagInput(btn) {
+  const inp = document.getElementById('barTagInput');
+  if (!inp) return;
+  btn.style.display = 'none';
+  inp.style.display = 'inline-block';
+  inp.focus();
+}
+
+function hideBarTagInput() {
+  const inp = document.getElementById('barTagInput');
+  const btn = document.querySelector('.tag-inline-add-btn');
+  if (!inp) return;
+  inp.style.display = 'none';
+  inp.value = '';
+  if (btn) btn.style.display = '';
+}
+
+function barTagInputKey(e) {
+  if (e.key === 'Escape') { e.preventDefault(); hideBarTagInput(); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const inp = document.getElementById('barTagInput');
+    if (!inp) return;
+    const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-');
+    hideBarTagInput();
+    if (!val) return;
+    if (getAllUniqueTags().includes(val)) { showToast(`Tag "${val}" already exists`, 'error'); return; }
+    knownTags.add(val); saveKnownTags();
+    buildTagFilterBar();
+    renderTagManagerList();
+    showToast(`Tag "${val}" created`, 'success');
+  }
+}
+
+function createNewTag() {
+  const inp = document.getElementById('newTagInput');
+  if (!inp) return;
+  const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-');
+  if (!val) return;
+  if (getAllUniqueTags().includes(val)) { showToast(`Tag "${val}" already exists`, 'error'); return; }
+  knownTags.add(val); saveKnownTags();
+  inp.value = '';
+  buildTagFilterBar();
+  renderTagManagerList();
+  showToast(`Tag "${val}" created`, 'success');
+}
+
+// ── Tag editing ───────────────────────────────────────────────────────────────
+let editingTagKey = null;
+
+function openTagEditor(key) {
+  if (editingTagKey === key) { closeTagEditor(); return; }
+  closeTagEditor();
+  editingTagKey = key;
+  const el = document.getElementById('scene-' + key);
+  if (!el) return;
+  el.classList.add('tag-editing');
+  setTimeout(() => document.addEventListener('click', closeTagEditorOutside, { once: true }), 0);
+}
+
+function closeTagEditorOutside() { closeTagEditor(); }
+
+function closeTagEditor() {
+  if (!editingTagKey) return;
+  const el = document.getElementById('scene-' + editingTagKey);
+  if (el) {
+    el.classList.remove('tag-editing');
+    const inp = document.getElementById('staginput-' + editingTagKey);
+    if (inp) { inp.style.display = 'none'; inp.value = ''; }
+    const addBtn = el.querySelector('.scene-tag-add');
+    if (addBtn) addBtn.style.display = 'none';
+  }
+  editingTagKey = null;
+}
+
+function showTagInput(key) {
+  const inp = document.getElementById('staginput-' + key);
+  const addBtn = document.getElementById('scene-' + key)?.querySelector('.scene-tag-add');
+  if (!inp) return;
+  if (addBtn) addBtn.style.display = 'none';
+  inp.style.display = 'inline-block';
+  inp.focus();
+}
+
+function tagInputKey(e, key) {
+  if (e.key === 'Enter')  { e.preventDefault(); commitTagInput(key); }
+  if (e.key === 'Escape') { closeTagEditor(); }
+}
+
+function commitTagInput(key) {
+  const inp = document.getElementById('staginput-' + key);
+  if (!inp) return;
+  const val = inp.value.trim().toLowerCase().replace(/[^a-z0-9 -]/g, '').replace(/\s+/g, '-');
+  inp.value = '';
+  if (val) {
+    const tags = getTagsFor(key);
+    if (!tags.includes(val)) { saveTagsFor(key, [...tags, val]); refreshCardTags(key); buildTagFilterBar(); applyTagFilter(); }
+  }
+  // Re-show add button
+  const addBtn = document.getElementById('scene-' + key)?.querySelector('.scene-tag-add');
+  if (addBtn) { inp.style.display = 'none'; addBtn.style.display = 'inline-flex'; }
+}
+
+function removeTagFromScene(key, tag) {
+  saveTagsFor(key, getTagsFor(key).filter(t => t !== tag));
+  refreshCardTags(key);
+  buildTagFilterBar();
+  applyTagFilter();
+}
+
+function refreshCardTags(key) {
+  const el = document.getElementById('stags-' + key);
+  if (el) el.innerHTML = renderTagPills(key, getTagsFor(key));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROJECTOR CONTROL
+// Barco Pulse API — JSON-RPC 2.0 over TCP port 9090
+// Browser can't open raw TCP. We use a lightweight WebSocket proxy:
+//   node proxy.js   (bundled separately, see comment below)
+// The proxy bridges ws://localhost:8080?host=IP to TCP IP:9090
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const BARCO_PROXY_PORT = 8080;
+const METRICS_POLL_MS  = 2 * 60 * 1000; // laser runtime + temp: every 2 min
+
+// Proxy server host — defaults to the host the page was served from so remote
+// access works automatically. Override in Settings if needed.
+let proxyHost = localStorage.getItem('proxyHost') || window.location.hostname || 'localhost';
+
+// Projector definitions — from screenshot
+const PROJECTORS = [
+  // Multimedia (1–17) — zones from reference screenshot
+  { id: 1,  name: 'B25-A01-PRJ09', model: 'UDM-4K30', ip: '172.16.202.19',  group: 'main',  zone: 'West'  },
+  { id: 2,  name: 'B25-A01-PRJ10', model: 'UDM-4K30', ip: '172.16.202.20',  group: 'main',  zone: 'West'  },
+  { id: 3,  name: 'B25-A02-PRJ04', model: 'UDM-4K30', ip: '172.16.202.14',  group: 'main',  zone: 'South' },
+  { id: 4,  name: 'B25-A03-PRJ06', model: 'UDM-4K30', ip: '172.16.202.16',  group: 'main',  zone: 'North' },
+  { id: 5,  name: 'B25-A03-PRJ08', model: 'UDM-4K30', ip: '172.16.202.18',  group: 'main',  zone: 'Dome'  },
+  { id: 6,  name: 'B25-A04-PRJ14', model: 'UDM-4K30', ip: '172.16.202.24',  group: 'main',  zone: 'East'  },
+  { id: 7,  name: 'B25-A04-PRJ15', model: 'UDM-4K30', ip: '172.16.202.25',  group: 'main',  zone: 'East'  },
+  { id: 8,  name: 'B25-A05-PRJ11', model: 'UDM-4K30', ip: '172.16.202.21',  group: 'main',  zone: 'West'  },
+  { id: 9,  name: 'B25-A05-PRJ12', model: 'UDM-4K30', ip: '172.16.202.22',  group: 'main',  zone: 'West'  },
+  { id: 10, name: 'B25-A05-PRJ13', model: 'UDM-4K30', ip: '172.16.202.23',  group: 'main',  zone: 'West'  },
+  { id: 11, name: 'B25-A06-PRJ03', model: 'UDM-4K30', ip: '172.16.202.13',  group: 'main',  zone: 'North' },
+  { id: 12, name: 'B25-A06-PRJ07', model: 'UDM-4K30', ip: '172.16.202.17',  group: 'main',  zone: 'Dome'  },
+  { id: 13, name: 'B25-A07-PRJ01', model: 'UDM-4K30', ip: '172.16.202.11',  group: 'main',  zone: 'North' },
+  { id: 14, name: 'B25-A08-PRJ16', model: 'UDM-4K30', ip: '172.16.202.26',  group: 'main',  zone: 'East'  },
+  { id: 15, name: 'B25-A08-PRJ17', model: 'UDM-4K30', ip: '172.16.202.27',  group: 'main',  zone: 'East'  },
+  { id: 16, name: 'B25-N01-PRJ05', model: 'UDM-4K30', ip: '172.16.202.15',  group: 'main',  zone: 'South' },
+  { id: 17, name: 'B25-S01-PRJ02', model: 'UDM-4K30', ip: '172.16.202.12',  group: 'main',  zone: 'North' },
+  // North Show (18–19) — optional, only installed sometimes
+  { id: 18, name: 'B25-S01-PRJ18', model: 'F80-4K12', ip: '172.16.202.28', group: 'north', zone: 'North Show', optional: true },
+  { id: 19, name: 'B25-S01-PRJ19', model: 'F80-4K12', ip: '172.16.202.29', group: 'north', zone: 'North Show', optional: true },
+];
+
+// Per-projector state
+const projState = {};
+PROJECTORS.forEach(p => {
+  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, serial: null, lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
+});
+
+// ── Persistent connection manager ─────────────────────────────────────────────
+// One WS per projector, reconnects automatically on close.
+function connectProj(projId) {
+  const st   = projState[projId];
+  const proj = PROJECTORS.find(p => p.id === projId);
+  if (st.connecting || (st.ws && st.ws.readyState === WebSocket.OPEN)) return;
+  st.connecting = true;
+
+  const ws = new WebSocket(`ws://${proxyHost}:${BARCO_PROXY_PORT}?host=${proj.ip}&port=9090`);
+
+  ws.addEventListener('open', () => {
+    st.ws = ws;
+    st.connecting = false;
+    st.reconnectDelay = 1000; // reset backoff on successful connect
+    console.log(`[WS] Connected ${proj.ip}`);
+    // Auto-fetch state — defer one tick so WS is fully ready
+    setTimeout(() => projRefresh(projId), 50);
+  });
+
+  ws.addEventListener('message', e => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    handleProjMsg(projId, msg);
+  });
+
+  ws.addEventListener('close', () => {
+    st.ws = null;
+    st.connecting = false;
+    const delay = st.reconnectDelay;
+    if (proj.optional) {
+      st.reconnectDelay = 30000; // poll slowly when optional projector is unplugged
+    } else {
+      st.reconnectDelay = Math.min(st.reconnectDelay * 2, 60000);
+      console.log(`[WS] Closed ${proj.ip} — reconnecting in ${delay}ms`);
+    }
+    setTimeout(() => connectProj(projId), delay);
+  });
+
+  ws.addEventListener('error', () => {
+    st.connecting = false;
+  });
+}
+
+function ensureConnected(projId) {
+  const st = projState[projId];
+  if (!st.ws || st.ws.readyState !== WebSocket.OPEN) {
+    connectProj(projId);
+    // Return a promise that waits up to 4s for connection
+    return new Promise((resolve, reject) => {
+      const t = Date.now();
+      const check = setInterval(() => {
+        if (st.ws && st.ws.readyState === WebSocket.OPEN) {
+          clearInterval(check); resolve(st.ws);
+        } else if (Date.now() - t > 4000) {
+          clearInterval(check); reject(new Error(`Timeout connecting ${projId}`));
+        }
+      }, 100);
+    });
+  }
+  return Promise.resolve(st.ws);
+}
+
+// Build projector cards
+function buildProjCards() {
+  const gridMain  = document.getElementById('proj-grid-main');
+  const gridNorth = document.getElementById('proj-grid-north');
+  gridMain.innerHTML = '';
+  gridNorth.innerHTML = '';
+
+  PROJECTORS.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'proj-card';
+    card.id = `proj-card-${p.id}`;
+    card.innerHTML = `
+      <div class="proj-card-head">
+        <div>
+          <div class="proj-name">${p.name.replace('B25-','')}</div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <div class="proj-ip">${p.ip}</div>
+          <button class="proj-expand-btn" id="expand-btn-${p.id}" onclick="toggleMetrics(${p.id})" title="Lamp hours &amp; temperature">+</button>
+        </div>
+      </div>
+      <div class="proj-status-row">
+        <span id="pw-badge-${p.id}" class="status-badge badge-unknown">
+          <span class="badge-dot"></span> —
+        </span>
+        <div style="display:flex;align-items:center;gap:6px;margin-left:auto">
+          <span id="sh-badge-${p.id}" class="status-badge badge-unknown" style="display:none">
+            <span class="badge-dot"></span> Shutter —
+          </span>
+          <span id="vde-badge-${p.id}" class="status-badge" style="display:none"></span>
+        </div>
+      </div>
+      <div class="proj-metrics" id="metrics-${p.id}" style="display:none">
+        <div class="proj-metric">
+          <span class="metric-label">Model</span>
+          <span class="metric-value" style="color:var(--text-2)">Barco ${p.model}</span>
+        </div>
+        <div class="proj-metric">
+          <span class="metric-label">Laser Hrs</span>
+          <span class="metric-value" id="lamp-${p.id}">—</span>
+        </div>
+        <div class="proj-metric">
+          <span class="metric-label">Temp</span>
+          <span class="metric-value" id="temp-${p.id}">—</span>
+        </div>
+        <div class="proj-metric">
+          <span class="metric-label">S/N</span>
+          <span class="metric-value" id="serial-${p.id}" style="font-size:10px;color:var(--text-3)">—</span>
+        </div>
+      </div>
+      <div class="proj-divider"></div>
+      <div class="proj-controls">
+        <button class="proj-btn power-on"  onclick="projPowerOn(${p.id})"  title="Power On">⏻</button>
+        <button class="proj-btn power-off" onclick="projPowerOff(${p.id})" title="Power Off">⏻</button>
+
+        <button class="proj-btn proj-btn-shutter" id="sh-btn-${p.id}" onclick="projToggleShutter(${p.id})" title="Toggle Shutter">Shutter</button>
+      </div>`;
+    (p.group === 'main' ? gridMain : gridNorth).appendChild(card);
+  });
+}
+
+buildProjCards();
+
+// ── View toggle (tile ↔ list) ─────────────────────────────────────────────────
+function setProjView(mode) {
+  localStorage.setItem('projView', mode);
+  ['proj-grid-main', 'proj-grid-north'].forEach(id => {
+    document.getElementById(id)?.classList.toggle('list-view', mode === 'list');
+  });
+  document.querySelectorAll('.proj-view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === mode));
+}
+
+function setCipView(mode) {
+  localStorage.setItem('cipView', mode);
+  ['cip-grid-tx', 'cip-grid-rx'].forEach(id => {
+    document.getElementById(id)?.classList.toggle('list-view', mode === 'list');
+  });
+  document.querySelectorAll('.cip-view-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === mode));
+}
+
+// Restore saved preferences
+setProjView(localStorage.getItem('projView') || 'tile');
+setCipView(localStorage.getItem('cipView')   || 'tile');
+
+// ── WebSocket proxy comm ──────────────────────────────────────────────────────
+// The Barco Pulse API is TCP JSON-RPC on port 9090.
+// We need a lightweight local proxy to bridge WebSocket → TCP.
+// Run:  node proxy.js
+// proxy.js is generated below (see the note in the settings panel).
+
+// ── RPC helpers ───────────────────────────────────────────────────────────────
+function handleProjMsg(projId, msg) {
+  // Resolve pending RPC calls
+  if (msg.id !== undefined) {
+    const st = projState[projId];
+    const cb = st.pending[msg.id];
+    if (cb) {
+      delete st.pending[msg.id];
+      if (msg.error) cb.reject(new Error(msg.error.message || 'RPC error'));
+      else           cb.resolve(msg.result);
+    }
+  }
+  // Handle push notifications from subscriptions
+  // Barco format: {"method":"property.changed","params":{"property":[{"system.state":"on"}]}}
+  if (msg.method === 'property.changed' && msg.params) {
+    const props = Array.isArray(msg.params.property) ? msg.params.property : [msg.params.property];
+    props.forEach(obj => {
+      if (!obj || typeof obj !== 'object') return;
+      if (obj['system.state']                        !== undefined) updatePowerBadge(projId,   obj['system.state']);
+      if (obj['optics.shutter.position']             !== undefined) updateShutterBadge(projId, obj['optics.shutter.position']);
+      if (obj['statistics.laserruntime.value']     !== undefined) updateLampHours(projId,    obj['statistics.laserruntime.value']);
+      if (obj['environment.temperature.mainboard'] !== undefined) updateTemp(projId,          obj['environment.temperature.mainboard']);
+      if (obj['system.serialnumber']               !== undefined) updateSerial(projId,        obj['system.serialnumber']);
+      // Also handle flat property names without dot-path (last segment of each property)
+      if (obj['state']        !== undefined) updatePowerBadge(projId,   obj['state']);
+      if (obj['position']     !== undefined) updateShutterBadge(projId, obj['position']);
+      if (obj['value']        !== undefined) updateLampHours(projId,    obj['value']);
+      if (obj['mainboard']    !== undefined) updateTemp(projId,          obj['mainboard']);
+      if (obj['serialnumber'] !== undefined) updateSerial(projId,        obj['serialnumber']);
+    });
+  }
+}
+
+function rpcCall(projId, method, params) {
+  return ensureConnected(projId).then(ws => new Promise((resolve, reject) => {
+    const st  = projState[projId];
+    const id  = st.rpcId++;
+    const msg = { jsonrpc: '2.0', method, id };
+    if (params) msg.params = params;
+    st.pending[id] = { resolve, reject };
+    ws.send(JSON.stringify(msg));
+    setTimeout(() => {
+      if (st.pending[id]) {
+        delete st.pending[id];
+        reject(new Error('RPC timeout'));
+      }
+    }, 6000);
+  }));
+}
+
+function rpcSend(projId, method, params) { return rpcCall(projId, method, params); }
+function rpcGet(projId, property)        { return rpcCall(projId, 'property.get', { property }); }
+
+// Unwrap Barco result — handles both "standby" and {"system.state":"standby"}
+function unwrap(result, property) {
+  if (result === null || result === undefined) return null;
+  if (typeof result === 'string') return result;
+  // Object form: {"system.state":"standby"} or {"position":"Open"}
+  if (typeof result === 'object') {
+    // Try exact property name
+    if (result[property] !== undefined) return result[property];
+    // Try last segment: "optics.shutter.position" → "position"
+    const key = property.split('.').pop();
+    if (result[key] !== undefined) return result[key];
+    // Return first value
+    const vals = Object.values(result);
+    if (vals.length) return vals[0];
+  }
+  return String(result);
+}
+
+async function projRefresh(projId) {
+  const proj = PROJECTORS.find(p => p.id === projId);
+  try {
+    const raw   = await rpcGet(projId, 'system.state');
+    const state = unwrap(raw, 'system.state');
+    console.log(`[Refresh] ${proj.ip} state raw:`, raw, '→', state);
+    updatePowerBadge(projId, state);
+    // Fetch shutter every poll; laser runtime + temp only when interval has elapsed
+    if (state === 'on' || state === 'ready') {
+      const st = projState[projId];
+      const doMetrics = (Date.now() - st.lastMetricsFetch) > METRICS_POLL_MS;
+      const [sRaw, lhRaw, tRaw] = await Promise.all([
+        rpcGet(projId, 'optics.shutter.position').catch(() => null),
+        doMetrics ? rpcGet(projId, 'statistics.laserruntime.value').catch(() => null)     : Promise.resolve(null),
+        doMetrics ? rpcGet(projId, 'environment.temperature.mainboard').catch(() => null) : Promise.resolve(null),
+      ]);
+      updateShutterBadge(projId, sRaw ? unwrap(sRaw, 'optics.shutter.position') : 'unknown');
+      if (doMetrics) {
+        updateLampHours(projId, lhRaw ? unwrap(lhRaw, 'statistics.laserruntime.value')     : null);
+        updateTemp(projId,      tRaw  ? unwrap(tRaw,  'environment.temperature.mainboard') : null);
+        st.lastMetricsFetch = Date.now();
+      }
+    } else {
+      document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+    }
+    // Fetch serial number once per connection (available in any power state)
+    if (projState[projId].serial === null) {
+      rpcGet(projId, 'system.serialnumber')
+        .then(raw => updateSerial(projId, unwrap(raw, 'system.serialnumber')))
+        .catch(() => {});
+    }
+    // Subscribe to push notifications for live updates
+    rpcSend(projId, 'property.subscribe', { property: 'system.state' }).catch(() => {});
+    if (state === 'on' || state === 'ready') {
+      rpcSend(projId, 'property.subscribe', { property: 'optics.shutter.position' }).catch(() => {});
+      rpcSend(projId, 'property.subscribe', { property: 'statistics.laserruntime.value' }).catch(() => {});
+      rpcSend(projId, 'property.subscribe', { property: 'environment.temperature.mainboard' }).catch(() => {});
+    }
+  } catch (e) {
+    if (proj.optional) {
+      setPowerBadge(projId, 'unknown'); // show as unknown, not error
+    } else {
+      setPowerBadge(projId, 'error');
+      updateSysStatus();
+      document.getElementById(`proj-card-${projId}`)?.classList.add('offline');
+      showToast(`${proj.name}: connection failed`, 'error');
+    }
+  }
+}
+
+// ── Power / Shutter commands ──────────────────────────────────────────────────
+async function projPowerOn(projId) {
+  const proj = PROJECTORS.find(p => p.id === projId);
+  setPowerBadge(projId, 'transitioning');
+  try {
+    await rpcSend(projId, 'system.poweron');
+    showToast(`${proj.name} — powering on`, 'info');
+    setTimeout(() => projRefresh(projId), 3000);
+  } catch { showToast(`${proj.name}: failed`, 'error'); }
+}
+
+async function projPowerOff(projId) {
+  const proj = PROJECTORS.find(p => p.id === projId);
+  setPowerBadge(projId, 'transitioning');
+  try {
+    await rpcSend(projId, 'system.poweroff');
+    showToast(`${proj.name} — powering off`, 'info');
+    setTimeout(() => projRefresh(projId), 3000);
+  } catch { showToast(`${proj.name}: failed`, 'error'); }
+}
+
+async function projToggleShutter(projId) {
+  const proj = PROJECTORS.find(p => p.id === projId);
+  const st = projState[projId];
+  const newTarget = st.shutter === 'Open' ? 'Closed' : 'Open';
+  try {
+    await rpcSend(projId, 'property.set', { property: 'optics.shutter.target', value: newTarget });
+    showToast(`${proj.name} — shutter ${newTarget.toLowerCase()}`, 'info');
+    setTimeout(() => projRefresh(projId), 1500);
+  } catch { showToast(`${proj.name}: shutter failed`, 'error'); }
+}
+
+// ── Badge helpers ─────────────────────────────────────────────────────────────
+const POWER_BADGE = {
+  boot:           { cls: 'badge-transitioning', text: 'Booting' },
+  eco:            { cls: 'badge-standby',        text: 'ECO' },
+  standby:        { cls: 'badge-standby',        text: 'Standby' },
+  ready:          { cls: 'badge-ready',           text: 'Ready' },
+  conditioning:   { cls: 'badge-transitioning',  text: 'Warming' },
+  on:             { cls: 'badge-on',             text: 'On' },
+  deconditioning: { cls: 'badge-transitioning',  text: 'Cooling' },
+  error:          { cls: 'badge-error',          text: 'Error' },
+  unknown:        { cls: 'badge-unknown',        text: '—' },
+  transitioning:  { cls: 'badge-transitioning',  text: '…' },
+};
+
+function setPowerBadge(projId, stateKey) {
+  const b = document.getElementById(`pw-badge-${projId}`);
+  const def = POWER_BADGE[stateKey] || POWER_BADGE.unknown;
+  b.className = `status-badge ${def.cls}`;
+  b.innerHTML = `<span class="badge-dot"></span> ${def.text}`;
+  projState[projId].power = stateKey;
+}
+
+function updatePowerBadge(projId, rawState) {
+  setPowerBadge(projId, rawState || 'unknown');
+  updateSysStatus();
+  // Re-apply filters/sort if active
+  const stateFilter = document.getElementById('filterState')?.value;
+  const sortFilter  = document.getElementById('sortBy')?.value;
+  if (stateFilter || (sortFilter && sortFilter !== 'default')) applyFilters();
+  const card = document.getElementById(`proj-card-${projId}`);
+  card.classList.remove('offline');
+  card.style.borderColor = '';
+  if (rawState === 'on') {
+    card.style.borderColor = 'rgba(94,207,122,0.2)';
+  } else if (rawState === 'ready') {
+    card.style.borderColor = 'rgba(94,207,122,0.2)';
+    document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+  } else if (rawState === 'standby' || rawState === 'eco') {
+    card.style.borderColor = 'rgba(245,166,35,0.2)';
+    document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+  } else if (rawState === 'error') {
+    card.classList.add('offline');
+    document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+  } else {
+    document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+  }
+}
+
+function updateShutterBadge(projId, position) {
+  const b = document.getElementById(`sh-badge-${projId}`);
+  projState[projId].shutter = position;
+  const pw = projState[projId].power;
+  if (pw !== 'on') { b.style.display = 'none'; return; }
+  b.style.display = '';
+  if (position === 'Open') {
+    b.className = 'status-badge badge-open';
+    b.innerHTML = '<span class="badge-dot"></span> Open';
+  } else if (position === 'Closed') {
+    b.className = 'status-badge badge-closed';
+    b.innerHTML = '<span class="badge-dot"></span> Closed';
+  } else {
+    b.className = 'status-badge badge-unknown';
+    b.innerHTML = '<span class="badge-dot"></span> Shutter —';
+  }
+  // Update shutter button label
+  const btn = document.getElementById(`sh-btn-${projId}`);
+  if (btn) btn.textContent = 'Shutter';
+}
+
+function updateLampHours(projId, seconds) {
+  projState[projId].lampHours = seconds;
+  const el = document.getElementById(`lamp-${projId}`);
+  if (!el) return;
+  if (seconds === null || seconds === undefined) {
+    el.textContent = '—';
+  } else {
+    const h = Math.round(Number(seconds) / 3600);
+    el.textContent = isNaN(h) ? '—' : h.toLocaleString() + ' h';
+  }
+}
+
+function updateTemp(projId, celsius) {
+  projState[projId].temp = celsius;
+  const el = document.getElementById(`temp-${projId}`);
+  if (!el) return;
+  if (celsius === null || celsius === undefined) {
+    el.className = 'metric-value';
+    el.textContent = '—';
+  } else {
+    const t = Math.round(Number(celsius));
+    el.textContent = isNaN(t) ? '—' : t + '°C';
+    el.className = 'metric-value ' + (t >= 70 ? 'temp-hot' : t >= 55 ? 'temp-warn' : 'temp-ok');
+  }
+}
+
+function updateSerial(projId, sn) {
+  projState[projId].serial = sn;
+  const el = document.getElementById(`serial-${projId}`);
+  if (!el) return;
+  el.textContent = (sn !== null && sn !== undefined && String(sn).trim()) ? String(sn).trim() : '—';
+}
+
+function toggleMetrics(projId) {
+  const row = document.getElementById(`metrics-${projId}`);
+  const btn = document.getElementById(`expand-btn-${projId}`);
+  const willOpen = row.style.display === 'none';
+  row.style.display = willOpen ? '' : 'none';
+  btn.textContent = willOpen ? '−' : '+';
+  btn.classList.toggle('open', willOpen);
+}
+
+// ── Filters & Sort ────────────────────────────────────────────────────────────
+const STATE_ORDER = { on:0, ready:1, conditioning:2, deconditioning:3, standby:4, eco:5, boot:6, error:7, unknown:8 };
+
+function initFilters() {} // no dynamic population needed anymore
+
+function applyFilters() {
+  const zone    = document.getElementById('filterZone').value;
+  const state   = document.getElementById('filterState').value;
+  const sortBy  = document.getElementById('sortBy').value;
+  const hasFilter = zone || state;
+  const hasSort   = sortBy && sortBy !== 'default';
+
+  document.getElementById('filterClear').classList.toggle('visible', !!(hasFilter || hasSort));
+  ['filterZone','filterState'].forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.toggle('active', !!el.value);
+  });
+  document.getElementById('sortBy').classList.toggle('active', hasSort);
+
+  // Filter
+  let visible = [];
+  PROJECTORS.forEach(p => {
+    const card = document.getElementById(`proj-card-${p.id}`);
+    if (!card) return;
+    const pw = projState[p.id]?.power || 'unknown';
+    const stateMatch = !state || pw === state || (state === 'error' && (pw === 'error' || pw === 'unknown'));
+    const zoneMatch  = !zone  || p.zone === zone;
+    const show = stateMatch && zoneMatch;
+    card.style.display = show ? '' : 'none';
+    if (show) visible.push(p);
+  });
+
+  // Sort — reorder cards within their grid containers
+  if (sortBy !== 'default') {
+    ['proj-grid-main', 'proj-grid-north'].forEach(gridId => {
+      const grid = document.getElementById(gridId);
+      if (!grid) return;
+      const cards = [...grid.querySelectorAll('.proj-card')];
+      cards.sort((a, b) => {
+        const pa = PROJECTORS.find(p => `proj-card-${p.id}` === a.id);
+        const pb = PROJECTORS.find(p => `proj-card-${p.id}` === b.id);
+        if (!pa || !pb) return 0;
+        if (sortBy === 'ip') {
+          const toNum = ip => ip.split('.').reduce((acc,v) => acc*256 + parseInt(v), 0);
+          return toNum(pa.ip) - toNum(pb.ip);
+        }
+        if (sortBy === 'zone') {
+          return (pa.zone || '').localeCompare(pb.zone || '') || pa.id - pb.id;
+        }
+        if (sortBy === 'name') {
+          return pa.name.localeCompare(pb.name);
+        }
+        if (sortBy === 'state') {
+          const sa = STATE_ORDER[projState[pa.id]?.power] ?? 8;
+          const sb = STATE_ORDER[projState[pb.id]?.power] ?? 8;
+          return sa - sb || pa.id - pb.id;
+        }
+        return 0;
+      });
+      cards.forEach(c => grid.appendChild(c));
+    });
+  }
+
+  // Show/hide section headers
+  document.querySelectorAll('.proj-section').forEach(sec => {
+    const anyVisible = [...sec.querySelectorAll('.proj-card')].some(c => c.style.display !== 'none');
+    sec.style.display = anyVisible ? '' : 'none';
+  });
+
+  const total = PROJECTORS.length;
+  document.getElementById('filterResults').textContent =
+    hasFilter ? `${visible.length} of ${total} shown` : '';
+}
+
+function clearFilters() {
+  ['filterZone','filterState','sortBy'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.value = id === 'sortBy' ? 'default' : ''; el.classList.remove('active'); }
+  });
+  document.getElementById('filterClear').classList.remove('visible');
+  document.getElementById('filterResults').textContent = '';
+  // Restore original card order and visibility
+  PROJECTORS.forEach(p => {
+    const card = document.getElementById(`proj-card-${p.id}`);
+    if (card) { card.style.display = ''; }
+  });
+  // Re-append in original id order
+  ['proj-grid-main','proj-grid-north'].forEach(gridId => {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+    PROJECTORS.filter(p => gridId === 'proj-grid-main' ? p.group === 'main' : p.group === 'north')
+      .sort((a,b) => a.id - b.id)
+      .forEach(p => {
+        const card = document.getElementById(`proj-card-${p.id}`);
+        if (card) grid.appendChild(card);
+      });
+  });
+  document.querySelectorAll('.proj-section').forEach(sec => sec.style.display = '');
+}
+
+// ── System status bar ────────────────────────────────────────────────────────
+const MAIN_PROJ_IDS = PROJECTORS.filter(p => p.group === 'main').map(p => p.id); // ids 1-17
+const TOAST_PROJ_ID = 8; // B25-A05-PRJ11 — the "toast" projector, ok to be on alone
+
+// Friendly short names for single-projector callouts
+const PROJ_SHORT = {};
+PROJECTORS.forEach(p => { PROJ_SHORT[p.id] = p.name.replace('B25-',''); });
+
+function updateSysStatus() {
+  const indicators = document.getElementById('sysIndicators');
+  const summary    = document.getElementById('sysSummary');
+  const powerEl    = document.getElementById('sysPower');
+  if (!indicators || !summary) return;
+
+  const states = MAIN_PROJ_IDS.map(id => ({
+    id,
+    name: PROJ_SHORT[id],
+    power: projState[id]?.power || 'unknown'
+  }));
+
+  const connected  = states.filter(s => s.power !== 'unknown' && s.power !== 'error');
+  const errors     = states.filter(s => s.power === 'error');
+  const unknown    = states.filter(s => s.power === 'unknown');
+  const on         = states.filter(s => s.power === 'on');
+  const ready      = states.filter(s => s.power === 'ready');
+  const active     = [...on, ...ready]; // lamp is energised
+  const standby    = states.filter(s => s.power === 'standby' || s.power === 'eco');
+
+  // Render dot strip
+  indicators.innerHTML = states.map(s => {
+    let cls = 'unknown';
+    if (s.power === 'on')                                cls = 'on';
+    else if (s.power === 'ready' || s.power === 'standby' || s.power === 'eco') cls = 'standby';
+    else if (s.power === 'error')                        cls = 'error';
+    return `<div class="sys-dot ${cls}" title="${s.name}: ${s.power}"></div>`;
+  }).join('');
+
+  // Build summary text
+  let html = '';
+  const total = MAIN_PROJ_IDS.length;
+  const connCount = connected.length;
+
+  // Network status — right side
+  let netHtml = '';
+  if (errors.length > 0) {
+    netHtml = `<span class="warn">⚠ ${errors.length} unreachable</span>`;
+  } else if (unknown.length === total) {
+    netHtml = `<span class="warn">Waiting…</span>`;
+  } else if (unknown.length > 0) {
+    netHtml = `<span class="warn">${connCount}/${total} network OK</span>`;
+  } else {
+    netHtml = `<span class="ok">All ${total} network OK</span>`;
+  }
+  summary.innerHTML = netHtml;
+
+
+  // Power summary — left side
+  const trueOn = states.filter(s => s.power === 'on');
+  let pwrHtml  = '';
+
+  if (unknown.length === total) {
+    pwrHtml = `Waiting for data…`;
+  } else if (trueOn.length === 0) {
+    pwrHtml = `All projectors off`;
+  } else if (trueOn.length === 1 && trueOn[0].id === TOAST_PROJ_ID) {
+    pwrHtml = `<span class="ok">Toast on</span> — all others off`;
+  } else if (trueOn.length === total) {
+    pwrHtml = `<span class="ok">All ${total} on</span>`;
+  } else {
+    pwrHtml = `<span class="on">${trueOn.length} on</span>`;
+    if (trueOn.length <= 4) {
+      const names = trueOn.map(s => s.name).join(', ');
+      pwrHtml += ` <span style="color:var(--text-3);font-size:10px">(${names})</span>`;
+    }
+    pwrHtml += ` · ${total - trueOn.length} off`;
+  }
+  if (powerEl) powerEl.innerHTML = pwrHtml;
+
+  // Mirror to scene library tab — simplified sales view
+  const summary2    = document.getElementById('sysSummary2');
+  const power2      = document.getElementById('sysPower2');
+  const indicators2 = document.getElementById('sysIndicators2');
+  if (indicators2) indicators2.innerHTML = indicators.innerHTML;
+
+  if (summary2 && power2) {
+    const rxDevices  = CIP_DEVICES.filter(d => d.type === 'rx');
+    const allStreaming = rxDevices.length > 0 &&
+      rxDevices.every(d => cipState[d.id]?.online === 'online' && cipState[d.id]?.stream === true);
+
+    if (unknown.length === total) {
+      power2.innerHTML   = `Waiting for data…`;
+      summary2.innerHTML = `—`;
+    } else if (trueOn.length === 0) {
+      power2.innerHTML   = `All projectors off`;
+      summary2.innerHTML = `—`;
+    } else if (trueOn.length === 1 && trueOn[0].id === TOAST_PROJ_ID) {
+      power2.innerHTML   = `<span class="ok">Toast only</span>`;
+      summary2.innerHTML = `—`;
+    } else if (trueOn.length === total) {
+      power2.innerHTML   = `<span class="ok">All Projectors OK</span>`;
+      summary2.innerHTML = allStreaming
+        ? `<span class="ok">All Matrox OK</span>`
+        : `—`;
+    } else {
+      power2.innerHTML   = `<span class="on">${trueOn.length} / ${total} on</span>`;
+      summary2.innerHTML = `—`;
+    }
+  }
+}
+
+// ── Bulk actions ──────────────────────────────────────────────────────────────
+const MAIN_PROJECTORS = PROJECTORS.filter(p => p.group === 'main');
+
+function bulkPowerOn()  { MAIN_PROJECTORS.forEach(p => projPowerOn(p.id)); }
+function bulkPowerOff() { MAIN_PROJECTORS.forEach(p => projPowerOff(p.id)); }
+function toastOnly() {
+  MAIN_PROJECTORS.forEach(p => {
+    if (p.id === TOAST_PROJ_ID) projPowerOn(p.id);
+    else projPowerOff(p.id);
+  });
+}
+function bulkShutterOpen() {
+  PROJECTORS.forEach(p => {
+    if (projState[p.id].power === 'on' || projState[p.id].power === 'ready') {
+      rpcSend(p.id, 'property.set', { property: 'optics.shutter.target', value: 'Open' })
+        .then(() => setTimeout(() => projRefresh(p.id), 1500))
+        .catch(() => {});
+    }
+  });
+  showToast('Opening all shutters…', 'info');
+}
+function bulkShutterClose() {
+  PROJECTORS.forEach(p => {
+    if (projState[p.id].power === 'on' || projState[p.id].power === 'ready') {
+      rpcSend(p.id, 'property.set', { property: 'optics.shutter.target', value: 'Closed' })
+        .then(() => setTimeout(() => projRefresh(p.id), 1500))
+        .catch(() => {});
+    }
+  });
+  showToast('Closing all shutters…', 'info');
+}
+
+// ── Refresh all ───────────────────────────────────────────────────────────────
+function refreshAll() {
+  PROJECTORS.forEach((p, i) => setTimeout(() => projRefresh(p.id), i * 200));
+  updatePollTime();
+}
+
+function updatePollTime() {
+  const status = document.getElementById('pollStatus');
+  if (!status) return;
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (pollingInterval) {
+    status.innerHTML = `<span style="color:var(--teal)">Live</span> · Last poll ${now}`;
+  } else {
+    status.innerHTML = `Last poll ${now}`;
+  }
+}
+
+// ── Auto-polling ──────────────────────────────────────────────────────────────
+let pollingInterval = null;
+function togglePolling() {
+  const btn = document.getElementById('pollBtn');
+  const status = document.getElementById('pollStatus');
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
+    btn.classList.remove('polling');
+    btn.innerHTML = `<svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Start Polling`;
+    status.textContent = 'Not polling';
+    status.className = 'poll-status';
+  } else {
+    refreshAll();
+    pollingInterval = setInterval(refreshAll, 5000);
+    btn.classList.add('polling');
+    btn.innerHTML = `<svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Stop Polling`;
+    status.className = 'poll-status live';
+    updatePollTime();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════════
+function switchTab(tab) {
+  document.getElementById('tab-scenes').classList.toggle('active', tab === 'scenes');
+  document.getElementById('tab-proj').classList.toggle('active',   tab === 'proj');
+  document.getElementById('tab-matrox').classList.toggle('active', tab === 'matrox');
+  document.getElementById('panel-scenes').classList.toggle('active', tab === 'scenes');
+  document.getElementById('panel-proj').classList.toggle('active',   tab === 'proj');
+  document.getElementById('panel-matrox').classList.toggle('active', tab === 'matrox');
+
+  // Sidebar nav sets
+  const sceneNavItems = ['nav-tech','nav-demos','nav-new','nav-alpha','nav-multi'];
+  sceneNavItems.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = tab === 'scenes' ? '' : 'none';
+  });
+  document.getElementById('nav-label-scenes').style.display = tab === 'scenes' ? '' : 'none';
+  document.getElementById('proj-nav').style.display    = tab === 'proj'   ? '' : 'none';
+  document.getElementById('matrox-nav').style.display  = tab === 'matrox' ? '' : 'none';
+
+  if (tab === 'proj') {
+    initFilters();
+    PROJECTORS.forEach(p => connectProj(p.id));
+    if (!pollingInterval) togglePolling();
+    // connectProj auto-refreshes on open; for already-open connections, refresh manually
+    setTimeout(() => {
+      PROJECTORS.forEach((p, i) => {
+        const st = projState[p.id];
+        if (st.ws && st.ws.readyState === WebSocket.OPEN) {
+          setTimeout(() => projRefresh(p.id), i * 150);
+        }
+      });
+    }, 500);
+  }
+
+  if (tab === 'matrox') {
+    if (!cipPollingInterval) toggleCipPolling();
+  }
+
+  document.getElementById('scenes-footer').style.display = tab === 'scenes' ? '' : 'none';
+  document.getElementById('nowPill').style.display        = tab === 'scenes' ? '' : 'none';
+}
+
+// ── Nav helpers ───────────────────────────────────────────────────────────────
+function navTo(e, id) {
+  e.preventDefault();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('#panel-scenes .nav-item, #sidebar .nav-item').forEach(el => el.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+}
+
+function navToProj(e, id) {
+  e.preventDefault();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('#proj-nav .nav-item').forEach(el => el.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════════════════════════════════════════
+let toastTimer;
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.className = `toast show ${type}`;
+  document.getElementById('toastMsg').textContent  = msg;
+  document.getElementById('toastTime').textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONFIG MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function openConfig() {
+  const scenes = allScenes();
+  document.getElementById('configForm').innerHTML = `
+    <div class="bulk-lbl">Server</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Proxy Host</label>
+      <input class="cfg-input" id="cfgProxyHost" type="text" placeholder="${window.location.hostname || 'localhost'}" value="${proxyHost}" style="flex:1;font-family:monospace">
+      <span style="font-size:10px;color:var(--text-3)">:${BARCO_PROXY_PORT}</span>
+    </div>
+    <p style="font-size:10px;color:var(--text-3);margin-bottom:10px;line-height:1.6">Defaults to the page hostname. Set to the server IP (e.g. <code style="color:var(--teal)">172.16.0.32</code>) if auto-detect is wrong. Changing this reconnects all projector WebSockets.</p>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">CC IP</label>
+      <input class="cfg-input" id="cfgCcIp" type="text" placeholder="172.16.0.20" value="${ccIp}" style="flex:1;font-family:monospace">
+    </div>
+    <p style="font-size:10px;color:var(--text-3);margin-bottom:4px;line-height:1.6">Barco Control Center IP for scene triggering. Also editable in the top bar on desktop.</p>
+    <div class="modal-rule"></div>
+    <div class="cfg-header"><span>Scene</span><span>Timeline Key</span><span>Value</span></div>
+    <div class="cfg-rows">
+      ${scenes.map(s => { const c = sceneMap[s.key]||{}; return `<div class="cfg-row"><span class="cfg-lbl">${s.label}</span><input class="cfg-input" id="k-${s.key}" type="text" placeholder="Timeline 01" value="${c.tlKey||''}"><input class="cfg-input" id="v-${s.key}" type="number" placeholder="0" value="${c.tlValue!==undefined?c.tlValue:''}"></div>`; }).join('')}
+    </div>
+    <div class="modal-rule"></div>
+    <div class="bulk-lbl">Bulk Import — JSON</div>
+    <textarea class="bulk-ta" id="bulkJson" placeholder='{"artnyc":{"tlKey":"Timeline 03","tlValue":210}}'></textarea>
+    <button class="btn-teal" onclick="importBulk()">Import JSON</button>
+    <div class="modal-rule"></div>
+    <div class="bulk-lbl">Running the Dashboard</div>
+    <p style="font-size:11px;color:var(--text-3);line-height:1.8;margin-bottom:10px;">
+      Both files must be in the same folder. Open a terminal there and run:<br>
+      <code style="background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:5px;font-size:10px;display:inline-block;margin-top:6px;color:#e2c998;">node proxy.js</code><br><br>
+      Then open your browser to:<br>
+      <code style="background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:5px;font-size:10px;display:inline-block;margin-top:4px;color:#5ecfbe;">http://localhost:8080</code><br><br>
+      <span style="color:#505050;">No npm install needed — uses Node.js built-ins only. The proxy serves the HTML file AND bridges WebSocket → Barco TCP/9090.</span>
+    </p>
+    <textarea class="bulk-ta" rows="10" style="font-size:9.5px;font-family:monospace;color:#7ecfbe;background:#060608;" readonly>// proxy.js — Barco TCP bridge
+// npm install ws   then   node proxy.js
+const { WebSocketServer } = require('ws');
+const net = require('net');
+
+const wss = new WebSocketServer({ port: 9100 });
+console.log('Barco proxy listening on ws://localhost:8080');
+
+wss.on('connection', (ws, req) => {
+  const params = new URLSearchParams(req.url.split('?')[1]);
+  const host = params.get('host');
+  const port = parseInt(params.get('port') || '9090');
+  const tcp = net.createConnection({ host, port });
+  let buf = '';
+  tcp.on('data', d => {
+    buf += d.toString();
+    let nl;
+    while ((nl = buf.indexOf('\\n')) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) try { ws.send(line); } catch {}
+    }
+  });
+  tcp.on('error', e => ws.close(1011, e.message));
+  tcp.on('close', ()  => ws.close());
+  ws.on('message', m  => tcp.write(m + '\\n'));
+  ws.on('close',   ()  => tcp.destroy());
+});
+</textarea>`;
+  document.getElementById('configModal').classList.add('open');
+}
+
+function closeConfig() { document.getElementById('configModal').classList.remove('open'); }
+
+function saveConfig() {
+  // Proxy host
+  const newProxyHost = (document.getElementById('cfgProxyHost')?.value.trim()) || window.location.hostname || 'localhost';
+  const hostChanged  = newProxyHost !== proxyHost;
+  proxyHost = newProxyHost;
+  localStorage.setItem('proxyHost', proxyHost);
+
+  // CC IP (editable from modal on mobile)
+  const newCcIp = document.getElementById('cfgCcIp')?.value.trim();
+  if (newCcIp) {
+    ccIp = newCcIp;
+    localStorage.setItem('ccIp', ccIp);
+    const topbarInput = document.getElementById('ccIp');
+    if (topbarInput) topbarInput.value = ccIp;
+  }
+
+  // Scene mappings
+  allScenes().forEach(s => {
+    const k = document.getElementById('k-' + s.key)?.value.trim();
+    const v = document.getElementById('v-' + s.key)?.value;
+    if (k) sceneMap[s.key] = { tlKey: k, tlValue: v !== '' ? Number(v) : undefined };
+    else   delete sceneMap[s.key];
+  });
+  localStorage.setItem('sceneMap', JSON.stringify(sceneMap));
+  renderAll();
+  closeConfig();
+
+  if (hostChanged) {
+    // Drop all open WS connections — the reconnect loop re-opens them with the new host
+    PROJECTORS.forEach(p => {
+      const st = projState[p.id];
+      if (st.ws) { st.ws.close(); st.ws = null; }
+      st.connecting = false;
+    });
+    showToast(`Proxy host → ${proxyHost} · reconnecting…`, 'info');
+  } else {
+    showToast('Settings saved', 'success');
+  }
+}
+
+function importBulk() {
+  try {
+    const obj = JSON.parse(document.getElementById('bulkJson').value.trim());
+    Object.assign(sceneMap, obj);
+    Object.entries(obj).forEach(([k, v]) => {
+      const ke = document.getElementById('k-' + k);
+      const ve = document.getElementById('v-' + k);
+      if (ke) ke.value = v.tlKey || '';
+      if (ve) ve.value = v.tlValue !== undefined ? v.tlValue : '';
+    });
+    showToast(`${Object.keys(obj).length} scenes imported`, 'info');
+  } catch { showToast('Invalid JSON', 'error'); }
+}
+
+document.getElementById('configModal').addEventListener('click', e => {
+  if (e.target.id === 'configModal') closeConfig();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONVERTIP — Matrox ConvertIP senders & receivers
+// REST API over HTTPS/443 with cookie auth, proxied through /api/matrox
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CIP_DEVICES = [
+  // ── Senders (TX) — located in server room ────────────────────────────────
+  { id:'ven01', name:'CTL-VEN01', ip:'172.16.201.141', type:'tx', zone:'Server Room' },
+  { id:'ven02', name:'CTL-VEN02', ip:'172.16.201.142', type:'tx', zone:'Server Room' },
+  { id:'ven03', name:'CTL-VEN03', ip:'172.16.201.143', type:'tx', zone:'Server Room' },
+  { id:'ven04', name:'CTL-VEN04', ip:'172.16.201.144', type:'tx', zone:'Server Room' },
+  { id:'ven05', name:'CTL-VEN05', ip:'172.16.201.145', type:'tx', zone:'Server Room' },
+  { id:'ven06', name:'CTL-VEN06', ip:'172.16.201.146', type:'tx', zone:'Server Room' },
+  { id:'ven07', name:'CTL-VEN07', ip:'172.16.201.147', type:'tx', zone:'Server Room' },
+  { id:'ven08', name:'CTL-VEN08', ip:'172.16.201.148', type:'tx', zone:'Server Room' },
+  { id:'ven09', name:'CTL-VEN09', ip:'172.16.201.149', type:'tx', zone:'Server Room' },
+  { id:'ven10', name:'CTL-VEN10', ip:'172.16.201.150', type:'tx', zone:'Server Room' },
+  { id:'ven11', name:'CTL-VEN11', ip:'172.16.201.151', type:'tx', zone:'Server Room' },
+  { id:'ven12', name:'CTL-VEN12', ip:'172.16.201.152', type:'tx', zone:'Server Room' },
+  { id:'ven13', name:'CTL-VEN13', ip:'172.16.201.153', type:'tx', zone:'Server Room' },
+  { id:'ven14', name:'CTL-VEN14', ip:'172.16.201.154', type:'tx', zone:'Server Room' },
+  { id:'ven15', name:'CTL-VEN15', ip:'172.16.201.155', type:'tx', zone:'Server Room' },
+  { id:'ven16', name:'CTL-VEN16', ip:'172.16.201.156', type:'tx', zone:'Server Room' },
+  { id:'ven17', name:'CTL-VEN17', ip:'172.16.201.157', type:'tx', zone:'Server Room' },
+  { id:'ven18', name:'CTL-VEN18', ip:'172.16.201.158', type:'tx', zone:'Server Room' },
+  { id:'ven19', name:'CTL-VEN19', ip:'172.16.201.159', type:'tx', zone:'Server Room' },
+  { id:'ven20', name:'CTL-VEN20', ip:'172.16.201.160', type:'tx', zone:'Server Room' },
+  { id:'ven21', name:'CTL-VEN21', ip:'172.16.201.161', type:'tx', zone:'Server Room' },
+  // ── Receivers (RX) — zones match connected projector areas ───────────────
+  { id:'vde01', name:'A07-VDE01', ip:'172.16.201.171', type:'rx', zone:'North' },      // A07 → PRJ01 North
+  { id:'vde02', name:'S01-VDE02', ip:'172.16.201.172', type:'rx', zone:'North' },      // S01 → PRJ02 North
+  { id:'vde03', name:'A03-VDE03', ip:'172.16.201.173', type:'rx', zone:'North' },      // A03 → PRJ06/08 North
+  { id:'vde04', name:'A02-VDE04', ip:'172.16.201.174', type:'rx', zone:'South' },      // A02 → PRJ04 South
+  { id:'vde05', name:'N01-VDE05', ip:'172.16.201.175', type:'rx', zone:'South' },      // N01 → PRJ05 South
+  { id:'vde06', name:'A03-VDE06', ip:'172.16.201.176', type:'rx', zone:'North' },      // A03 → PRJ06/08 North
+  { id:'vde07', name:'A06-VDE07', ip:'172.16.201.177', type:'rx', zone:'Dome'  },      // A06 → PRJ07 Dome
+  { id:'vde08', name:'A03-VDE08', ip:'172.16.201.178', type:'rx', zone:'Dome'  },      // A03 → PRJ08 Dome
+  { id:'vde09', name:'A01-VDE09', ip:'172.16.201.179', type:'rx', zone:'West'  },      // A01 → PRJ09 West
+  { id:'vde10', name:'A01-VDE10', ip:'172.16.201.180', type:'rx', zone:'West'  },      // A01 → PRJ10 West
+  { id:'vde11', name:'A05-VDE11', ip:'172.16.201.181', type:'rx', zone:'West'  },      // A05 → PRJ11 West
+  { id:'vde12', name:'A05-VDE12', ip:'172.16.201.182', type:'rx', zone:'West'  },      // A05 → PRJ12 West
+  { id:'vde13', name:'A05-VDE13', ip:'172.16.201.183', type:'rx', zone:'West'  },      // A05 → PRJ13 West
+  { id:'vde14', name:'A04-VDE14', ip:'172.16.201.184', type:'rx', zone:'East'  },      // A04 → PRJ14 East
+  { id:'vde15', name:'A04-VDE15', ip:'172.16.201.185', type:'rx', zone:'East'  },      // A04 → PRJ15 East
+  { id:'vde16', name:'A08-VDE16', ip:'172.16.201.186', type:'rx', zone:'East'  },      // A08 → PRJ16 East
+  { id:'vde17', name:'A08-VDE17', ip:'172.16.201.187', type:'rx', zone:'East'  },      // A08 → PRJ17 East
+];
+
+// Per-device state: online | offline | unknown, stream: true|false|null, ptp: true|false|null
+const cipState = {};
+CIP_DEVICES.forEach(d => { cipState[d.id] = { online: 'unknown', stream: null, ptp: null, ptpSearching: false, tempC: null, tempLimit: null, fbRes: null, inputPresent: null, streamBitrate: null, audioActive: null, networks: [] }; });
+
+// Reverse lookup: projector numeric id → CIP RX device id
+// VDE number matches PRJ number (VDE01 → PRJ01, VDE09 → PRJ09, etc.)
+const PRJ_TO_VDE = (() => {
+  const map = {};
+  CIP_DEVICES.filter(d => d.type === 'rx').forEach(d => {
+    const n = parseInt(d.id.replace('vde', ''), 10);
+    const prj = PROJECTORS.find(p => p.name.includes(`PRJ${String(n).padStart(2, '0')}`));
+    if (prj) map[prj.id] = d.id;
+  });
+  return map;
+})();
+
+// Update the stream badge on a projector card from its associated RX device state
+function updateProjVdeBadge(projId) {
+  const el = document.getElementById(`vde-badge-${projId}`);
+  if (!el) return;
+  const vdeId = PRJ_TO_VDE[projId];
+  if (!vdeId) { el.style.display = 'none'; return; }
+  const st = cipState[vdeId];
+  if (!st || st.online !== 'online' || st.stream === null) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
+  if (st.stream) {
+    el.className = 'status-badge badge-stream';
+    el.innerHTML = '<span class="badge-dot"></span> Stream';
+  } else {
+    el.className = 'status-badge badge-off';
+    el.innerHTML = '<span class="badge-dot"></span> No Stream';
+  }
+}
+
+// ── Card builder ─────────────────────────────────────────────────────────────
+function buildCipCards() {
+  const txGrid = document.getElementById('cip-grid-tx');
+  const rxGrid = document.getElementById('cip-grid-rx');
+  txGrid.innerHTML = '';
+  rxGrid.innerHTML = '';
+
+  CIP_DEVICES.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'cip-card';
+    card.id = `cip-card-${d.id}`;
+    card.onclick = () => cipToggleSelect(d.id);
+    card.innerHTML = `
+      <div class="cip-card-head">
+        <div class="cip-name">${d.name}</div>
+        <button class="cip-expand-btn" id="cip-expand-${d.id}" onclick="cipToggleExpand('${d.id}');event.stopPropagation()" title="Show NICs">+</button>
+      </div>
+      <div class="cip-meta">
+        <div class="cip-type-badge cip-type-${d.type}">${d.type === 'tx' ? 'TX' : 'RX'}</div>
+        <div class="cip-ip">${d.ip}</div>
+      </div>
+      <div class="cip-badges" id="cip-badges-${d.id}">
+        <span class="cip-badge cip-badge-wait"><span class="cip-badge-dot"></span>—</span>
+      </div>
+      <div class="cip-info-block" id="cip-info-${d.id}"></div>
+      <div class="cip-expand-panel" id="cip-panel-${d.id}"></div>`;
+    (d.type === 'tx' ? txGrid : rxGrid).appendChild(card);
+  });
+}
+
+buildCipCards();
+setCipView(localStorage.getItem('cipView') || 'tile'); // apply saved view after grids exist
+cipInitFilters();
+
+// ── Filter / sort helpers ─────────────────────────────────────────────────────
+function cipInitFilters() {
+  const sel = document.getElementById('cipFilterZone');
+  if (!sel) return;
+  const zones = [...new Set(CIP_DEVICES.map(d => d.zone).filter(Boolean))].sort();
+  zones.forEach(z => {
+    const o = document.createElement('option');
+    o.value = o.textContent = z;
+    sel.appendChild(o);
+  });
+}
+
+function cipApplyFilters() {
+  const type   = document.getElementById('cipFilterType')?.value   || '';
+  const zone   = document.getElementById('cipFilterZone')?.value   || '';
+  const status = document.getElementById('cipFilterStatus')?.value || '';
+  const sort   = document.getElementById('cipSortBy')?.value       || 'default';
+
+  // Highlight active selects
+  ['cipFilterType','cipFilterZone','cipFilterStatus'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', !!el.value);
+  });
+  const sortEl = document.getElementById('cipSortBy');
+  if (sortEl) sortEl.classList.toggle('active', sort !== 'default');
+
+  let devices = [...CIP_DEVICES];
+  if (type)   devices = devices.filter(d => d.type === type);
+  if (zone)   devices = devices.filter(d => d.zone === zone);
+  if (status) devices = devices.filter(d => cipState[d.id]?.online === status);
+
+  const order = { online: 0, unknown: 1, offline: 2 };
+  if (sort === 'name')   devices.sort((a,b) => a.name.localeCompare(b.name));
+  if (sort === 'ip')     devices.sort((a,b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+  if (sort === 'zone')   devices.sort((a,b) => (a.zone||'').localeCompare(b.zone||''));
+  if (sort === 'status') devices.sort((a,b) => (order[cipState[a.id]?.online]??1) - (order[cipState[b.id]?.online]??1));
+
+  const txGrid = document.getElementById('cip-grid-tx');
+  const rxGrid = document.getElementById('cip-grid-rx');
+
+  // Hide all cards first
+  CIP_DEVICES.forEach(d => {
+    const c = document.getElementById(`cip-card-${d.id}`);
+    if (c) c.style.display = 'none';
+  });
+
+  // Show and reorder matched cards into their respective grids
+  devices.forEach(d => {
+    const c = document.getElementById(`cip-card-${d.id}`);
+    if (!c) return;
+    c.style.display = '';
+    const grid = d.type === 'tx' ? txGrid : rxGrid;
+    if (grid) grid.appendChild(c);
+  });
+
+  // Show/hide sections based on visible cards
+  const txSection = document.getElementById('cip-senders');
+  const rxSection = document.getElementById('cip-receivers');
+  const txCount = devices.filter(d => d.type === 'tx').length;
+  const rxCount = devices.filter(d => d.type === 'rx').length;
+  if (txSection) {
+    txSection.style.display = txCount ? '' : 'none';
+    const ct = txSection.querySelector('.section-ct');
+    if (ct) ct.textContent = txCount === CIP_DEVICES.filter(d=>d.type==='tx').length
+      ? `${txCount} devices` : `${txCount} shown`;
+  }
+  if (rxSection) {
+    rxSection.style.display = rxCount ? '' : 'none';
+    const ct = rxSection.querySelector('.section-ct');
+    if (ct) ct.textContent = rxCount === CIP_DEVICES.filter(d=>d.type==='rx').length
+      ? `${rxCount} devices` : `${rxCount} shown`;
+  }
+}
+
+// PTP locked states from Matrox /device/status
+const CIP_PTP_LOCKED = new Set(['Follower', 'Master', 'PassiveMaster', 'PreMaster']);
+
+// ── Poll a single device via Matrox REST API ──────────────────────────────────
+async function cipPoll(devId) {
+  const dev = CIP_DEVICES.find(d => d.id === devId);
+  if (!dev) return;
+
+  try {
+    const res = await fetch(`/api/matrox/${dev.ip}/device/status`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Detect "not logged in" returned as 200 with error body
+    if (data.status === 'error') throw new Error(data.message || 'API error');
+
+    cipState[devId].online = 'online';
+
+    // PTP — locked, searching (TX only), or disabled (RX)
+    cipState[devId].ptp          = CIP_PTP_LOCKED.has(data.ptpState);
+    cipState[devId].ptpSearching = !cipState[devId].ptp && data.ptpState !== 'Disabled' && !!data.ptpState;
+
+    // Video streams
+    const streams = Array.isArray(data.videoStreams) ? data.videoStreams : [];
+    const activeStream = streams.find(s => s.state === 'active');
+    cipState[devId].stream        = streams.length ? !!activeStream : null;
+    cipState[devId].streamBitrate = activeStream ? (activeStream.bitrateKbits || null) : null;
+
+    // Audio streams
+    const aStreams = Array.isArray(data.audioStreams) ? data.audioStreams : [];
+    cipState[devId].audioActive = aStreams.some(s => s.state === 'active');
+
+    // Temperature
+    cipState[devId].tempC     = data.temperature     != null ? Number(data.temperature)     : null;
+    cipState[devId].tempLimit = data.temperatureLimit != null ? Number(data.temperatureLimit) : null;
+
+    // Configured (frameBuffer) resolution
+    cipState[devId].fbRes = fmtRes(data.frameBuffer && data.frameBuffer.resolution);
+
+    // HDMI signal presence
+    // TX: videos[0].isPresent = HDMI source connected to encoder input
+    // RX: videos[0].isPresent is the decoded stream, not the display — use HDCP service instead
+    if (dev?.type === 'tx') {
+      const vid0 = Array.isArray(data.videos) && data.videos[0];
+      cipState[devId].inputPresent = vid0 ? !!vid0.isPresent : null;
+    } else {
+      const hdcp = Array.isArray(data.servicesStatus)
+        ? data.servicesStatus.find(s => s.service === 'HDCP')
+        : null;
+      cipState[devId].inputPresent = hdcp
+        ? hdcp.description.toLowerCase().includes('authenticated')
+        : null;
+    }
+
+    // Networks (MACs)
+    cipState[devId].networks = Array.isArray(data.networks) ? data.networks : [];
+
+  } catch {
+    cipState[devId].online        = 'offline';
+    cipState[devId].stream        = null;
+    cipState[devId].ptp           = false;
+    cipState[devId].ptpSearching  = false;
+    cipState[devId].tempC         = null;
+    cipState[devId].tempLimit     = null;
+    cipState[devId].fbRes         = null;
+    cipState[devId].inputPresent  = null;
+    cipState[devId].streamBitrate = null;
+    cipState[devId].audioActive   = null;
+    // keep networks — they don't change on disconnect
+  }
+
+  renderCipCard(devId);
+  updateCipSummary();
+  // Propagate stream state to associated projector card (RX VDE number = PRJ number)
+  const assocPrjId = Object.entries(PRJ_TO_VDE).find(([, v]) => v === devId)?.[0];
+  if (assocPrjId) updateProjVdeBadge(Number(assocPrjId));
+  // Re-apply filters only when status filter is active (avoid reorder on every poll)
+  if (document.getElementById('cipFilterStatus')?.value || document.getElementById('cipSortBy')?.value === 'status') {
+    cipApplyFilters();
+  }
+}
+
+// ── Render badges for one card ────────────────────────────────────────────────
+function renderCipCard(devId) {
+  const st   = cipState[devId];
+  const card = document.getElementById(`cip-card-${devId}`);
+  const badges = document.getElementById(`cip-badges-${devId}`);
+  if (!card || !badges) return;
+
+  card.className = 'cip-card ' + (st.online === 'online' ? 'online' : st.online === 'offline' ? 'offline' : '');
+
+  let html = '';
+
+  // Online / Offline / Waiting badge
+  if (st.online === 'online') {
+    html += `<span class="cip-badge cip-badge-online"><span class="cip-badge-dot"></span>Online</span>`;
+  } else if (st.online === 'offline') {
+    html += `<span class="cip-badge cip-badge-offline"><span class="cip-badge-dot"></span>Offline</span>`;
+  } else {
+    html += `<span class="cip-badge cip-badge-wait"><span class="cip-badge-dot"></span>—</span>`;
+  }
+
+  const dev = CIP_DEVICES.find(d => d.id === devId);
+  const isTx = dev?.type === 'tx';
+
+  // Stream badge
+  if (st.online === 'online' && st.stream !== null) {
+    if (st.stream) {
+      html += `<span class="cip-badge cip-badge-stream"><span class="cip-badge-dot"></span>Stream</span>`;
+    } else {
+      html += `<span class="cip-badge cip-badge-nostream"><span class="cip-badge-dot"></span>No Stream</span>`;
+    }
+  }
+
+  // PTP: only show badge when locked
+  if (st.online === 'online' && st.ptp) {
+    html += `<span class="cip-badge cip-badge-ptp"><span class="cip-badge-dot"></span>PTP</span>`;
+  }
+
+  badges.innerHTML = html;
+
+  // Info grid
+  const infoEl = document.getElementById(`cip-info-${devId}`);
+  if (infoEl) {
+    if (st.online !== 'online') {
+      infoEl.innerHTML = '';
+    } else {
+      // Temperature
+      const tColor = tempColor(st.tempC, st.tempLimit);
+      const tStr   = st.tempC != null ? `${st.tempC}°C` : '—';
+
+      // Resolution
+      const resStr = st.fbRes || '—';
+
+      const sigLabel = 'HDMI';
+      let sigStr, sigColor;
+      if (st.inputPresent === true)       { sigStr = '● Signal';    sigColor = 'var(--teal)'; }
+      else if (st.inputPresent === false) { sigStr = '○ No Signal'; sigColor = 'var(--text-3)'; }
+      else                                { sigStr = '—';           sigColor = 'var(--text-3)'; }
+
+      infoEl.innerHTML = `<div class="cip-info">
+        <div class="cip-info-item">
+          <span class="cip-info-label">Temp</span>
+          <span class="cip-info-value" style="color:${tColor}">${tStr}</span>
+        </div>
+        <div class="cip-info-item">
+          <span class="cip-info-label">Resolution</span>
+          <span class="cip-info-value">${resStr}</span>
+        </div>
+        <div class="cip-info-item">
+          <span class="cip-info-label">${sigLabel}</span>
+          <span class="cip-info-value" style="color:${sigColor}">${sigStr}</span>
+        </div>
+      </div>`;
+    }
+  }
+
+  // Expand panel — NIC MACs (render whenever networks data is available)
+  const panelEl = document.getElementById(`cip-panel-${devId}`);
+  if (panelEl) {
+    const nicLabels = { 'RJ45 1G': 'Mgmt', 'SFP 10G': 'Media', 'SFP 25G': 'Media' };
+    const nicRows = st.networks
+      .filter(n => n.state !== 'disconnected' && n.macAddress)
+      .map(n => {
+        const label = nicLabels[n.state] || n.state;
+        const mac   = n.macAddress.replace(/-/g, ':');
+        return `<div class="cip-nic-row">
+          <span class="cip-nic-label">${label}</span>
+          <span class="cip-nic-mac">${mac}</span>
+        </div>`;
+      }).join('');
+    const brStr   = st.stream && st.streamBitrate ? fmtBitrate(st.streamBitrate) : '—';
+    const brColor = st.stream ? 'var(--teal)' : 'var(--text-3)';
+    const brRow   = `<div class="cip-nic-row" style="margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--border)">
+      <span class="cip-nic-label">Bitrate</span>
+      <span class="cip-nic-mac" style="color:${brColor}">${brStr}</span>
+    </div>`;
+    panelEl.innerHTML = brRow + nicRows;
+  }
+}
+
+// ── Expand / collapse NIC panel ───────────────────────────────────────────────
+function cipToggleExpand(devId) {
+  const btn   = document.getElementById(`cip-expand-${devId}`);
+  const panel = document.getElementById(`cip-panel-${devId}`);
+  if (!btn || !panel) return;
+  const open = panel.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  btn.textContent = open ? '−' : '+';
+}
+
+// ── Resolution formatter ──────────────────────────────────────────────────────
+function fmtRes(r) {
+  if (!r || !r.width) return null;
+  const num = Number(r.refreshRateNum), den = Number(r.refreshRateDen) || 1;
+  const fps = den === 1 ? num : parseFloat((num / den).toFixed(2));
+  return `${r.width}×${r.height}@${fps}`;
+}
+
+// ── Temperature colour ────────────────────────────────────────────────────────
+function tempColor(c, limit) {
+  if (c == null || !limit) return 'var(--text-2)';
+  const r = c / limit;
+  if (r >= 0.80) return 'var(--red)';
+  if (r >= 0.60) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+// ── Bitrate formatter ─────────────────────────────────────────────────────────
+function fmtBitrate(kbits) {
+  if (kbits == null) return '—';
+  if (kbits >= 1e6) return `${(kbits / 1e6).toFixed(1)} Gbps`;
+  if (kbits >= 1e3) return `${(kbits / 1e3).toFixed(0)} Mbps`;
+  return `${kbits} Kbps`;
+}
+
+// ── Reboot a device ───────────────────────────────────────────────────────────
+async function cipReboot(devId, silent = false) {
+  const dev = CIP_DEVICES.find(d => d.id === devId);
+  if (!dev) return;
+  if (!silent && !confirm(`Reboot ${dev.name} (${dev.ip})?\n\nThe device will be offline for ~30 seconds.`)) return;
+  try {
+    const res = await fetch(`/api/matrox/${dev.ip}/device/reboot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok && res.status !== 204) throw new Error(data.error || `HTTP ${res.status}`);
+    // Mark offline immediately; polling will recover it
+    cipState[devId].online        = 'offline';
+    cipState[devId].stream        = null;
+    cipState[devId].ptp           = null;
+    cipState[devId].streamBitrate = null;
+    cipState[devId].tempC         = null;
+    cipState[devId].inputPresent  = null;
+    renderCipCard(devId);
+    updateCipSummary();
+  } catch (e) {
+    if (!silent) alert(`Reboot failed for ${dev.name}: ${e.message}`);
+  }
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────────
+const cipSelected = new Set();
+
+function cipToggleSelect(devId) {
+  const card = document.getElementById(`cip-card-${devId}`);
+  if (!card) return;
+  if (cipSelected.has(devId)) {
+    cipSelected.delete(devId);
+    card.classList.remove('selected');
+  } else {
+    cipSelected.add(devId);
+    card.classList.add('selected');
+  }
+  const btn = document.getElementById('cipRebootSelBtn');
+  if (btn) btn.classList.toggle('inactive', cipSelected.size === 0);
+}
+
+async function cipRebootSelected() {
+  if (cipSelected.size === 0) return;
+  const names = [...cipSelected].map(id => CIP_DEVICES.find(d => d.id === id)?.name).filter(Boolean).join(', ');
+  if (!confirm(`Reboot ${cipSelected.size} device(s)?\n\n${names}`)) return;
+  const ids = [...cipSelected];
+  cipSelected.clear();
+  document.getElementById('cipRebootSelBtn')?.classList.add('inactive');
+  for (const id of ids) {
+    document.getElementById(`cip-card-${id}`)?.classList.remove('selected');
+    await cipReboot(id, true); // silent = skip confirm
+  }
+}
+
+async function cipRebootAll() {
+  if (!confirm(`Reboot all ${CIP_DEVICES.length} ConvertIP devices?\n\nAll devices will be offline for ~30 seconds.`)) return;
+  for (const [i, d] of CIP_DEVICES.entries()) {
+    setTimeout(() => cipReboot(d.id, true), i * 200);
+  }
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+function updateCipStatusBar() {
+  const indicators = document.getElementById('cipIndicators');
+  const summary    = document.getElementById('cipStatusSummary');
+  if (!indicators || !summary) return;
+
+  indicators.innerHTML = CIP_DEVICES.map(d => {
+    const st = cipState[d.id];
+    let cls = 'unknown';
+    if (st.online === 'online')  cls = 'ok';
+    if (st.online === 'offline') cls = 'offline';
+    return `<div class="sys-dot ${cls}" title="${d.name}: ${st.online}"></div>`;
+  }).join('');
+
+  const total   = CIP_DEVICES.length;
+  const online  = CIP_DEVICES.filter(d => cipState[d.id].online === 'online').length;
+  const offline = CIP_DEVICES.filter(d => cipState[d.id].online === 'offline').length;
+  const unknown = total - online - offline;
+  let html = '';
+  if (unknown === total) {
+    html = `<span class="warn">Waiting…</span>`;
+  } else if (offline === 0) {
+    html = `<span class="ok">All ${online} online</span>`;
+  } else {
+    if (online)  html += `<span class="ok">${online} online</span>`;
+    if (offline) html += `${html ? ' · ' : ''}<span style="color:var(--red)">${offline} offline</span>`;
+    if (unknown) html += ` · ${unknown} waiting`;
+  }
+  summary.innerHTML = html;
+}
+
+// ── Summary (kept for filter bar counts) ─────────────────────────────────────
+function updateCipSummary() {
+  updateCipStatusBar();
+}
+
+// ── Refresh all / polling ─────────────────────────────────────────────────────
+function cipRefreshAll() {
+  CIP_DEVICES.forEach((d, i) => setTimeout(() => cipPoll(d.id), i * 150));
+  updateCipPollTime();
+}
+
+function updateCipPollTime() {
+  const status = document.getElementById('cipPollStatus');
+  if (!status) return;
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (cipPollingInterval) {
+    status.innerHTML = `<span style="color:var(--teal)">Live</span> · Last poll ${now}`;
+  } else {
+    status.innerHTML = `Last poll ${now}`;
+  }
+}
+
+let cipPollingInterval = null;
+function toggleCipPolling() {
+  const btn    = document.getElementById('cipPollBtn');
+  const status = document.getElementById('cipPollStatus');
+  if (cipPollingInterval) {
+    clearInterval(cipPollingInterval);
+    cipPollingInterval = null;
+    btn.classList.remove('polling');
+    btn.innerHTML = `<svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Start Polling`;
+    status.textContent = 'Not polling';
+    status.className   = 'poll-status';
+  } else {
+    cipRefreshAll();
+    cipPollingInterval = setInterval(cipRefreshAll, 10000);
+    btn.classList.add('polling');
+    btn.innerHTML = `<svg class="poll-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Stop Polling`;
+    status.className = 'poll-status live';
+    updateCipPollTime();
+  }
+}
+
+// ── Section nav helper ────────────────────────────────────────────────────────
+function navToSection(e, id) {
+  e.preventDefault();
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.querySelectorAll('#matrox-nav .nav-item').forEach(el => el.classList.remove('active'));
+  e.currentTarget.classList.add('active');
+}
+</script>
+</body>
+</html>

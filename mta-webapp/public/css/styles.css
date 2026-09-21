@@ -1,0 +1,445 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-color: #000000;
+  --card-bg: #111111;
+  --m-orange: #FF6319;
+  --l-grey: #A7A9AC;
+  --success-green: #34C759;
+  --motion-blue: #007AFF;
+  --safety-orange: #FF9500;
+  --safety-red: #FF3B30;
+  --alert-yellow: #FFD60A;
+}
+
+/* ─── BODY ─── */
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 14px 20px 10px;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+/* ─── HEADER (glance + clock + weather) ─── */
+.header-container {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.header-clock {
+  grid-column: 2;
+  font-size: clamp(2.2rem, 5.5vw, 3.4rem);
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+
+/* ─── WEATHER ─── */
+.weather-widget {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 14px;
+  border-radius: 50px;
+  border: 1px solid #222;
+}
+
+#w-icon {
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+}
+
+.temp-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.temp-primary {
+  font-weight: 700;
+  font-size: clamp(0.9rem, 1.6vw, 1.1rem);
+}
+
+.temp-secondary {
+  color: #444;
+  font-size: clamp(0.65rem, 1.2vw, 0.8rem);
+}
+
+.weather-details {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-left: 1px solid #333;
+  padding-left: 10px;
+}
+
+.weather-condition {
+  font-size: clamp(0.65rem, 1.2vw, 0.78rem);
+  color: #fff;
+  font-weight: 600;
+}
+
+.weather-wind {
+  font-size: clamp(0.6rem, 1.1vw, 0.72rem);
+  color: #fff;
+  font-weight: 500;
+}
+
+/* ─── GLANCE BAR ─── */
+.glance-bar {
+  grid-column: 1;
+  justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.glance-item {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 59, 48, 0.12);
+  border: 1px solid rgba(255, 59, 48, 0.45);
+  border-radius: 8px;
+  padding: 4px 9px 4px 5px;
+  animation: glancePulse 2s ease-in-out infinite;
+}
+
+.glance-item.visible {
+  display: flex;
+}
+
+.glance-route {
+  font-size: clamp(0.65rem, 1.2vw, 0.78rem);
+  font-weight: 800;
+  color: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.glance-label {
+  font-size: clamp(0.58rem, 1.1vw, 0.68rem);
+  font-weight: 700;
+  color: var(--safety-red);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+@keyframes glancePulse {
+  0%, 100% { border-color: rgba(255, 59, 48, 0.45); }
+  50%       { border-color: rgba(255, 59, 48, 0.95); }
+}
+
+/* ─── DASHBOARD (two cards) ─── */
+.dashboard {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 22px;
+  padding: 18px 20px;
+  flex: 1;
+  border: 2px solid #222;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card.flash-orange {
+  animation: syncOrange 0.8s infinite ease-in-out;
+}
+
+.card.solid-green {
+  border-color: var(--success-green);
+  box-shadow: 0 0 28px rgba(52, 199, 89, 0.4);
+}
+
+.card.error-state {
+  border-color: var(--safety-red);
+  box-shadow: 0 0 28px rgba(255, 59, 48, 0.3);
+}
+
+@keyframes syncOrange {
+  0%, 100% { border-color: #222; }
+  50%       { border-color: var(--safety-orange); }
+}
+
+/* ─── CARD INTERNALS ─── */
+.card .next-box {
+  margin-top: auto;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.route-circle {
+  width: clamp(44px, 7vw, 58px);
+  height: clamp(44px, 7vw, 58px);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(22px, 3.5vw, 30px);
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.m-line { background-color: var(--m-orange); }
+.l-line { background-color: var(--l-grey); }
+
+.station-name {
+  font-size: clamp(1.2rem, 2.6vw, 1.7rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.label {
+  color: #555;
+  font-size: clamp(0.68rem, 1.3vw, 0.82rem);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.action-text {
+  font-size: clamp(1.6rem, 3.8vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+
+.action-text.green-text  { color: var(--success-green); }
+.action-text.orange-text { color: var(--safety-orange); }
+.action-text.red-text    { color: var(--safety-red); }
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.value-text {
+  font-size: clamp(1rem, 2vw, 1.3rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.wall-label { color: #555; }
+
+.wall-eta {
+  font-size: clamp(0.8rem, 1.6vw, 1rem);
+  font-weight: 600;
+  color: #666;
+}
+
+.next-box {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.next-row {
+  font-size: clamp(0.82rem, 1.7vw, 1.05rem);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #aaa;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+/* ─── SCROLLING TICKER ─── */
+.ticker-wrap {
+  width: 100%;
+  height: 26px;
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+  margin-top: 10px;
+}
+
+.ticker-wrap.active {
+  border-top: 1px solid #222;
+}
+
+.ticker {
+  display: flex;
+  white-space: nowrap;
+  height: 100%;
+  align-items: center;
+}
+
+.ticker-scroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  animation: ticker-move linear infinite;
+  will-change: transform;
+}
+
+.ticker-scroll.static {
+  animation: none !important;
+}
+
+@keyframes ticker-move {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.ticker-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 28px;
+  font-size: clamp(0.62rem, 1.2vw, 0.76rem);
+  font-weight: 600;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.ticker-seg .ticker-badge {
+  background: var(--safety-red);
+  color: #fff;
+  font-weight: 800;
+  font-size: clamp(0.6rem, 1.1vw, 0.72rem);
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.ticker-seg .ticker-dot {
+  color: #333;
+  font-size: 0.8rem;
+}
+
+/* ─── FOOTER ─── */
+.footer {
+  width: 100%;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.footer-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.heartbeat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-green);
+  box-shadow: 0 0 6px var(--success-green);
+  animation: heartbeat 2s infinite;
+}
+
+.heartbeat-dot.error {
+  background: var(--safety-red);
+  box-shadow: 0 0 6px var(--safety-red);
+  animation: errorPulse 1s infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.2); }
+}
+
+@keyframes errorPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.mta-status {
+  font-size: clamp(0.6rem, 1.2vw, 0.72rem);
+  color: #555;
+  font-family: monospace;
+  letter-spacing: 1px;
+  transition: color 0.3s ease;
+}
+
+.mta-status.error { color: var(--safety-red); }
+
+.trash-indicator {
+  display: none;
+  font-size: clamp(0.95rem, 1.8vw, 1.2rem);
+  color: #bbb;
+  font-weight: 600;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 10px 18px;
+}
+
+.trash-indicator.urgent {
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  color: #fff;
+  background: rgba(255, 180, 0, 0.15);
+  border-color: rgba(255, 180, 0, 0.5);
+  animation: trashUrgent 2s ease-in-out infinite;
+}
+
+@keyframes trashUrgent {
+  0%, 100% {
+    box-shadow: 0 0 0 transparent;
+    border-color: rgba(255, 180, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 180, 0, 0.4);
+    border-color: rgba(255, 180, 0, 0.9);
+  }
+}
+
+.ip-text {
+  font-size: clamp(0.58rem, 1.1vw, 0.68rem);
+  color: #444;
+  font-family: monospace;
+}
+

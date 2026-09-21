@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <title>MTA Dashboard v3.4.0</title>
+
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚇</text></svg>">
+  <link rel="stylesheet" href="/css/styles.css?v=4">
+</head>
+
+<body>
+  <div class="header-container">
+    <!-- Glance badges live here, left column -->
+    <div class="glance-bar">
+      <div class="glance-item" id="glance-m"></div>
+      <div class="glance-item" id="glance-l"></div>
+      <div class="glance-item" id="glance-j"></div>
+    </div>
+    <div class="header-clock" id="clock">00:00:00</div>
+    <div class="weather-widget">
+      <span id="w-icon">☀️</span>
+      <div class="temp-container">
+        <span id="w-temp-c" class="temp-primary">--°C</span>
+        <span id="w-temp-f" class="temp-secondary">--°F</span>
+      </div>
+      <div class="weather-details">
+        <div id="w-condition" class="weather-condition">--</div>
+        <div id="w-wind" class="weather-wind">-- km/h</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard">
+    <div class="card" id="card-m">
+      <div class="card-header">
+        <div class="route-circle m-line">M</div>
+        <span class="station-name">Knickerbocker</span>
+      </div>
+      <div class="main-data">
+        <div class="label">Departure</div>
+        <div class="action-text" id="m-action">...</div>
+        <div class="data-row">
+          <span class="label">Walk</span>
+          <span class="value-text" id="m-walk">5m</span>
+        </div>
+        <div class="data-row">
+          <span class="label">ETA</span>
+          <span class="value-text" id="m-eta">—</span>
+        </div>
+        <div class="data-row">
+          <span class="label wall-label">55 Wall</span>
+          <span class="value-text wall-eta" id="m-wall-eta">—</span>
+        </div>
+      </div>
+      <div class="next-box">
+        <div class="label" style="font-size:0.6rem">Next Trains</div>
+        <div id="m-next" class="next-row">—</div>
+      </div>
+    </div>
+
+    <div class="card" id="card-l">
+      <div class="card-header">
+        <div class="route-circle l-line">L</div>
+        <span class="station-name">DeKalb Av</span>
+      </div>
+      <div class="main-data">
+        <div class="label">Departure</div>
+        <div class="action-text" id="l-action">...</div>
+        <div class="data-row">
+          <span class="label">Walk</span>
+          <span class="value-text" id="l-walk">7m</span>
+        </div>
+        <div class="data-row">
+          <span class="label">ETA</span>
+          <span class="value-text" id="l-eta">—</span>
+        </div>
+        <div class="data-row">
+          <span class="label wall-label">55 Wall</span>
+          <span class="value-text wall-eta" id="l-wall-eta">—</span>
+        </div>
+      </div>
+      <div class="next-box">
+        <div class="label" style="font-size:0.6rem">Next Trains</div>
+        <div id="l-next" class="next-row">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scrolling Ticker (detailed alerts) -->
+  <div class="ticker-wrap" id="ticker-wrap">
+    <div class="ticker" id="ticker"></div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-left">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="heartbeat-dot" id="sync-pulse"></div>
+        <div class="mta-status" id="mta-status">STARTING...</div>
+      </div>
+      <div class="ip-text" id="ip-display">IP: --</div>
+    </div>
+<div style="display:flex; align-items:center; gap:8px;">
+      <div class="motion-dot" id="motion-led"></div>
+      <div class="trash-indicator" id="trash-indicator"></div>
+    </div>
+  </div>
+
+  <script src="/js/app.js?v=3"></script>
+</body>
+
+</html>
