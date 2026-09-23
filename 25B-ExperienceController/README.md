@@ -1,4 +1,4 @@
-# 25 Broadway — Experience Controller · v1.3
+# 25 Broadway — Experience Controller · v1.4
 
 Local web dashboard for AV control at 25 Broadway, NYC.  
 Three tabs: **Scene Library** (triggers Barco Control Center timelines), **Projectors** (monitors and controls 19 Barco laser projectors over TCP), and **ConvertIP** (monitors 38 Matrox ConvertIP ST 2110 encoders/decoders).
@@ -11,31 +11,90 @@ Three tabs: **Scene Library** (triggers Barco Control Center timelines), **Proje
 25B-ExperienceController/
 ├── 25broadway_dashboard.html   # Full dashboard UI — HTML + CSS + JS, no build step
 ├── proxy.js                    # Node.js server: serves HTML on :8080, bridges WS → Barco TCP :9090,
-│                               #   and proxies HTTPS → Matrox ConvertIP REST API
+│                               #   proxies HTTPS → Matrox ConvertIP REST API, stores shared settings
+├── settings.json               # Created on first save — shared settings + Matrox login (git-ignored)
+├── Dockerfile                  # Single-container image (node:22-alpine)
+├── docker-compose.yml          # One-command deploy, settings on a named volume
+├── images/                     # Scene thumbnails
 ├── package.json
-└── node_modules/ws/            # Only dependency
+└── node_modules/ws/            # Only dependency (git-ignored — run npm install)
 ```
 
-The dashboard is intentionally a **single HTML file**. There is no bundler, no framework, no build step. This keeps deployment simple — copy two files, run one command.
+The dashboard is intentionally a **single HTML file**. There is no bundler, no framework, no build step. This keeps deployment simple — copy the folder, run one command.
 
 ---
 
 ## Requirements
 
-- Node.js (any recent LTS)
+- **Docker** (recommended) — Docker Engine on Linux, or Docker Desktop on macOS/Windows
+- or **Node.js** (any recent LTS) to run without Docker
 - Network access to the Barco subnet (`172.16.202.x`) and Control Center (`172.16.0.20`)
 - Network access to the Matrox ConvertIP subnet (`172.16.201.x`)
 
 ---
 
-## Setup
+## Deploy with Docker (recommended)
+
+The whole stack is one container: dashboard, Barco WebSocket → TCP bridge, Matrox proxy and settings store.
+
+```bash
+docker compose up -d --build
+```
+
+That's it — the container restarts automatically after reboots/crashes (`restart: unless-stopped`) and reports its health in `docker compose ps`.
+
+| Task | Command |
+|---|---|
+| Update after `git pull` | `docker compose up -d --build` |
+| View logs | `docker compose logs -f` |
+| Stop | `docker compose down` |
+| Back up settings | `docker compose cp experience-controller:/data/settings.json ./settings.backup.json` |
+| Restore / import settings | `docker compose cp ./settings.json experience-controller:/data/settings.json` then `docker compose restart` |
+
+- **Settings persist** in the `settings` Docker volume (`/data/settings.json` inside the container), so rebuilding or updating the container keeps them. `docker compose down -v` **deletes** them.
+- **Moving from a plain `node proxy.js` install:** start the container, then import your existing `settings.json` with the restore command above.
+- **Network:** the container reaches the AV subnets through the host. The host running Docker needs the same network access listed in Requirements. If Docker's internal subnet ever clashes with a site network, pin it — see the comment at the bottom of `docker-compose.yml`.
+- **Environment variables:** `PORT` (default `8080`) and `DATA_DIR` (default `/data` in Docker, the app folder otherwise). To use a different host port, change the left side of `ports:` in `docker-compose.yml` (e.g. `"80:8080"`).
+
+## Run without Docker
 
 ```bash
 npm install        # installs the ws package (one-time)
-node proxy.js      # starts the server
+npm start          # starts the server (same as: node proxy.js)
 ```
 
-Open **http://localhost:8080** in a browser on the same machine.
+`settings.json` is created next to `proxy.js`.
+
+Open **http://localhost:8080** in a browser on the same machine, or **http://&lt;server-ip&gt;:8080** from another device on the network.
+
+On a fresh install, open **Settings** and enter the **Matrox login** — the ConvertIP tab shows every device offline until it is set.
+
+---
+
+## Settings
+
+All settings are edited from **Settings** (top-right) and saved on the server in `settings.json`, next to `proxy.js`. Every browser and device that opens the dashboard sees the same setup.
+
+| Setting | Stored | Notes |
+|---|---|---|
+| CC IP | Server | Control Center IP for scene triggers (also editable in the top bar) |
+| Matrox username / password | Server | Used by `proxy.js` to log in to all ConvertIP devices |
+| Scene timeline mappings | Server | Timeline key/value per scene |
+| Scene tags, custom tags, sort order | Server | |
+| Proxy Host | This browser | Only needed if the page can't auto-detect the server address |
+| Tile / List view | This browser | Per-device display preference |
+
+- **Matrox password** is write-only: it is never sent back to the browser. Leave the field blank to keep the current one. Changing the login drops all Matrox sessions so the next poll logs in with the new credentials.
+- **`settings.json` is git-ignored** and never served over HTTP. Back it up when moving the dashboard to a new machine — it's the whole configuration.
+- **Migration:** the first time a browser with older `localStorage` settings opens a server that has no scene data yet, its settings are copied to the server automatically.
+- If the page is opened without `proxy.js` running, the dashboard falls back to the last settings cached in that browser.
+
+### Settings API
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/settings` | Returns all shared settings; Matrox returned as `{ username, hasPassword }` |
+| PUT | `/api/settings` | Merges the top-level keys given (`ccIp`, `sceneMap`, `sceneTags`, `knownTags`, `sceneSortOrder`, `matrox`) |
 
 ---
 
@@ -45,6 +104,9 @@ Open **http://localhost:8080** in a browser on the same machine.
 Browser (localhost:8080)
 │
 │  HTTP GET /                     → proxy.js serves 25broadway_dashboard.html
+│
+│  Settings (all tabs)
+│  HTTP GET|PUT /api/settings     → proxy.js reads/writes settings.json (DATA_DIR)
 │
 │  Scene trigger (Scene Library tab)
 │  HTTP POST → http://172.16.0.20:3030/sc-datastore/projectData/taskFlow
@@ -80,7 +142,7 @@ Scenes are grouped into five sections:
 
 | Section | Count | Card style |
 |---|---|---|
-| Tech Looks | 6 | Thumbnail card |
+| Tech Looks | 4 | Thumbnail card |
 | Demos | 6 | Demo button |
 | New Looks 2026 | 12 | Thumbnail card |
 | Alpha Overlay | 9 | Text list + thumbnail |
@@ -104,11 +166,22 @@ Or use **Bulk Import** — paste a JSON object:
 }
 ```
 
-Keys match the `key` field in the `SCENES` object in the HTML source. Settings persist in `localStorage`.
+Keys match the `key` field in the `SCENES` object in the HTML source. Mappings are saved on the server (see [Settings](#settings)).
+
+### Tags
+
+Every scene carries tags (defaults in the `SCENES` object). Use them to find scenes quickly:
+
+- **Filter** — click any tag pill (on a card or in the filter bar) to show only scenes with that tag; combine several, **Clear** to reset
+- **Sort** — Default (sections), A → Z, or **By Tag** (flat view grouped by tag)
+- **Edit** — hover a card and click the tag edit button to add/remove tags on that scene
+- **More** — tag manager: create, rename or delete a tag across all scenes
+
+Tag edits and sort order are saved on the server.
 
 ### Control Center IP
 
-The CC IP field (top bar, labelled **CC**) defaults to `172.16.0.20`. Change it and it persists in `localStorage`.
+The CC IP field (top bar, labelled **CC**) defaults to `172.16.0.20`. Changes are saved on the server.
 
 ---
 
@@ -189,7 +262,7 @@ Sort by IP, State, Zone, or Name. Active filters are highlighted gold.
 
 ### Authentication
 
-Cookie-based (`session_token`). `proxy.js` maintains one session per device IP and auto-re-logs in when the device returns 401, 403, or `"Not logged in"` in a 200 response.
+Cookie-based (`session_token`). The login is set in **Settings → ConvertIP — Matrox Login** and stored in `settings.json`. `proxy.js` maintains one session per device IP and auto-re-logs in when the device returns 401, 403, or `"Not logged in"` in a 200 response.
 
 ### Polling
 
@@ -251,6 +324,17 @@ This makes it robust against TCP segmentation of large Barco responses.
 ---
 
 ## Changelog
+
+### v1.4 — 2026-09-23
+- **Feature:** Settings are stored on the server (`settings.json`) and shared by every browser — scene mappings, tags, sort order, CC IP. Existing browser settings are migrated automatically on first load
+- **Feature:** Matrox ConvertIP login is configurable from **Settings** (was hardcoded in `proxy.js`); password is write-only and never returned to the browser
+- **Feature:** Single-container Docker deployment (`Dockerfile`, `docker-compose.yml`) with settings on a persistent volume and a health check
+- **Feature:** `PORT` and `DATA_DIR` environment variables in `proxy.js`
+- **Security:** `proxy.js` refuses to serve `settings.json` and dotfiles
+- **Chore:** Removed the outdated "Running the Dashboard" snippet from the Settings modal
+- **Chore:** Added `.gitignore` (`node_modules/`, `.DS_Store`, `settings.json`); `node_modules` no longer committed
+- **Chore:** `package.json` now carries the app name/version and an `npm start` script
+- **Docs:** Documented tags, Docker deployment, settings storage and API; corrected Tech Looks count
 
 ### v1.3 — 2026-05-08
 - **Feature:** Tile / List view toggle on both Projectors and ConvertIP tabs — preference persists in `localStorage`

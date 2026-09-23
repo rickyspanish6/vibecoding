@@ -1,0 +1,25 @@
+services:
+  experience-controller:
+    build: .
+    image: 25b-experience-controller:latest
+    container_name: 25b-experience-controller
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - settings:/data
+    # The container reaches the AV subnets (Barco 172.16.202.x, Control Center
+    # 172.16.0.20, Matrox 172.16.201.x) through the host's network via NAT.
+    # On a Linux host you can use `network_mode: host` instead of `ports:`
+    # if the default bridge network ever gets in the way.
+
+volumes:
+  settings:
+
+# Docker picks a private subnet for its internal network (usually 172.17–172.31.x.x).
+# If that ever overlaps a site network, pin it to a free range:
+# networks:
+#   default:
+#     ipam:
+#       config:
+#         - subnet: 10.254.254.0/24

@@ -1,0 +1,10 @@
+node_modules
+.git
+.DS_Store
+**/.DS_Store
+settings.json
+settings.json.tmp
+Dockerfile
+docker-compose.yml
+.dockerignore
+README.md

@@ -1137,7 +1137,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div class="brand-mark">25</div>
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.3</div>
+        <div class="brand-sub">Experience Control · v1.4</div>
       </div>
     </div>
 
@@ -1470,10 +1470,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="modal-backdrop" id="configModal">
   <div class="modal">
     <div class="modal-hd">
-      <div class="modal-title">Scene Settings</div>
+      <div class="modal-title">Settings</div>
       <button class="modal-x" onclick="closeConfig()">✕</button>
     </div>
-    <p class="modal-desc">Map each scene to its Control Center timeline key and value. Get IDs via CTRL+ALT+SHIFT+F1 in the Taskflow Editor.</p>
+    <p class="modal-desc">Settings are saved on the server and shared by every browser that opens the dashboard. Proxy Host is the only per-device setting.</p>
     <div id="configForm"></div>
     <div class="modal-actions">
       <button class="btn-gold" onclick="saveConfig()">Save Changes</button>
@@ -1558,11 +1558,11 @@ function getTagsFor(key) {
 
 function saveTagsFor(key, tags) {
   sceneTagOverrides[key] = tags;
-  localStorage.setItem('sceneTags', JSON.stringify(sceneTagOverrides));
+  persistShared({ sceneTags: sceneTagOverrides });
 }
 
 function saveKnownTags() {
-  localStorage.setItem('knownTags', JSON.stringify([...knownTags]));
+  persistShared({ knownTags: [...knownTags] });
 }
 
 function getAllUniqueTags() {
@@ -1592,7 +1592,7 @@ let sceneMap    = JSON.parse(localStorage.getItem('sceneMap') || '{}');
 document.getElementById('ccIp').value = ccIp;
 document.getElementById('ccIp').addEventListener('change', e => {
   ccIp = e.target.value.trim();
-  localStorage.setItem('ccIp', ccIp);
+  persistShared({ ccIp });
 });
 
 function allScenes() {
@@ -1669,10 +1669,77 @@ function renderAll() {
   fill('multimedia-grid',  SCENES.multimedia, mkSceneBtn);
   buildTagFilterBar();
   // Apply persisted sort (skip for 'default' since renderAll is already default order)
-  if (sortOrder !== 'default') setSortOrder(sortOrder);
+  if (sortOrder !== 'default') setSortOrder(sortOrder, false);
   else applyTagFilter();
 }
 renderAll();
+
+// ── Shared settings (server-side settings.json via proxy.js) ─────────────────
+// Scene mappings, tags, sort order and CC IP live on the server so every
+// browser sees the same setup. localStorage is only a cache, used for a fast
+// first paint and as a fallback when the page is opened without the proxy.
+// Per-device preferences (proxy host, tile/list views) stay in localStorage.
+const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder'];
+let matroxCfg = { username: '', hasPassword: false };
+
+function cacheShared(patch) {
+  SHARED_KEYS.forEach(k => {
+    if (patch[k] === undefined) return;
+    localStorage.setItem(k, typeof patch[k] === 'string' ? patch[k] : JSON.stringify(patch[k]));
+  });
+}
+
+async function persistShared(patch) {
+  cacheShared(patch);
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const s = await res.json();
+    matroxCfg = s.matrox;
+    return true;
+  } catch {
+    showToast('Server unreachable — saved in this browser only', 'error');
+    return false;
+  }
+}
+
+function applySharedSettings(s) {
+  ccIp              = s.ccIp || ccIp;
+  sceneMap          = s.sceneMap || {};
+  sceneTagOverrides = s.sceneTags || {};
+  knownTags         = new Set(s.knownTags || []);
+  matroxCfg         = s.matrox || matroxCfg;
+  cacheShared(s);
+  document.getElementById('ccIp').value = ccIp;
+  setSortOrder(s.sceneSortOrder || 'default', false); // re-renders scenes
+}
+
+async function loadSharedSettings() {
+  let s;
+  try {
+    const res = await fetch('/api/settings');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    s = await res.json();
+  } catch {
+    return; // no proxy — keep the localStorage values already loaded
+  }
+  // One-time migration: server has no scene data yet but this browser does
+  const isEmpty = o => !o || (Array.isArray(o) ? o.length === 0 : Object.keys(o).length === 0);
+  const serverEmpty = isEmpty(s.sceneMap) && isEmpty(s.sceneTags) && isEmpty(s.knownTags);
+  const localHasData = !isEmpty(sceneMap) || !isEmpty(sceneTagOverrides) || knownTags.size > 0;
+  if (serverEmpty && localHasData) {
+    const local = { ccIp, sceneMap, sceneTags: sceneTagOverrides, knownTags: [...knownTags], sceneSortOrder: sortOrder };
+    if (await persistShared(local)) {
+      showToast('Browser settings copied to the server', 'info');
+      matroxCfg = s.matrox;
+      return;
+    }
+  }
+  applySharedSettings(s);
+}
+loadSharedSettings();
 
 async function fire(key, label, el) {
   const ip = document.getElementById('ccIp').value.trim();
@@ -1818,9 +1885,9 @@ function buildTagFilterBar() {
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
-function setSortOrder(order) {
+function setSortOrder(order, save = true) {
   sortOrder = order;
-  localStorage.setItem('sceneSortOrder', order);
+  if (save) persistShared({ sceneSortOrder: order });
   document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === order));
   const flat = document.getElementById('flat-tag-view');
   const secs = document.querySelectorAll('#panel-scenes > .section');
@@ -2888,6 +2955,19 @@ function openConfig() {
     </div>
     <p style="font-size:10px;color:var(--text-3);margin-bottom:4px;line-height:1.6">Barco Control Center IP for scene triggering. Also editable in the top bar on desktop.</p>
     <div class="modal-rule"></div>
+    <div class="bulk-lbl">ConvertIP — Matrox Login</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Username</label>
+      <input class="cfg-input" id="cfgMatroxUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="admin" value="${escAttr(matroxCfg.username)}" style="flex:1;font-family:monospace">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Password</label>
+      <input class="cfg-input" id="cfgMatroxPass" type="password" autocomplete="new-password" placeholder="${matroxCfg.hasPassword ? '•••••••• (unchanged)' : 'Not set'}" style="flex:1;font-family:monospace">
+    </div>
+    <p style="font-size:10px;color:var(--text-3);margin-bottom:4px;line-height:1.6">Used by the server to log in to all 38 ConvertIP devices. Leave the password blank to keep the current one. It is stored on the server only and never shown here.</p>
+    <div class="modal-rule"></div>
+    <div class="bulk-lbl">Scene Timelines</div>
+    <p style="font-size:10px;color:var(--text-3);margin-bottom:10px;line-height:1.6">Map each scene to its Control Center timeline key and value. Get IDs via CTRL+ALT+SHIFT+F1 in the Taskflow Editor.</p>
     <div class="cfg-header"><span>Scene</span><span>Timeline Key</span><span>Value</span></div>
     <div class="cfg-rows">
       ${scenes.map(s => { const c = sceneMap[s.key]||{}; return `<div class="cfg-row"><span class="cfg-lbl">${s.label}</span><input class="cfg-input" id="k-${s.key}" type="text" placeholder="Timeline 01" value="${c.tlKey||''}"><input class="cfg-input" id="v-${s.key}" type="number" placeholder="0" value="${c.tlValue!==undefined?c.tlValue:''}"></div>`; }).join('')}
@@ -2896,50 +2976,17 @@ function openConfig() {
     <div class="bulk-lbl">Bulk Import — JSON</div>
     <textarea class="bulk-ta" id="bulkJson" placeholder='{"artnyc":{"tlKey":"Timeline 03","tlValue":210}}'></textarea>
     <button class="btn-teal" onclick="importBulk()">Import JSON</button>
-    <div class="modal-rule"></div>
-    <div class="bulk-lbl">Running the Dashboard</div>
-    <p style="font-size:11px;color:var(--text-3);line-height:1.8;margin-bottom:10px;">
-      Both files must be in the same folder. Open a terminal there and run:<br>
-      <code style="background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:5px;font-size:10px;display:inline-block;margin-top:6px;color:#e2c998;">node proxy.js</code><br><br>
-      Then open your browser to:<br>
-      <code style="background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:5px;font-size:10px;display:inline-block;margin-top:4px;color:#5ecfbe;">http://localhost:8080</code><br><br>
-      <span style="color:#505050;">No npm install needed — uses Node.js built-ins only. The proxy serves the HTML file AND bridges WebSocket → Barco TCP/9090.</span>
-    </p>
-    <textarea class="bulk-ta" rows="10" style="font-size:9.5px;font-family:monospace;color:#7ecfbe;background:#060608;" readonly>// proxy.js — Barco TCP bridge
-// npm install ws   then   node proxy.js
-const { WebSocketServer } = require('ws');
-const net = require('net');
-
-const wss = new WebSocketServer({ port: 9100 });
-console.log('Barco proxy listening on ws://localhost:8080');
-
-wss.on('connection', (ws, req) => {
-  const params = new URLSearchParams(req.url.split('?')[1]);
-  const host = params.get('host');
-  const port = parseInt(params.get('port') || '9090');
-  const tcp = net.createConnection({ host, port });
-  let buf = '';
-  tcp.on('data', d => {
-    buf += d.toString();
-    let nl;
-    while ((nl = buf.indexOf('\\n')) !== -1) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (line) try { ws.send(line); } catch {}
-    }
-  });
-  tcp.on('error', e => ws.close(1011, e.message));
-  tcp.on('close', ()  => ws.close());
-  ws.on('message', m  => tcp.write(m + '\\n'));
-  ws.on('close',   ()  => tcp.destroy());
-});
-</textarea>`;
+`;
   document.getElementById('configModal').classList.add('open');
 }
 
 function closeConfig() { document.getElementById('configModal').classList.remove('open'); }
 
-function saveConfig() {
+function escAttr(v) {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+async function saveConfig() {
   // Proxy host
   const newProxyHost = (document.getElementById('cfgProxyHost')?.value.trim()) || window.location.hostname || 'localhost';
   const hostChanged  = newProxyHost !== proxyHost;
@@ -2950,7 +2997,6 @@ function saveConfig() {
   const newCcIp = document.getElementById('cfgCcIp')?.value.trim();
   if (newCcIp) {
     ccIp = newCcIp;
-    localStorage.setItem('ccIp', ccIp);
     const topbarInput = document.getElementById('ccIp');
     if (topbarInput) topbarInput.value = ccIp;
   }
@@ -2962,9 +3008,16 @@ function saveConfig() {
     if (k) sceneMap[s.key] = { tlKey: k, tlValue: v !== '' ? Number(v) : undefined };
     else   delete sceneMap[s.key];
   });
-  localStorage.setItem('sceneMap', JSON.stringify(sceneMap));
+  // Matrox login — password only sent when typed
+  const matrox = { username: document.getElementById('cfgMatroxUser')?.value.trim() || '' };
+  const pass   = document.getElementById('cfgMatroxPass')?.value || '';
+  if (pass) matrox.password = pass;
+  const matroxChanged = matrox.username !== matroxCfg.username || !!pass;
+
+  const saved = await persistShared({ ccIp, sceneMap, matrox });
   renderAll();
   closeConfig();
+  if (saved && matroxChanged) cipRefreshAll();
 
   if (hostChanged) {
     // Drop all open WS connections — the reconnect loop re-opens them with the new host
@@ -2974,7 +3027,7 @@ function saveConfig() {
       st.connecting = false;
     });
     showToast(`Proxy host → ${proxyHost} · reconnecting…`, 'info');
-  } else {
+  } else if (saved) {
     showToast('Settings saved', 'success');
   }
 }

@@ -1,16 +1,19 @@
 // proxy.js — 25 Broadway Dashboard Server
 // ─────────────────────────────────────────
-// Serves the dashboard HTML over HTTP  AND
-// bridges WebSocket ↔ Barco TCP (port 9090)
+// Serves the dashboard HTML over HTTP, bridges WebSocket ↔ Barco TCP (port 9090),
+// proxies Matrox ConvertIP HTTPS, and stores shared settings (settings.json)
 //
-// Setup (one time):
-//   npm install ws
+// Run with Docker (recommended):
+//   docker compose up -d --build
 //
-// Run:
-//   node proxy.js
+// Or directly:
+//   npm install   (one time)
+//   npm start     (= node proxy.js)
 //
 // Open:
 //   http://localhost:8080
+//
+// Env: PORT (default 8080), DATA_DIR (folder for settings.json, default: this folder)
 
 const http  = require('http');
 const https = require('https');
@@ -27,8 +30,64 @@ try {
   process.exit(1);
 }
 
-const HTTP_PORT = 8080;
-const DIR       = __dirname;
+const HTTP_PORT     = parseInt(process.env.PORT || '8080', 10);
+const DIR           = __dirname;
+// DATA_DIR lets Docker keep settings.json on a volume, outside the app folder
+const DATA_DIR      = process.env.DATA_DIR || DIR;
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+// ── Shared settings (settings.json) ──────────────────────────────────────────
+// Single source of truth for every browser that opens the dashboard.
+// Holds scene mappings, tags, CC IP and the Matrox login. The Matrox password
+// is never sent back to the browser.
+const SETTINGS_DEFAULTS = {
+  ccIp:           '172.16.0.20',
+  sceneMap:       {},
+  sceneTags:      {},
+  knownTags:      [],
+  sceneSortOrder: 'default',
+  matrox:         { username: '', password: '' },
+};
+const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder'];
+
+let settings = loadSettings();
+
+function loadSettings() {
+  try {
+    const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    return { ...SETTINGS_DEFAULTS, ...s, matrox: { ...SETTINGS_DEFAULTS.matrox, ...s.matrox } };
+  } catch (e) {
+    if (e.code !== 'ENOENT') console.error(`[Settings] Could not read settings.json: ${e.message}`);
+    return { ...SETTINGS_DEFAULTS, matrox: { ...SETTINGS_DEFAULTS.matrox } };
+  }
+}
+
+function saveSettings() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = SETTINGS_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(settings, null, 2));
+  fs.renameSync(tmp, SETTINGS_FILE);
+}
+
+function publicSettings() {
+  const out = {};
+  SHARED_KEYS.forEach(k => { out[k] = settings[k]; });
+  out.matrox = { username: settings.matrox.username, hasPassword: !!settings.matrox.password };
+  return out;
+}
+
+function readBody(req) {
+  return new Promise(resolve => {
+    let buf = '';
+    req.on('data', c => { buf += c; });
+    req.on('end',  () => resolve(buf));
+  });
+}
+
+function sendJson(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+  res.end(JSON.stringify(obj));
+}
 
 // ── Matrox ConvertIP HTTPS proxy (cookie-based auth) ─────────────────────────
 const matroxSessions = new Map(); // ip → 'session_token=VALUE'
@@ -64,8 +123,10 @@ function matroxRequest(ip, method, apiPath, cookie, body) {
 }
 
 async function matroxLogin(ip) {
+  const { username, password } = settings.matrox;
+  if (!username || !password) throw new Error('Matrox login not set — open Settings');
   const r = await matroxRequest(ip, 'POST', '/user/login', null,
-    JSON.stringify({ username: 'mofa-admin', password: '25B_m0f4_2443' }));
+    JSON.stringify({ username, password }));
   console.log(`[Matrox] login ${ip} → HTTP ${r.status}${r.cookie ? ' ✓ cookie' : ' ✗ no cookie'}`);
   if (r.cookie) matroxSessions.set(ip, r.cookie);
   return r;
@@ -101,6 +162,33 @@ const MIME = {
 
 // ── HTTP file server + Matrox API proxy ──────────────────────────────────────
 const httpServer = http.createServer(async (req, res) => {
+  // Shared settings: GET returns everything except the Matrox password,
+  // PUT merges the given top-level keys and writes settings.json
+  if ((req.url || '').split('?')[0] === '/api/settings') {
+    if (req.method === 'GET') { sendJson(res, 200, publicSettings()); return; }
+    if (req.method === 'PUT') {
+      let patch;
+      try { patch = JSON.parse(await readBody(req) || '{}'); }
+      catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
+      SHARED_KEYS.forEach(k => { if (patch[k] !== undefined) settings[k] = patch[k]; });
+      if (patch.matrox) {
+        const m = settings.matrox;
+        const before = m.username + '\n' + m.password;
+        if (typeof patch.matrox.username === 'string') m.username = patch.matrox.username.trim();
+        if (typeof patch.matrox.password === 'string' && patch.matrox.password) m.password = patch.matrox.password;
+        if (before !== m.username + '\n' + m.password) {
+          matroxSessions.clear(); // force re-login with the new credentials
+          console.log(`[Settings] Matrox login updated (user: ${m.username})`);
+        }
+      }
+      try { saveSettings(); }
+      catch (e) { sendJson(res, 500, { error: e.message }); return; }
+      sendJson(res, 200, publicSettings());
+      return;
+    }
+    res.writeHead(405); res.end(); return;
+  }
+
   // Matrox ConvertIP pass-through: GET|POST /api/matrox/172.16.201.141/device/status
   if ((req.url || '').startsWith('/api/matrox/')) {
     const rest     = (req.url.split('?')[0]).slice('/api/matrox/'.length);
@@ -113,11 +201,7 @@ const httpServer = http.createServer(async (req, res) => {
       let r;
       if (req.method === 'POST') {
         // Read request body (may be empty for reboot etc.)
-        const body = await new Promise(resolve => {
-          let buf = '';
-          req.on('data', c => { buf += c; });
-          req.on('end',  () => resolve(buf));
-        });
+        const body = await readBody(req);
         if (!matroxSessions.has(ip)) await matroxLogin(ip);
         r = await matroxRequest(ip, 'POST', apiPath, matroxSessions.get(ip), body || null);
         if (r.status === 401 || r.status === 403) {
@@ -147,7 +231,10 @@ const httpServer = http.createServer(async (req, res) => {
   if (urlPath === '/') urlPath = '/25broadway_dashboard.html';
 
   const filePath = path.resolve(DIR, '.' + urlPath);
-  if (!filePath.startsWith(DIR)) {
+  // Never serve the settings file (contains the Matrox password) or dotfiles
+  if (!filePath.startsWith(DIR + path.sep) ||
+      path.basename(filePath).startsWith('settings.json') ||
+      path.basename(filePath).startsWith('.')) {
     res.writeHead(403); res.end('Forbidden'); return;
   }
 
@@ -279,5 +366,6 @@ httpServer.listen(HTTP_PORT, () => {
   console.log(`  │  Open  →  http://localhost:${HTTP_PORT}               │`);
   console.log('  └──────────────────────────────────────────────┘');
   console.log('');
+  console.log(`  Settings → ${SETTINGS_FILE}`);
   console.log('  Press Ctrl+C to stop.\n');
 });
