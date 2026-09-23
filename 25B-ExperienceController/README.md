@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.10.0
+# 25 Broadway — Experience Controller · v1.12.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -138,7 +138,7 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 | **⏻ Power** | `ON` (green) | Asks **"Power off …?"** and only powers off if you confirm. It asks every time, for every projector |
 | | `OFF` | Powers on, with no confirmation |
 | | `Warming up…` / `Cooling down…` / `Booting…` / `Error` / `—` | Disabled: wait, or use Advanced |
-| **Shutter** | `OPEN` (teal) | Closes the shutter |
+| **Shutter** | `OPEN` (blue) | Closes the shutter |
 | | `CLOSED` (red) | Opens the shutter |
 | | `—` | Disabled: the shutter only works while the projector is on |
 
@@ -146,12 +146,12 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 
 - Power and shutter status badges.
 - Separate **⏻ On**, **⏻ Off** and **Shutter** buttons. These have no confirmation.
-- Details for each projector:
+- Details for each projector. Colour is used only for status: a **green dot** means OK, and the text turns **amber** or **red** only when something needs attention. Everything else is plain grey.
 
 | Detail | Meaning |
 |---|---|
 | Model | `UDM-4K30` or `F80-4K12` |
-| Zone / IP address | Where it is and its network address |
+| Zone / IP address | Where it is and its network address. The IP address (underlined) is a link to the projector's own web interface (port 80, opens in a new tab) |
 | Connection | Whether the dashboard's link to the projector is up |
 | Video feed | `Receiving` / `No stream` from its Matrox decoder (hover for the decoder's name) |
 | Laser hours | Laser runtime |
@@ -421,6 +421,15 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.12.0 — 2026-09-23
+- **Change:** Clearer colours in Advanced mode — plain facts are grey, the IP address is an underlined link, and status values (Connection, Video feed, Mainboard temp) show a green dot when OK and only turn amber/red when something is wrong
+- **Change:** Shutter **Open** is now **blue** everywhere (badge, Simple toggle, Open All Shutters) so it's no longer confused with power **On** (green)
+- **Change:** Video feed **No stream** is shown in amber
+- **Fix:** The IP address link no longer gets cut off (removed the ↗ arrow)
+
+### v1.11.0 — 2026-09-23
+- **Feature:** Advanced mode projector **IP address** is a link to the projector's web interface (`http://<ip>/`, port 80), opening in a new tab
 
 ### v1.10.0 — 2026-09-23
 - **Feature:** Matrox devices are polled from page load, so each projector's **Video feed** is live without opening the Signal tab

@@ -31,6 +31,8 @@
   --gold-dim:  rgba(201,169,110,0.10);
   --gold-glow: rgba(201,169,110,0.22);
   --teal:      #5ecfbe;
+  --blue:      #6ea8fe;   /* shutter open */
+  --blue-dim:  rgba(110,168,254,0.12);
   --teal-dim:  rgba(94,207,190,0.10);
   --red:       #e05a52;
   --red-dim:   rgba(224,90,82,0.12);
@@ -438,8 +440,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .badge-unknown .badge-dot { background: var(--text-3); animation: blink 1.2s ease-in-out infinite; }
 
 /* Shutter states */
-.badge-open    { background: var(--teal-dim); border-color: rgba(94,207,190,0.25); color: var(--teal); }
-.badge-open .badge-dot { background: var(--teal); }
+.badge-open    { background: var(--blue-dim); border-color: rgba(110,168,254,0.3); color: var(--blue); }
+.badge-open .badge-dot { background: var(--blue); }
 .badge-closed  { background: var(--red-dim); border-color: rgba(224,90,82,0.25); color: var(--red); }
 .badge-closed .badge-dot { background: var(--red); }
 /* ConvertIP stream badge on projector cards */
@@ -524,13 +526,21 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   text-overflow: ellipsis;
 }
 .metric-value.mono     { font-family: monospace; font-size: 10.5px; }
-.metric-value.feed-on  { color: var(--teal); }
-.metric-value.link-ok  { color: var(--green); }
-.metric-value.link-down { color: var(--red); }
+.metric-link { color: var(--text); text-decoration: underline dotted; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
+.metric-link:hover { color: var(--gold-lt); text-decoration-color: var(--gold-lt); }
+/* Status values: neutral text + coloured dot; text is coloured only when something is wrong */
+.metric-value.feed-on::before, .metric-value.feed-off::before,
+.metric-value.link-ok::before, .metric-value.link-down::before,
+.metric-value.temp-ok::before, .metric-value.temp-warn::before, .metric-value.temp-hot::before {
+  content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px;
+}
+.metric-value.feed-on::before, .metric-value.link-ok::before, .metric-value.temp-ok::before { background: var(--green); }
+.metric-value.feed-off, .metric-value.temp-warn { color: var(--amber); }
+.metric-value.feed-off::before, .metric-value.temp-warn::before { background: var(--amber); }
+.metric-value.link-down, .metric-value.temp-hot { color: var(--red); }
+.metric-value.link-down::before, .metric-value.temp-hot::before { background: var(--red); }
 
-.metric-value.temp-ok   { color: var(--green); }
-.metric-value.temp-warn { color: var(--amber); }
-.metric-value.temp-hot  { color: var(--red); }
+
 
 /* Simple / Advanced: which parts of a card each mode shows */
 #panel-proj:not(.proj-advanced) .adv-only { display: none !important; }
@@ -544,7 +554,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .tgl-ico   { font-size: 15px; line-height: 1; }
 .tgl.is-on     { color: var(--green); background: var(--green-dim); border-color: rgba(94,207,122,0.35); }
 .tgl.is-off    { color: var(--text-2); }
-.tgl.is-open   { color: var(--teal); background: var(--teal-dim); border-color: rgba(94,207,190,0.35); }
+.tgl.is-open   { color: var(--blue); background: var(--blue-dim); border-color: rgba(110,168,254,0.4); }
 .tgl.is-closed { color: var(--red); background: var(--red-dim); border-color: rgba(224,90,82,0.3); }
 .tgl.is-busy   { color: var(--amber); background: var(--amber-dim); border-color: rgba(245,166,35,0.3); }
 .tgl.is-busy .tgl-state { animation: blink 1s ease-in-out infinite; }
@@ -1167,7 +1177,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.10.0</div>
+        <div class="brand-sub">Experience Control · v1.12.0</div>
       </div>
     </div>
 
@@ -1375,7 +1385,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <button class="bulk-action-btn danger" onclick="bulkPowerOff()">Power Off All</button>
       <button class="bulk-action-btn" onclick="toastOnly()" title="Power on PRJ11 only — power off all others" style="color:var(--gold);border-color:rgba(201,169,110,0.25);background:rgba(201,169,110,0.08)">Toast Only</button>
       <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
-      <button class="bulk-action-btn" onclick="bulkShutterOpen()" style="color:var(--teal);border-color:rgba(94,207,190,0.2);background:var(--teal-dim)">Open All Shutters</button>
+      <button class="bulk-action-btn" onclick="bulkShutterOpen()" style="color:var(--blue);border-color:rgba(110,168,254,0.3);background:var(--blue-dim)">Open All Shutters</button>
       <button class="bulk-action-btn" onclick="bulkShutterClose()" style="color:var(--text-2)">Close All Shutters</button>
       <div style="flex:1"></div>
       <span class="poll-status" id="pollStatus" style="margin-left:0">Not polling</span>
@@ -2297,7 +2307,7 @@ function buildProjCards() {
       <div class="proj-details">
         <div class="proj-detail"><span class="metric-label">Model</span><span class="metric-value">${p.model}</span></div>
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
-        <div class="proj-detail"><span class="metric-label">IP address</span><span class="metric-value mono">${p.ip}</span></div>
+        <div class="proj-detail"><span class="metric-label">IP address</span><a class="metric-value mono metric-link" href="http://${p.ip}/" target="_blank" rel="noopener" title="Open the projector's web interface (new tab)">${p.ip}</a></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
         <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE)">—</span></div>
         <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
@@ -3405,7 +3415,7 @@ function updateProjVdeBadge(projId) {
   // Short value so it fits the card; the decoder's name is in the tooltip
   el.textContent = st.stream ? 'Receiving' : 'No stream';
   el.title = `From decoder ${vde.name}`;
-  if (st.stream) el.classList.add('feed-on');
+  el.classList.add(st.stream ? 'feed-on' : 'feed-off');
 }
 // ── Card builder ─────────────────────────────────────────────────────────────
 function buildCipCards() {
