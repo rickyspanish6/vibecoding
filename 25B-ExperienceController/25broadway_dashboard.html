@@ -1236,7 +1236,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.20.0</div>
+        <div class="brand-sub">Experience Control · v1.20.1</div>
       </div>
     </div>
 
@@ -3777,7 +3777,7 @@ function buildReportData(rows) {
     if (tl === 'warn' || tl === 'bad') issues.push([tl, `${n}: mainboard is hot (${Math.round(st.temp)}°C).`]);
     const ls = lifeStatus(pct);
     if (ls.key === 'past')  issues.push(['bad',  `${n}: laser is past its rated life (${Math.round(pct)} %).`]);
-    else if (ls.key === 'eol')   issues.push(['bad',  `${n}: laser is at end of life (${Math.round(pct)} % of rated life).`]);
+    else if (ls.key === 'eol')   issues.push(['bad',  `${n}: laser is at End of Life (${Math.round(pct)} % of rated life).`]);
     else if (ls.key === 'aging') issues.push(['warn', `${n}: laser is aging (${Math.round(pct)} % of rated life).`]);
   });
   issues.sort((a, b) => (a[0] === 'bad' ? 0 : 1) - (b[0] === 'bad' ? 0 : 1));
@@ -3852,7 +3852,8 @@ function exportReportPdf(section) {
   const R = lastReport;
   if (!R) return;
   const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
-  const title = section === 'aging' ? 'Laser Aging' : 'Projector Health';
+  const title = section === 'aging' ? 'Laser Hours' : 'Projector Health';
+  const lifeText = ls => ls.key === 'past' ? 'End of Life — past rated life' : ls.key === 'eol' ? 'End of Life' : ls.text;   // PDF spells EOL out
   const date  = R.takenAt.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
   const time  = R.takenAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const dot = lvl => `<span class="dot ${lvl}"></span>`;
@@ -3865,29 +3866,28 @@ function exportReportPdf(section) {
       ['Rated laser life', `${fmtInt(RATED_LASER_HOURS)} h`],
       ['Average use', R.avg != null ? `${fmtInt(R.avg)} h` : '—'],
       ['Highest use', R.most ? `${esc(PROJ_SHORT[R.most.p.id])} · ${fmtInt(R.most.hours)} h` : '—'],
-      ['Good', R.counts.good], ['Aging', R.counts.aging], ['EOL', R.counts.eol + R.counts.past],
+      ['Good', R.counts.good], ['Aging', R.counts.aging], ['End of Life', R.counts.eol + R.counts.past],
     ];
     table = `<table><thead><tr><th>Projector</th><th>Zone</th><th>Model</th><th>Installed</th><th class="r">Laser hours</th><th>Rated life used</th><th>Status</th></tr></thead><tbody>
       ${[...R.rows].sort(byAge).map(r => { const ls = lifeStatus(r.pct), w = r.pct == null ? 0 : Math.min(r.pct, 100);
         return `<tr><td class="b">${esc(PROJ_SHORT[r.p.id])}</td><td>${esc(r.p.zone)}</td><td>${esc(r.p.model)}</td><td>${fmtInstalled(r.p.installed) || 'Unknown'}</td>
           <td class="r">${r.hours == null ? '—' : fmtInt(r.hours) + ' h'}</td>
           <td>${r.pct == null ? '—' : `<span class="bar ${ls.level}"><span style="width:${w}%"></span></span> ${Math.round(r.pct)} %`}</td>
-          <td class="st ${ls.level}">${dot(ls.level)}${ls.key === 'past' ? 'EOL — past rated life' : ls.text}</td></tr>`; }).join('')}
+          <td class="st ${ls.level}">${dot(ls.level)}${lifeText(ls)}</td></tr>`; }).join('')}
       </tbody></table>`;
-    notes = `Status is based on laser hours against the rated life of ${fmtInt(RATED_LASER_HOURS)} h: <b>Good</b> below ${AGING_PCT} %, <b>Aging</b> from ${AGING_PCT} %, <b>EOL</b> (end of life) from ${EOL_PCT} %. Laser hours are read directly from each projector.`;
+    notes = `Status is based on laser hours against the rated life of ${fmtInt(RATED_LASER_HOURS)} h: <b>Good</b> below ${AGING_PCT} %, <b>Aging</b> from ${AGING_PCT} %, <b>End of Life</b> from ${EOL_PCT} %. Laser hours are read directly from each projector.`;
   } else {
     summary = [
       ['Projectors', R.rows.length], ['Answering', `${R.answering} of ${R.rows.length}`],
       ['Normal', R.hc.ok], ['Warning', R.hc.warn], ['Error / unreachable', R.hc.bad], ['Not reported', R.hc.muted],
     ];
-    table = `<table><thead><tr><th>Projector</th><th>Zone</th><th>Health</th><th>Air intake</th><th>Mainboard</th><th class="r">Illumination</th><th>Power</th></tr></thead><tbody>
+    table = `<table><thead><tr><th>Projector</th><th>Model</th><th>Zone</th><th>Health</th><th>Air intake</th><th>Mainboard</th><th class="r">Illumination</th></tr></thead><tbody>
       ${[...R.rows].sort(byPrjSort).map(r => { const { p, st, alarms } = r, hs = healthStatus(r);
         const t = (v, w, e) => v == null ? '—' : `${dot(tempLevel(v, w, e))}${Math.round(v)}°C`;
-        return `<tr><td class="b">${esc(PROJ_SHORT[p.id])}</td><td>${esc(p.zone)}</td>
+        return `<tr><td class="b">${esc(PROJ_SHORT[p.id])}</td><td>${esc(p.model)}</td><td>${esc(p.zone)}</td>
           <td class="st ${hs.level}">${dot(hs.level)}${esc(hs.text)}${alarms.length ? `<div class="why">${esc(alarmDetail(alarms))}</div>` : ''}</td>
           <td>${t(st.amb, st.ambWarn, st.ambError)}</td><td>${t(st.temp, st.tempWarn, st.tempError)}</td>
-          <td class="r">${st.illum == null ? '—' : Math.round(st.illum) + ' %'}</td>
-          <td>${esc((POWER_BADGE[st.power] || POWER_BADGE.unknown).text)}${st.power === 'on' && st.shutter ? ', shutter ' + esc(String(st.shutter).toLowerCase()) : ''}</td></tr>`; }).join('')}
+          <td class="r">${st.illum == null ? '—' : Math.round(st.illum) + ' %'}</td></tr>`; }).join('')}
       </tbody></table>`;
     notes = `Health is each projector's own self-check (Barco system health), with the reason it reports. Temperatures are compared with the projector's own warning and error limits. The F80-4K12 units do not report health.`;
   }
@@ -3938,7 +3938,7 @@ function exportReportPdf(section) {
   </header>
   <div class="summary">${summary.map(([k, v]) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
   <div class="issues ${issues.length ? '' : 'ok'}">
-    <h3>${issues.length ? `Needs attention (${issues.length})` : section === 'aging' ? 'No laser is aging or at end of life' : 'No health issues reported'}</h3>
+    <h3>${issues.length ? `Needs attention (${issues.length})` : section === 'aging' ? 'No laser is aging or at End of Life' : 'No health issues reported'}</h3>
     ${issues.length ? `<ul>${issues.map(([, t]) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
   </div>
   ${table}

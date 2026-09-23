@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.20.0
+# 25 Broadway — Experience Controller · v1.20.1
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -494,6 +494,9 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.20.1 — 2026-09-23
+- **Change:** Projector report PDFs — the aging PDF is titled **Laser Hours**; **End of Life** is spelled out instead of EOL; the Health PDF shows each projector's **model** and no longer shows power / shutter
 
 ### v1.20.0 — 2026-09-23
 - **Feature:** **Projector report** page in Settings — fleet header (rated life 20,000 h, average use), summary of projector issues, **Aging** (install date, laser hours, % of rated life: Good < 70 %, **Aging** ≥ 70 %, **EOL** ≥ 90 % in red, flashing ≥ 100 %) and **Health** (each projector's own self-check via `system.health`, with the reason from `environment.getalarminfo`, temperatures, illumination, power). Fresh readings each time it's opened
