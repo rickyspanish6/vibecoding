@@ -540,15 +540,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .metric-link { color: var(--text); text-decoration: underline dotted; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
 .metric-link:hover { color: var(--gold-lt); text-decoration-color: var(--gold-lt); }
 /* Status values: neutral text + coloured dot; text is coloured only when something is wrong */
-.metric-value.st-ok::before, .metric-value.st-warn::before,
 .metric-value.feed-on::before, .metric-value.feed-off::before,
 .metric-value.link-ok::before, .metric-value.link-down::before,
 .metric-value.temp-ok::before, .metric-value.temp-warn::before, .metric-value.temp-hot::before {
   content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px;
 }
-.metric-value.st-ok::before, .metric-value.feed-on::before, .metric-value.link-ok::before, .metric-value.temp-ok::before { background: var(--green); }
-.metric-value.st-warn, .metric-value.feed-off, .metric-value.temp-warn { color: var(--amber); }
-.metric-value.st-warn::before, .metric-value.feed-off::before, .metric-value.temp-warn::before { background: var(--amber); }
+.metric-value.feed-on::before, .metric-value.link-ok::before, .metric-value.temp-ok::before { background: var(--green); }
+.metric-value.feed-off, .metric-value.temp-warn { color: var(--amber); }
+.metric-value.feed-off::before, .metric-value.temp-warn::before { background: var(--amber); }
 .metric-value.link-down, .metric-value.temp-hot { color: var(--red); }
 .metric-value.link-down::before, .metric-value.temp-hot::before { background: var(--red); }
 
@@ -1191,7 +1190,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.15.2</div>
+        <div class="brand-sub">Experience Control · v1.16.0</div>
       </div>
     </div>
 
@@ -2153,14 +2152,17 @@ const METRICS_POLL_MS  = 2 * 60 * 1000; // laser runtime + temp: every 2 min
 // Model-specific Pulse API properties (verified with the introspect call on each model).
 //   tempSensor — mainboard temperature sensor; read <sensor>.value, and its
 //                threshold.highwarning / threshold.higherror to colour the reading
+//   ambSensor  — ambient (air intake) temperature sensor, read the same way. The F80 has
+//                no ambient_outside sensor; its air-intake sensor is "inlet"
 //   laser      — laser runtime counter, in `laserUnit` seconds (UDM: seconds, F80: minutes)
 const MODEL_PROPS = {
-  'UDM-4K30': { tempSensor: 'environment.temperature.mainboard.cpu', laser: 'statistics.laserruntime.value',      laserUnit: 1 },
-  'F80-4K12': { tempSensor: 'environment.temperature.mainboard',     laser: 'statistics.operating.laseron.value', laserUnit: 60 },
+  'UDM-4K30': { tempSensor: 'environment.temperature.mainboard.cpu', ambSensor: 'environment.temperature.ambient_outside', laser: 'statistics.laserruntime.value',      laserUnit: 1 },
+  'F80-4K12': { tempSensor: 'environment.temperature.mainboard',     ambSensor: 'environment.temperature.inlet',           laser: 'statistics.operating.laseron.value', laserUnit: 60 },
 };
 const modelProps = projId => MODEL_PROPS[PROJECTORS.find(p => p.id === projId).model];
 const tempSensor = projId => modelProps(projId).tempSensor;
 const laserProp  = projId => modelProps(projId).laser;
+const ambSensor  = projId => modelProps(projId).ambSensor;
 
 // Dashboard server address — normally the address this page was opened from.
 // A per-screen override (Settings → Dashboard server) is kept in localStorage.
@@ -2223,7 +2225,7 @@ function withAllZones(zones, devices) {
 // Per-projector state
 const projState = {};
 PROJECTORS.forEach(p => {
-  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, tempWarn: null, tempError: null, laser: null, illum: null, serial: null, subscribed: new Set(), lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
+  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, tempWarn: null, tempError: null, amb: null, ambWarn: null, ambError: null, illum: null, serial: null, subscribed: new Set(), lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
 });
 
 // ── Persistent connection manager ─────────────────────────────────────────────
@@ -2342,11 +2344,11 @@ function buildProjCards() {
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
         <div class="proj-detail"><span class="metric-label">IP address</span><a class="metric-value mono metric-link" href="http://${p.ip}/" target="_blank" rel="noopener" title="Open the projector's web interface (new tab)">${p.ip}</a></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
-        <div class="proj-detail"><span class="metric-label">Laser</span><span class="metric-value" id="laser-${p.id}" title="illumination.state">—</span></div>
         <div class="proj-detail"><span class="metric-label">Illumination</span><span class="metric-value" id="illum-${p.id}" title="Actual laser output (illumination.sources.laser.actualpower)">—</span></div>
         <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE)">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Ambient</span><span class="metric-value" id="amb-${p.id}">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Mainboard</span><span class="metric-value" id="temp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
-        <div class="proj-detail"><span class="metric-label">Mainboard temp</span><span class="metric-value" id="temp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Serial no.</span><span class="metric-value mono" id="serial-${p.id}">—</span></div>
       </div>
       <div class="proj-divider"></div>
@@ -2524,7 +2526,7 @@ function handleProjMsg(projId, msg) {
       if (obj[laserProp(projId)]                    !== undefined) updateLampHours(projId,    obj[laserProp(projId)]);
       if (obj[tempSensor(projId) + '.value']        !== undefined) updateTemp(projId,          obj[tempSensor(projId) + '.value']);
       if (obj['system.serialnumber']               !== undefined) updateSerial(projId,        obj['system.serialnumber']);
-      if (obj['illumination.state']                 !== undefined) updateLaser(projId,         obj['illumination.state']);
+      if (obj[ambSensor(projId) + '.value']         !== undefined) updateAmbient(projId,       obj[ambSensor(projId) + '.value']);
       if (obj['illumination.sources.laser.actualpower'] !== undefined) updateIllum(projId,     obj['illumination.sources.laser.actualpower']);
       // Also handle flat property names without dot-path (last segment of each property).
       // Not for laser runtime / temperature: both end in ".value", so a flat "value" is ambiguous.
@@ -2592,25 +2594,24 @@ async function projRefresh(projId) {
     if (state === 'on' || state === 'ready') {
       const st = projState[projId];
       const doMetrics = (Date.now() - st.lastMetricsFetch) > METRICS_POLL_MS;
-      const [sRaw, lhRaw, tRaw, lsRaw, ilRaw] = await Promise.all([
+      const [sRaw, lhRaw, tRaw, aRaw, ilRaw] = await Promise.all([
         rpcGet(projId, 'optics.shutter.position').catch(() => null),
         doMetrics ? rpcGet(projId, laserProp(projId)).catch(() => null)                   : Promise.resolve(null),
         doMetrics ? rpcGet(projId, tempSensor(projId) + '.value').catch(() => null)       : Promise.resolve(null),
-        rpcGet(projId, 'illumination.state').catch(() => null),
+        doMetrics ? rpcGet(projId, ambSensor(projId) + '.value').catch(() => null)        : Promise.resolve(null),
         rpcGet(projId, 'illumination.sources.laser.actualpower').catch(() => null),
       ]);
-      updateLaser(projId, lsRaw !== null ? unwrap(lsRaw, 'illumination.state') : null);
       updateIllum(projId, ilRaw !== null ? unwrap(ilRaw, 'illumination.sources.laser.actualpower') : null);
       updateShutterBadge(projId, sRaw ? unwrap(sRaw, 'optics.shutter.position') : 'unknown');
       if (doMetrics) {
         updateLampHours(projId, lhRaw !== null ? unwrap(lhRaw, laserProp(projId)) : null);
         updateTemp(projId,      tRaw !== null ? unwrap(tRaw, tempSensor(projId) + '.value') : null);
+        updateAmbient(projId,   aRaw !== null ? unwrap(aRaw, ambSensor(projId) + '.value') : null);
         st.lastMetricsFetch = Date.now();
       }
     } else {
       document.getElementById(`sh-badge-${projId}`).style.display = 'none';
-      updateLaser(projId, null);   // laser values only apply while the projector is on
-      updateIllum(projId, null);
+      updateIllum(projId, null);   // laser output only applies while the projector is on
     }
     // Fetch serial number once per connection (available in any power state)
     if (projState[projId].serial === null) {
@@ -2629,13 +2630,23 @@ async function projRefresh(projId) {
         updateTemp(projId, projState[projId].temp); // recolour with the real limits
       }).catch(() => {});
     }
+    if (projState[projId].ambWarn === null) {
+      Promise.all([
+        rpcGet(projId, ambSensor(projId) + '.threshold.highwarning'),
+        rpcGet(projId, ambSensor(projId) + '.threshold.higherror'),
+      ]).then(([w, e]) => {
+        projState[projId].ambWarn  = Number(w);
+        projState[projId].ambError = Number(e);
+        updateAmbient(projId, projState[projId].amb);
+      }).catch(() => {});
+    }
     // Subscribe to push notifications for live updates — once per connection
     subscribeOnce(projId, 'system.state');
     if (state === 'on' || state === 'ready') {
       subscribeOnce(projId, 'optics.shutter.position');
       subscribeOnce(projId, laserProp(projId));
       subscribeOnce(projId, tempSensor(projId) + '.value');
-      subscribeOnce(projId, 'illumination.state');
+      subscribeOnce(projId, ambSensor(projId) + '.value');
       subscribeOnce(projId, 'illumination.sources.laser.actualpower');
     }
   } catch (e) {
@@ -2767,14 +2778,6 @@ function updateLampHours(projId, raw) {
   }
 }
 
-// Laser status (illumination.state): On → green dot; Off while the projector is on → amber
-function updateLaser(projId, state) {
-  projState[projId].laser = state;
-  const el = document.getElementById(`laser-${projId}`);
-  if (!el) return;
-  el.className   = 'metric-value' + (state === 'On' ? ' st-ok' : state === 'Off' ? ' st-warn' : '');
-  el.textContent = state === 'On' || state === 'Off' ? state : '—';
-}
 
 // Illumination level: actual laser output in % (a level, so no status colour)
 function updateIllum(projId, pct) {
@@ -2785,20 +2788,26 @@ function updateIllum(projId, pct) {
   el.textContent = pct === null || pct === undefined || isNaN(n) ? '—' : `${Math.round(n)} %`;
 }
 
-function updateTemp(projId, celsius) {
-  projState[projId].temp = celsius;
-  const el = document.getElementById(`temp-${projId}`);
+// A temperature, coloured against the projector's own limits for that sensor
+function renderTemp(el, celsius, warn, error, label) {
   if (!el) return;
-  if (celsius === null || celsius === undefined) {
-    el.className = 'metric-value';
-    el.textContent = '—';
-  } else {
-    const t = Math.round(Number(celsius));
-    el.textContent = isNaN(t) ? '—' : t + '°C';
-    const { tempWarn, tempError } = projState[projId];
-    el.className = 'metric-value ' + (tempError && t >= tempError ? 'temp-hot' : tempWarn && t >= tempWarn ? 'temp-warn' : 'temp-ok');
-    el.title = tempWarn ? `Mainboard — warning at ${tempWarn}°C, error at ${tempError}°C` : 'Mainboard';
-  }
+  const t = Math.round(Number(celsius));
+  if (celsius === null || celsius === undefined || isNaN(t)) { el.className = 'metric-value'; el.textContent = '—'; return; }
+  el.textContent = t + '°C';
+  el.className = 'metric-value ' + (error && t >= error ? 'temp-hot' : warn && t >= warn ? 'temp-warn' : 'temp-ok');
+  el.title = warn ? `${label} — warning at ${warn}°C, error at ${error}°C` : label;
+}
+
+function updateTemp(projId, celsius) {
+  const st = projState[projId];
+  st.temp = celsius;
+  renderTemp(document.getElementById(`temp-${projId}`), celsius, st.tempWarn, st.tempError, 'Mainboard temperature');
+}
+
+function updateAmbient(projId, celsius) {
+  const st = projState[projId];
+  st.amb = celsius;
+  renderTemp(document.getElementById(`amb-${projId}`), celsius, st.ambWarn, st.ambError, 'Ambient (air intake) temperature');
 }
 
 function updateSerial(projId, sn) {

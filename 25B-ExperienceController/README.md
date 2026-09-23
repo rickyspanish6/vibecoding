@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.15.2
+# 25 Broadway — Experience Controller · v1.16.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -153,11 +153,10 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 | Model | `UDM-4K30` or `F80-4K12` |
 | Zone / IP address | Where it is and its network address. The IP address (underlined) is a link to the projector's own web interface (port 80, opens in a new tab) |
 | Connection | Whether the dashboard's link to the projector is up |
-| Laser | Whether the laser light is `On` or `Off`. Amber if the projector is on but its laser is off |
 | Illumination | Actual laser output in %, including any power limits |
 | Video feed | `Receiving` / `No stream` from its Matrox decoder (hover for the decoder's name) |
+| Ambient / Mainboard | Air-intake and mainboard temperatures, side by side. Each is coloured against the projector's own warning and error limits for that sensor (hover to see them) |
 | Laser hours | Laser runtime |
-| Mainboard temp | Coloured against the projector's own warning and error limits |
 | Serial no. | Serial number |
 
 **Toolbar**
@@ -417,7 +416,6 @@ JSON-RPC 2.0 over TCP 9090 (Barco ref. TDE9629). The browser opens one WebSocket
 | `system.state` | `on` · `ready` · `standby` · `eco` · `boot` · `conditioning` · `deconditioning` · `error`. Simple mode treats `standby` / `eco` / `ready` as **Off** |
 | `optics.shutter.position` / `.target` | `Open` / `Closed` (read / write) |
 | `system.serialnumber` | Read once per connection |
-| `illumination.state` | Laser light `On` / `Off`. Read each refresh while on, and subscribed |
 | `illumination.sources.laser.actualpower` | Actual laser output in % (with limits). Read each refresh while on, and subscribed |
 
 Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each was verified with `introspect` on the real projectors:
@@ -426,7 +424,9 @@ Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each 
 |---|---|---|
 | Laser runtime | `statistics.laserruntime.value` (seconds) | `statistics.operating.laseron.value` (minutes) |
 | Mainboard temperature | `environment.temperature.mainboard.cpu.value` | `environment.temperature.mainboard.value` |
-| Temperature limits | `…mainboard.cpu.threshold.highwarning` / `.higherror` (90 / 100 °C) | `…mainboard.threshold.highwarning` / `.higherror` (80 / 83 °C) |
+| Mainboard limits | `…mainboard.cpu.threshold.highwarning` / `.higherror` (90 / 100 °C) | `…mainboard.threshold.highwarning` / `.higherror` (80 / 83 °C) |
+| Ambient temperature | `environment.temperature.ambient_outside.value` | `environment.temperature.inlet.value` (the F80 has no `ambient_outside`; `inlet` is its air-intake sensor) |
+| Ambient limits | `…ambient_outside.threshold.highwarning` / `.higherror` (43 / 58 °C) | `…inlet.threshold.highwarning` / `.higherror` (45 / 50 °C) |
 
 **Push notifications** use full property names: `{"method":"property.changed","params":{"property":[{"system.state":"on"}]}}`. As a fallback, the flat names `state`, `position` and `serialnumber` are also accepted. `value` is not accepted, because laser runtime and temperature both end in `.value` and it would be ambiguous.
 
@@ -472,6 +472,11 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.16.0 — 2026-09-23
+- **Feature:** Advanced mode shows each projector's **Ambient** (air intake) temperature — `environment.temperature.ambient_outside.value` on the UDM-4K30, `environment.temperature.inlet.value` on the F80-4K12 (which has no `ambient_outside`) — coloured against that sensor's own limits
+- **Change:** Removed the **Laser** (On / Off) detail; **Illumination** stays
+- **Change:** "Mainboard temp" is now **Mainboard** (fits on one line) and sits on the same row as Ambient
 
 ### v1.15.2 — 2026-09-23
 - **Fix:** Simple mode Power / Shutter buttons no longer overflow — in List view they have inner padding and a fixed, equal width; in Tile view the label sits above the state (e.g. ⏻ Power / WARMING…). Long states shortened to `Warming…` / `Cooling…`
