@@ -1,6 +1,6 @@
 {
   "name": "25b-experience-controller",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "private": true,
   "description": "25 Broadway AV control dashboard \u2014 Barco projectors, Control Center scenes, Matrox ConvertIP",
   "main": "proxy.js",

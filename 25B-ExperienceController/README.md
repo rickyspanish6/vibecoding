@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.9.0
+# 25 Broadway — Experience Controller · v1.10.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -88,7 +88,7 @@ Settings are saved on the server, so every screen shares them. The one exception
 
 ## 3. Using the dashboard
 
-The top bar has three tabs, **Scene Library**, **Projectors** and **ConvertIP**, plus one status/Settings button.
+The top bar has three tabs, **Scene Library**, **Projectors** and **Signal** (the Matrox ConvertIP devices), plus one status/Settings button.
 
 ### Connection status
 
@@ -153,7 +153,7 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 | Model | `UDM-4K30` or `F80-4K12` |
 | Zone / IP address | Where it is and its network address |
 | Connection | Whether the dashboard's link to the projector is up |
-| Video feed | Whether its Matrox decoder is receiving a stream (shows `—` until the ConvertIP tab has been opened) |
+| Video feed | `Receiving` / `No stream` from its Matrox decoder (hover for the decoder's name) |
 | Laser hours | Laser runtime |
 | Mainboard temp | Coloured against the projector's own warning and error limits |
 | Serial no. | Serial number |
@@ -170,9 +170,9 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 
 The filter row also has a **Zone** / **State** filter, a **Sort** (IP, State, Zone, Name) and **Tile / List** view.
 
-### ConvertIP
+### Signal
 
-Matrox devices are grouped by zone. Each zone holds the **decoders (VDE)** at its projectors, and **Control Room** holds all 21 **encoders (VEN)**.
+The Signal tab monitors the Matrox ConvertIP devices, grouped by zone. Each zone holds the **decoders (VDE)** at its projectors, and **Control Room** holds all 21 **encoders (VEN)**.
 
 Each card shows:
 
@@ -191,7 +191,7 @@ Each card shows:
 - **Reboot Selected**: tap cards to select them first.
 - **Reboot All**: reboots all 38 devices.
 - Both actions ask for confirmation. Devices are offline for about 30 s.
-- **Start / Stop Polling** refreshes every 10 s, and **Refresh All** refreshes once. Polling starts when the tab is first opened.
+- **Start / Stop Polling** refreshes every 10 s, and **Refresh All** refreshes once. Polling starts when the dashboard loads, so each projector's Video feed is live on every tab.
 
 Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name, IP, Zone or Status. Views: **Tile / List**.
 
@@ -385,7 +385,7 @@ Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each 
 
 - REST API over HTTPS 443, with cookie authentication (`session_token`).
 - `proxy.js` keeps one session per device and signs in again automatically on 401, 403, or a 200 response containing `"Not logged in"`. Changing the account in Settings drops all sessions.
-- Devices are polled every 10 s, staggered 150 ms apart, using `GET /device/status`.
+- Devices are polled every 10 s from page load, staggered 150 ms apart, using `GET /device/status`.
 - A reboot is `POST /device/reboot` with `Content-Type: application/json` and a `{}` body; the device returns 400 without them.
 - Each decoder is linked to its projector by number (VDE*n* ↔ PRJ*n*), which drives the projector's **Video feed** detail.
 
@@ -421,6 +421,11 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.10.0 — 2026-09-23
+- **Feature:** Matrox devices are polled from page load, so each projector's **Video feed** is live without opening the Signal tab
+- **Change:** The **ConvertIP** tab is renamed **Signal**
+- **Fix:** Advanced mode **Video feed** no longer gets cut off — shows just `Receiving` / `No stream`; the decoder's name moved to the tooltip
 
 ### v1.9.0 — 2026-09-23
 - **Feature:** ConvertIP devices grouped into sections — North, South, Dome, West, East (decoders, sorted by number) and **Control Room** (all 21 encoders) — with a sidebar link per section; replaces Senders / Receivers

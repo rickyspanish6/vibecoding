@@ -1167,7 +1167,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.9.0</div>
+        <div class="brand-sub">Experience Control · v1.10.0</div>
       </div>
     </div>
 
@@ -1176,7 +1176,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div class="tab-bar">
         <button class="tab-btn active" id="tab-scenes" onclick="switchTab('scenes')">Scene Library</button>
         <button class="tab-btn"        id="tab-proj"   onclick="switchTab('proj')">Projectors</button>
-        <button class="tab-btn"        id="tab-matrox" onclick="switchTab('matrox')">ConvertIP</button>
+        <button class="tab-btn"        id="tab-matrox" onclick="switchTab('matrox')">Signal</button>
       </div>
       <div class="topbar-right">
         <div class="now-pill" id="nowPill" style="display:none">
@@ -1226,7 +1226,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
     <!-- ConvertIP nav (hidden by default) -->
     <div id="matrox-nav" style="display:none">
-      <div class="nav-group-label" style="margin-top:8px">ConvertIP</div>
+      <div class="nav-group-label" style="margin-top:8px">Signal</div>
       <div id="cip-nav-links"></div>
     </div>
 
@@ -2299,7 +2299,7 @@ function buildProjCards() {
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
         <div class="proj-detail"><span class="metric-label">IP address</span><span class="metric-value mono">${p.ip}</span></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
-        <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE) — updates while the ConvertIP tab is polling">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE)">—</span></div>
         <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Mainboard temp</span><span class="metric-value" id="temp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Serial no.</span><span class="metric-value mono" id="serial-${p.id}">—</span></div>
@@ -3140,7 +3140,7 @@ function openConfig() {
       cfgTest('testProjectors', 'tProj'), 'proj') +
 
     cfgSection('Matrox ConvertIP',
-      `The ${CIP_DEVICES.length} Matrox video devices shown in the ConvertIP tab (${tx} encoders in the Control Room, ${rx} decoders at the projectors). The dashboard server signs in to each one with this account to read its status and restart it.`,
+      `The ${CIP_DEVICES.length} Matrox video devices shown in the Signal tab (${tx} encoders in the Control Room, ${rx} decoders at the projectors). The dashboard server signs in to each one with this account to read its status and restart it.`,
       `<div class="cfg-field">
          <label for="cfgMatroxUser">Username</label>
          <input class="cfg-input" id="cfgMatroxUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="admin" value="${escAttr(matroxCfg.username)}" oninput="clearTest('tMatrox')">
@@ -3389,6 +3389,8 @@ const PRJ_TO_VDE = (() => {
   });
   return map;
 })();
+// Initial Video feed value — projectors without a decoder (PRJ18/19) show "No decoder"
+PROJECTORS.forEach(p => updateProjVdeBadge(p.id));
 
 // Update the stream badge on a projector card from its associated RX device state
 function updateProjVdeBadge(projId) {
@@ -3400,7 +3402,9 @@ function updateProjVdeBadge(projId) {
   el.className = 'metric-value';
   if (!vde) { el.textContent = 'No decoder'; return; }
   if (!st || st.online !== 'online' || st.stream === null) { el.textContent = '—'; return; }
-  el.textContent = st.stream ? `Receiving · ${vde.name.replace('CTL-', '')}` : `No stream · ${vde.name.replace('CTL-', '')}`;
+  // Short value so it fits the card; the decoder's name is in the tooltip
+  el.textContent = st.stream ? 'Receiving' : 'No stream';
+  el.title = `From decoder ${vde.name}`;
   if (st.stream) el.classList.add('feed-on');
 }
 // ── Card builder ─────────────────────────────────────────────────────────────
@@ -3784,7 +3788,7 @@ async function cipRebootSelected() {
 }
 
 async function cipRebootAll() {
-  if (!confirm(`Reboot all ${CIP_DEVICES.length} ConvertIP devices?\n\nAll devices will be offline for ~30 seconds.`)) return;
+  if (!confirm(`Reboot all ${CIP_DEVICES.length} Matrox devices?\n\nAll devices will be offline for ~30 seconds.`)) return;
   for (const [i, d] of CIP_DEVICES.entries()) {
     setTimeout(() => cipReboot(d.id, true), i * 200);
   }
@@ -3863,6 +3867,10 @@ function toggleCipPolling() {
     updateCipPollTime();
   }
 }
+
+// Poll the Matrox devices from page load (not only once the Signal tab is opened),
+// so each projector's Video feed is live on every tab.
+toggleCipPolling();
 
 // ── Section nav helper ────────────────────────────────────────────────────────
 function navToSection(e, id) {
