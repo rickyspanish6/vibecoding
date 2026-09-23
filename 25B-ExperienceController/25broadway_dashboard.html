@@ -96,6 +96,48 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .conn-dot.unknown { background: var(--text-3); }
 .conn-dot.checking { background: var(--text-3); animation: blink 1.2s infinite; }
 
+/* Settings / Projector report pages */
+.cfg-pages .seg-btn { font-size: 13px; padding: 7px 16px; }
+#configModal.show-report .cfg-settings-only { display: none !important; }
+
+/* Projector report */
+.rep-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rep-head-facts { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); }
+.rep-head-facts b { color: var(--text); font-weight: 600; }
+.rep-card-actions { display: flex; gap: 8px; align-items: center; }
+.rep-card-actions .btn-teal { margin-top: 0; }
+.rep-pill.eol-past { animation: blink 1s ease-in-out infinite; font-weight: 600; }
+.rep { display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+.rep-banner { display: flex; align-items: flex-start; gap: 14px; padding: 18px 20px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+.rep-banner.ok   { border-color: rgba(94,207,122,0.35); background: var(--green-dim); }
+.rep-banner.warn { border-color: rgba(245,166,35,0.35); background: var(--amber-dim); }
+.rep-banner.bad  { border-color: rgba(224,90,82,0.35);  background: var(--red-dim); }
+.rep-banner-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.rep-banner-sub   { font-size: 11.5px; color: var(--text-2); }
+.rep-list { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rep-list li { display: flex; gap: 8px; font-size: 12px; color: var(--text); line-height: 1.5; }
+.rep-list li .conn-dot { margin-top: 6px; }
+.rep-card { border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; background: rgba(255,255,255,0.015); }
+.rep-card-hd { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+.rep-card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.rep-card-sub { font-size: 11px; color: var(--text-3); }
+.rep-note { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-bottom: 10px; }
+.rep-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.rep-table th { text-align: left; font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.rep-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-2); vertical-align: middle; }
+.rep-table td.name { color: var(--text); font-weight: 500; white-space: nowrap; }
+.rep-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rep-pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rep-pill.ok { color: var(--text-2); } .rep-pill.warn { color: var(--amber); } .rep-pill.bad { color: var(--red); } .rep-pill.muted { color: var(--text-3); }
+.rep-bar { position: relative; height: 6px; width: 100%; min-width: 80px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
+.rep-bar > span { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--green); }
+.rep-bar.warn > span { background: var(--amber); } .rep-bar.bad > span { background: var(--red); }
+.rep-table td { white-space: nowrap; }
+.rep-why { font-size: 10.5px; color: var(--text-3); white-space: normal; }
+.rep-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 11px; color: var(--text-3); }
+.rep-foot .btn-teal { margin-top: 0; }
+.rep-scroll { overflow-x: auto; }
+
 /* Settings sections */
 .cfg-sec { display: grid; grid-template-columns: 240px 1fr; gap: 28px; border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 14px; background: rgba(255,255,255,0.015); }
 .cfg-sec-info { min-width: 0; }
@@ -1194,7 +1236,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.19.1</div>
+        <div class="brand-sub">Experience Control · v1.20.0</div>
       </div>
     </div>
 
@@ -1499,12 +1541,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <div class="modal-backdrop" id="configModal">
   <div class="modal">
     <div class="modal-hd">
-      <div class="modal-title">Settings</div>
+      <div class="seg cfg-pages" role="tablist" aria-label="Settings pages">
+        <button class="seg-btn cfg-page-btn active" data-page="settings" onclick="showConfigPage('settings')">Settings</button>
+        <button class="seg-btn cfg-page-btn"        data-page="report"   onclick="showConfigPage('report')">Projector report</button>
+      </div>
       <button class="modal-x" onclick="closeConfig()">✕</button>
     </div>
-    <p class="modal-desc">Changes here apply to every screen that opens the dashboard — except the dashboard server address, which is saved on this screen only.</p>
-    <div id="configForm"></div>
-    <div class="modal-actions">
+    <p class="modal-desc cfg-settings-only">Changes here apply to every screen that opens the dashboard — except the dashboard server address, which is saved on this screen only.</p>
+    <div id="configForm" class="cfg-settings-only"></div>
+    <div id="reportPage" style="display:none"></div>
+    <div class="modal-actions cfg-settings-only">
       <button class="btn-gold" onclick="saveConfig()">Save Changes</button>
       <button class="btn-ghost" onclick="closeConfig()">Cancel</button>
     </div>
@@ -1705,6 +1751,10 @@ renderAll();
 // first paint and as a fallback when the page is opened without the proxy.
 // Per-screen preferences (dashboard server address, tile/list views) stay in localStorage.
 const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder'];
+
+// Rated laser life — every projector here (UDM-4K30 and F80-4K12) is rated 20,000 h
+// by Barco (normal mode). Used by the Projector report.
+const RATED_LASER_HOURS = 20000;
 let matroxCfg = { username: '', hasPassword: false };
 
 function cacheShared(patch) {
@@ -2185,28 +2235,29 @@ const serverHost     = () => serverHostOverride || autoServerHost();
 const serverBase     = host => `http://${host || serverHost()}:${SERVER_PORT}`;
 
 // Projector definitions — from screenshot
+// installed: 'YYYY-MM' — when the projector was installed (shown in the Projector report)
 const BUILTIN_PROJECTORS = [
   // Multimedia (1–17) — `group: 'main'` = included in the bulk Power On/Off All buttons
-  { id: 1,  name: 'B25-A01-PRJ09', model: 'UDM-4K30', ip: '172.16.202.19',  group: 'main',  zone: 'West'  },
-  { id: 2,  name: 'B25-A01-PRJ10', model: 'UDM-4K30', ip: '172.16.202.20',  group: 'main',  zone: 'West'  },
-  { id: 3,  name: 'B25-A02-PRJ04', model: 'UDM-4K30', ip: '172.16.202.14',  group: 'main',  zone: 'South' },
-  { id: 4,  name: 'B25-A03-PRJ06', model: 'UDM-4K30', ip: '172.16.202.16',  group: 'main',  zone: 'South' },
-  { id: 5,  name: 'B25-A03-PRJ08', model: 'UDM-4K30', ip: '172.16.202.18',  group: 'main',  zone: 'Dome'  },
-  { id: 6,  name: 'B25-A04-PRJ14', model: 'UDM-4K30', ip: '172.16.202.24',  group: 'main',  zone: 'East'  },
-  { id: 7,  name: 'B25-A04-PRJ15', model: 'UDM-4K30', ip: '172.16.202.25',  group: 'main',  zone: 'East'  },
-  { id: 8,  name: 'B25-A05-PRJ11', model: 'UDM-4K30', ip: '172.16.202.21',  group: 'main',  zone: 'West', toast: true },
-  { id: 9,  name: 'B25-A05-PRJ12', model: 'UDM-4K30', ip: '172.16.202.22',  group: 'main',  zone: 'West'  },
-  { id: 10, name: 'B25-A05-PRJ13', model: 'UDM-4K30', ip: '172.16.202.23',  group: 'main',  zone: 'West'  },
-  { id: 11, name: 'B25-A06-PRJ03', model: 'UDM-4K30', ip: '172.16.202.13',  group: 'main',  zone: 'North' },
-  { id: 12, name: 'B25-A06-PRJ07', model: 'UDM-4K30', ip: '172.16.202.17',  group: 'main',  zone: 'Dome'  },
-  { id: 13, name: 'B25-A07-PRJ01', model: 'UDM-4K30', ip: '172.16.202.11',  group: 'main',  zone: 'North' },
-  { id: 14, name: 'B25-A08-PRJ16', model: 'UDM-4K30', ip: '172.16.202.26',  group: 'main',  zone: 'East'  },
-  { id: 15, name: 'B25-A08-PRJ17', model: 'UDM-4K30', ip: '172.16.202.27',  group: 'main',  zone: 'East'  },
-  { id: 16, name: 'B25-N01-PRJ05', model: 'UDM-4K30', ip: '172.16.202.15',  group: 'main',  zone: 'South' },
-  { id: 17, name: 'B25-S01-PRJ02', model: 'UDM-4K30', ip: '172.16.202.12',  group: 'main',  zone: 'North' },
+  { id: 1,  name: 'B25-A01-PRJ09', model: 'UDM-4K30', ip: '172.16.202.19',  group: 'main',  zone: 'West', installed: '2025-01' },
+  { id: 2,  name: 'B25-A01-PRJ10', model: 'UDM-4K30', ip: '172.16.202.20',  group: 'main',  zone: 'West', installed: '2025-01' },
+  { id: 3,  name: 'B25-A02-PRJ04', model: 'UDM-4K30', ip: '172.16.202.14',  group: 'main',  zone: 'South', installed: '2025-01' },
+  { id: 4,  name: 'B25-A03-PRJ06', model: 'UDM-4K30', ip: '172.16.202.16',  group: 'main',  zone: 'South', installed: '2025-01' },
+  { id: 5,  name: 'B25-A03-PRJ08', model: 'UDM-4K30', ip: '172.16.202.18',  group: 'main',  zone: 'Dome', installed: '2025-01' },
+  { id: 6,  name: 'B25-A04-PRJ14', model: 'UDM-4K30', ip: '172.16.202.24',  group: 'main',  zone: 'East', installed: '2025-01' },
+  { id: 7,  name: 'B25-A04-PRJ15', model: 'UDM-4K30', ip: '172.16.202.25',  group: 'main',  zone: 'East', installed: '2025-01' },
+  { id: 8,  name: 'B25-A05-PRJ11', model: 'UDM-4K30', ip: '172.16.202.21',  group: 'main',  zone: 'West', toast: true, installed: '2025-01' },
+  { id: 9,  name: 'B25-A05-PRJ12', model: 'UDM-4K30', ip: '172.16.202.22',  group: 'main',  zone: 'West', installed: '2025-01' },
+  { id: 10, name: 'B25-A05-PRJ13', model: 'UDM-4K30', ip: '172.16.202.23',  group: 'main',  zone: 'West', installed: '2025-01' },
+  { id: 11, name: 'B25-A06-PRJ03', model: 'UDM-4K30', ip: '172.16.202.13',  group: 'main',  zone: 'North', installed: '2025-01' },
+  { id: 12, name: 'B25-A06-PRJ07', model: 'UDM-4K30', ip: '172.16.202.17',  group: 'main',  zone: 'Dome', installed: '2025-01' },
+  { id: 13, name: 'B25-A07-PRJ01', model: 'UDM-4K30', ip: '172.16.202.11',  group: 'main',  zone: 'North', installed: '2025-01' },
+  { id: 14, name: 'B25-A08-PRJ16', model: 'UDM-4K30', ip: '172.16.202.26',  group: 'main',  zone: 'East', installed: '2025-01' },
+  { id: 15, name: 'B25-A08-PRJ17', model: 'UDM-4K30', ip: '172.16.202.27',  group: 'main',  zone: 'East', installed: '2025-01' },
+  { id: 16, name: 'B25-N01-PRJ05', model: 'UDM-4K30', ip: '172.16.202.15',  group: 'main',  zone: 'South', installed: '2025-01' },
+  { id: 17, name: 'B25-S01-PRJ02', model: 'UDM-4K30', ip: '172.16.202.12',  group: 'main',  zone: 'North', installed: '2025-01' },
   // South Window (18–19) — optional, only installed sometimes; excluded from bulk power
-  { id: 18, name: 'B25-S01-PRJ18', model: 'F80-4K12', ip: '172.16.202.28', group: 'window', zone: 'South Window', optional: true },
-  { id: 19, name: 'B25-S01-PRJ19', model: 'F80-4K12', ip: '172.16.202.29', group: 'window', zone: 'South Window', optional: true },
+  { id: 18, name: 'B25-S01-PRJ18', model: 'F80-4K12', ip: '172.16.202.28', group: 'window', zone: 'South Window', optional: true },                       // installed: unknown
+  { id: 19, name: 'B25-S01-PRJ19', model: 'F80-4K12', ip: '172.16.202.29', group: 'window', zone: 'South Window', optional: true, installed: '2026-03' },
 ];
 
 const BUILTIN_PROJ_ZONES = ['North', 'South', 'Dome', 'West', 'East', 'South Window'];
@@ -2216,7 +2267,7 @@ const BUILTIN_PROJ_ZONES = ['North', 'South', 'Dome', 'West', 'East', 'South Win
 const PROJECTOR_CONFIG = window.SERVER_CONFIG?.projectorConfig || null;
 const PROJECTORS = (PROJECTOR_CONFIG
   ? PROJECTOR_CONFIG.projectors.map(d => ({
-      name: d.name, model: d.model, ip: d.ip, zone: d.zone,
+      name: d.name, model: d.model, ip: d.ip, zone: d.zone, installed: d.installed || null,
       group: d.bulkPower === false ? 'window' : 'main', optional: !!d.optional, toast: !!d.toast }))
   : BUILTIN_PROJECTORS.map(p => ({ ...p, name: p.name.replace(/^B25-/, '') }))
 ).map((p, i) => ({ ...p, id: i + 1 }));
@@ -3350,7 +3401,20 @@ function openConfig() {
        </div>`);
 
   renderConn();
+  showConfigPage('settings');
   document.getElementById('configModal').classList.add('open');
+}
+
+function showConfigPage(page) {
+  const modal = document.getElementById('configModal');
+  modal.classList.toggle('show-report', page === 'report');
+  document.getElementById('reportPage').style.display = page === 'report' ? '' : 'none';
+  document.querySelectorAll('.cfg-page-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.page === page);
+    b.setAttribute('aria-selected', b.dataset.page === page);
+  });
+  modal.querySelector('.modal').scrollTop = 0;
+  if (page === 'report') renderReport();
 }
 
 // ── Settings: device lists and project backup (export / import JSON) ─────────
@@ -3392,6 +3456,7 @@ function projectorExport() {
     projectors: [...PROJECTORS].sort(byPrjNumber).map(p => ({
       name: p.name, model: p.model, ip: p.ip, zone: p.zone,
       bulkPower: p.group === 'main', ...(p.optional ? { optional: true } : {}), ...(p.toast ? { toast: true } : {}),
+      installed: p.installed || null,
     })),
   };
 }
@@ -3447,7 +3512,9 @@ function validateDeviceList(kind, obj) {
     if (isProj) {
       if (!MODEL_PROPS[d.model]) errors.push(`${where}: unknown model "${d.model}" (supported: ${Object.keys(MODEL_PROPS).join(', ')})`);
       const optional = d.optional === true;
-      return { name, model: d.model, ip, zone, bulkPower: typeof d.bulkPower === 'boolean' ? d.bulkPower : !optional, optional, toast: d.toast === true };
+      const installed = d.installed === undefined || d.installed === null || d.installed === '' ? null : String(d.installed).trim();
+      if (installed !== null && !/^\d{4}-(0[1-9]|1[0-2])$/.test(installed)) errors.push(`${where}: "installed" must look like 2025-01 (year-month), or be left empty`);
+      return { name, model: d.model, ip, zone, bulkPower: typeof d.bulkPower === 'boolean' ? d.bulkPower : !optional, optional, toast: d.toast === true, installed };
     }
     if (d.type !== 'tx' && d.type !== 'rx') errors.push(`${where}: type must be "tx" (encoder) or "rx" (decoder)`);
     return { name, ip, type: d.type, zone };
@@ -3617,6 +3684,271 @@ async function importProject(text, filename) {
   if (!ok) return;
   cacheShared(patch);
   saveAndReload(patch, id);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROJECTOR REPORT (Settings → Projector report)
+// Projector fleet → laser aging → health → what needs attention. Fresh readings are
+// taken from every connected projector each time it's opened; each section can be
+// exported as a standalone PDF (print window) for sharing outside the team.
+// ═══════════════════════════════════════════════════════════════════════════════
+const fmtInt = n => Math.round(n).toLocaleString();
+const AGING_PCT = 70, EOL_PCT = 90;   // % of rated laser life
+function whenText(ts) {
+  const d = new Date(ts);
+  if (isNaN(d)) return '';
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return d.toDateString() === new Date().toDateString() ? `today at ${time}` : `${d.toLocaleDateString()} ${time}`;
+}
+const tempLevel = (v, warn, err) => v == null ? null : (err && v >= err ? 'bad' : warn && v >= warn ? 'warn' : 'ok');
+const pill = (level, text, extra = '') => `<span class="rep-pill ${level} ${extra}"><span class="conn-dot ${level === 'muted' ? 'unknown' : level === 'bad' ? 'down' : level}"></span>${text}</span>`;
+
+// Good < 70 % · Aging 70–90 % · EOL ≥ 90 % (flashes at ≥ 100 %)
+function lifeStatus(pct) {
+  if (pct == null)       return { level: 'muted', text: 'Unknown', key: 'unknown' };
+  if (pct >= 100)        return { level: 'bad',  text: 'EOL', key: 'past', flash: true };
+  if (pct >= EOL_PCT)    return { level: 'bad',  text: 'EOL', key: 'eol' };
+  if (pct >= AGING_PCT)  return { level: 'warn', text: 'Aging', key: 'aging' };
+  return { level: 'ok', text: 'Good', key: 'good' };
+}
+const fmtInstalled = ym => {
+  if (!ym) return null;
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString([], { month: 'short', year: 'numeric' });
+};
+function healthStatus({ p, connected, health }) {
+  if (!connected)                  return p.optional ? { level: 'muted', text: 'Not installed / off' } : { level: 'bad', text: 'Not reachable' };
+  if (health == null)              return { level: 'muted', text: 'Not reported' };
+  if (/^(normal|ok)$/i.test(health)) return { level: 'ok', text: 'Normal' };
+  return { level: /warning/i.test(health) ? 'warn' : 'bad', text: health };
+}
+
+// "Pump fan RPM (since today at 2:51 PM)" — what the projector says, from environment.getalarminfo
+function alarmDetail(alarms) {
+  if (!alarms || !alarms.length) return '';
+  const a = alarms[0];
+  const what = a.description || a.source || 'no details given';
+  const when = a.timestamp ? ` (since ${whenText(a.timestamp)})` : '';
+  return `${what}${when}${alarms.length > 1 ? `, +${alarms.length - 1} more` : ''}`;
+}
+
+// Fresh readings from each connected projector
+async function gatherProjectorReport() {
+  return Promise.all(PROJECTORS.map(async p => {
+    const st = projState[p.id];
+    const connected = !!(st.ws && st.ws.readyState === WebSocket.OPEN);
+    let health = null, alarms = [];
+    if (connected) {
+      const [h, lr] = await Promise.all([
+        rpcGet(p.id, 'system.health').then(v => unwrap(v, 'system.health')).catch(() => null),
+        rpcGet(p.id, laserProp(p.id)).then(v => unwrap(v, laserProp(p.id))).catch(() => null),
+      ]);
+      health = h;
+      if (lr !== null) updateLampHours(p.id, lr);
+      if (health && !/^(normal|ok)$/i.test(health)) {
+        alarms = await rpcCall(p.id, 'environment.getalarminfo').then(a => Array.isArray(a) ? a : []).catch(() => []);
+      }
+    }
+    const hours = laserHours(p.id);
+    return { p, st, connected, health, alarms, hours, pct: hours != null ? hours / RATED_LASER_HOURS * 100 : null };
+  }));
+}
+
+const byPrjSort = (a, b) => PROJ_ZONES.indexOf(a.p.zone) - PROJ_ZONES.indexOf(b.p.zone) || byPrjNumber(a.p, b.p);
+const byAge     = (a, b) => (b.pct ?? -1) - (a.pct ?? -1);
+
+// Everything both the screen and the PDFs need, computed once per report
+let lastReport = null;
+function buildReportData(rows) {
+  const known = rows.filter(r => r.hours != null);
+  const counts = { good: 0, aging: 0, eol: 0, past: 0, unknown: 0 };
+  rows.forEach(r => counts[lifeStatus(r.pct).key]++);
+  const hc = { ok: 0, warn: 0, bad: 0, muted: 0 };
+  rows.forEach(r => hc[healthStatus(r).level]++);
+  const issues = [];   // [level, text] — projector issues only
+  rows.forEach(r => {
+    const { p, st, connected, health, alarms, pct } = r, n = PROJ_SHORT[p.id];
+    if (!connected) { if (!p.optional) issues.push(['bad', `${n} is not reachable — check its power and network.`]); return; }
+    if (st.power === 'error') issues.push(['bad', `${n} reports a power error.`]);
+    if (health && /warning/i.test(health)) issues.push(['warn', `${n} reports a warning${alarms.length ? ': ' + alarmDetail(alarms) : ''}.`]);
+    if (health && /error|alert/i.test(health)) issues.push(['bad', `${n} reports an error${alarms.length ? ': ' + alarmDetail(alarms) : ''}.`]);
+    const al = tempLevel(st.amb, st.ambWarn, st.ambError), tl = tempLevel(st.temp, st.tempWarn, st.tempError);
+    if (al === 'warn' || al === 'bad') issues.push([al, `${n}: air intake is hot (${Math.round(st.amb)}°C) — check ventilation.`]);
+    if (tl === 'warn' || tl === 'bad') issues.push([tl, `${n}: mainboard is hot (${Math.round(st.temp)}°C).`]);
+    const ls = lifeStatus(pct);
+    if (ls.key === 'past')  issues.push(['bad',  `${n}: laser is past its rated life (${Math.round(pct)} %).`]);
+    else if (ls.key === 'eol')   issues.push(['bad',  `${n}: laser is at end of life (${Math.round(pct)} % of rated life).`]);
+    else if (ls.key === 'aging') issues.push(['warn', `${n}: laser is aging (${Math.round(pct)} % of rated life).`]);
+  });
+  issues.sort((a, b) => (a[0] === 'bad' ? 0 : 1) - (b[0] === 'bad' ? 0 : 1));
+  return {
+    takenAt: new Date(), rows, issues, counts, hc,
+    avg: known.length ? known.reduce((t, r) => t + r.hours, 0) / known.length : null,
+    most: [...known].sort((a, b) => b.hours - a.hours)[0] || null,
+    answering: rows.filter(r => r.connected).length,
+  };
+}
+
+async function renderReport() {
+  const page = document.getElementById('reportPage');
+  page.innerHTML = `<div class="rep"><div class="rep-banner"><div><div class="rep-banner-title">Reading the projectors…</div>
+    <div class="rep-banner-sub">Health, laser hours and temperatures from every connected projector.</div></div></div></div>`;
+  const rows = await gatherProjectorReport();
+  if (!document.getElementById('configModal').classList.contains('show-report')) return; // closed meanwhile
+  const R = lastReport = buildReportData(rows);
+
+  const head = `<div class="rep-head">
+      <div class="rep-head-facts"><span><b>${PROJECTORS.length}</b> projectors</span><span><b>${R.answering}</b> answering</span>
+        <span>Rated life <b>${fmtInt(RATED_LASER_HOURS)} h</b></span>${R.avg != null ? `<span>Average use <b>${fmtInt(R.avg)} h</b></span>` : ''}</div>
+      <button class="btn-teal" style="margin-top:0" onclick="renderReport()">Refresh</button>
+    </div>`;
+  const banner = `<div class="rep-banner ${R.issues.some(i => i[0] === 'bad') ? 'bad' : R.issues.length ? 'warn' : 'ok'}"><div style="flex:1">
+      <div class="rep-banner-title">${R.issues.length ? `${R.issues.length} projector issue${R.issues.length === 1 ? '' : 's'} need${R.issues.length === 1 ? 's' : ''} attention` : 'All projectors are healthy'}</div>
+      ${R.issues.length ? `<ul class="rep-list">${R.issues.map(([l, t]) => `<li><span class="conn-dot ${l === 'bad' ? 'down' : l}"></span><span>${t}</span></li>`).join('')}</ul>` : ''}
+    </div></div>`;
+
+  const ageRows = [...rows].sort(byAge).map(r => {
+    const ls = lifeStatus(r.pct), w = r.pct == null ? null : Math.min(r.pct, 100);
+    return `<tr>
+      <td class="name">${PROJ_SHORT[r.p.id]}</td><td>${r.p.zone}</td><td>${r.p.model}</td>
+      <td>${fmtInstalled(r.p.installed) || '<span class="rep-pill muted">Unknown</span>'}</td>
+      <td class="num">${r.hours == null ? '—' : fmtInt(r.hours) + ' h'}</td>
+      <td style="width:26%">${w == null ? '—' : `<div style="display:flex;align-items:center;gap:8px"><div class="rep-bar ${ls.level}"><span style="width:${w}%"></span></div><span class="num">${Math.round(r.pct)} %</span></div>`}</td>
+      <td>${pill(ls.level, ls.text, ls.flash ? 'eol-past' : '')}</td>
+    </tr>`; }).join('');
+  const ageCard = `<div class="rep-card">
+    <div class="rep-card-hd"><span class="rep-card-title">Aging</span>
+      <span class="rep-card-actions"><span class="rep-card-sub">${R.counts.good} good · ${R.counts.aging} aging · ${R.counts.eol + R.counts.past} EOL</span>
+        <button class="btn-teal" onclick="exportReportPdf('aging')">Export PDF</button></span></div>
+    <p class="rep-note">Rated life ${fmtInt(RATED_LASER_HOURS)} h · <b>Aging</b> from ${AGING_PCT} % · <b>EOL</b> from ${EOL_PCT} %.</p>
+    <div class="rep-scroll"><table class="rep-table"><thead><tr><th>Projector</th><th>Zone</th><th>Model</th><th>Installed</th><th class="num">Laser hours</th><th>Rated life used</th><th>Status</th></tr></thead>
+      <tbody>${ageRows}</tbody></table></div></div>`;
+
+  const healthRows = [...rows].sort(byPrjSort).map(r => {
+    const { p, st, alarms } = r, hs = healthStatus(r);
+    const t = (v, w, e) => v == null ? '—' : pill(tempLevel(v, w, e), `${Math.round(v)}°C`);
+    return `<tr>
+      <td class="name">${PROJ_SHORT[p.id]}</td><td>${p.zone}</td>
+      <td>${pill(hs.level, hs.text)}${alarms.length ? `<div class="rep-why">${alarmDetail(alarms)}</div>` : ''}</td>
+      <td>${t(st.amb, st.ambWarn, st.ambError)}</td><td>${t(st.temp, st.tempWarn, st.tempError)}</td>
+      <td class="num">${st.illum == null ? '—' : Math.round(st.illum) + ' %'}</td>
+      <td>${(POWER_BADGE[st.power] || POWER_BADGE.unknown).text}${st.power === 'on' && st.shutter ? ' · shutter ' + String(st.shutter).toLowerCase() : ''}</td>
+    </tr>`; }).join('');
+  const healthCard = `<div class="rep-card">
+    <div class="rep-card-hd"><span class="rep-card-title">Health</span>
+      <span class="rep-card-actions"><span class="rep-card-sub">${R.hc.ok} normal · ${R.hc.warn} warning · ${R.hc.bad} error / unreachable</span>
+        <button class="btn-teal" onclick="exportReportPdf('health')">Export PDF</button></span></div>
+    <p class="rep-note">Health is each projector's own self-check; temperatures are compared with its own limits. The F80-4K12 units don't report health.</p>
+    <div class="rep-scroll"><table class="rep-table"><thead><tr><th>Projector</th><th>Zone</th><th>Health</th><th>Air intake</th><th>Mainboard</th><th class="num">Illumination</th><th>Power</th></tr></thead>
+      <tbody>${healthRows}</tbody></table></div></div>`;
+
+  page.innerHTML = `<div class="rep">${head}${banner}${ageCard}${healthCard}
+    <div class="rep-foot"><span>Readings taken ${R.takenAt.toLocaleString()}</span></div></div>`;
+}
+
+// ── PDF export: a standalone, print-ready report in a new window ─────────────
+// The browser's print dialog saves it as PDF (on iPad: Share → Print → pinch to share as PDF).
+function exportReportPdf(section) {
+  const R = lastReport;
+  if (!R) return;
+  const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const title = section === 'aging' ? 'Laser Aging' : 'Projector Health';
+  const date  = R.takenAt.toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
+  const time  = R.takenAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const dot = lvl => `<span class="dot ${lvl}"></span>`;
+  const logo = `${location.origin}/images/icons/report-logo.jpg`;
+
+  let summary, table, notes;
+  if (section === 'aging') {
+    summary = [
+      ['Projectors', R.rows.length],
+      ['Rated laser life', `${fmtInt(RATED_LASER_HOURS)} h`],
+      ['Average use', R.avg != null ? `${fmtInt(R.avg)} h` : '—'],
+      ['Highest use', R.most ? `${esc(PROJ_SHORT[R.most.p.id])} · ${fmtInt(R.most.hours)} h` : '—'],
+      ['Good', R.counts.good], ['Aging', R.counts.aging], ['EOL', R.counts.eol + R.counts.past],
+    ];
+    table = `<table><thead><tr><th>Projector</th><th>Zone</th><th>Model</th><th>Installed</th><th class="r">Laser hours</th><th>Rated life used</th><th>Status</th></tr></thead><tbody>
+      ${[...R.rows].sort(byAge).map(r => { const ls = lifeStatus(r.pct), w = r.pct == null ? 0 : Math.min(r.pct, 100);
+        return `<tr><td class="b">${esc(PROJ_SHORT[r.p.id])}</td><td>${esc(r.p.zone)}</td><td>${esc(r.p.model)}</td><td>${fmtInstalled(r.p.installed) || 'Unknown'}</td>
+          <td class="r">${r.hours == null ? '—' : fmtInt(r.hours) + ' h'}</td>
+          <td>${r.pct == null ? '—' : `<span class="bar ${ls.level}"><span style="width:${w}%"></span></span> ${Math.round(r.pct)} %`}</td>
+          <td class="st ${ls.level}">${dot(ls.level)}${ls.key === 'past' ? 'EOL — past rated life' : ls.text}</td></tr>`; }).join('')}
+      </tbody></table>`;
+    notes = `Status is based on laser hours against the rated life of ${fmtInt(RATED_LASER_HOURS)} h: <b>Good</b> below ${AGING_PCT} %, <b>Aging</b> from ${AGING_PCT} %, <b>EOL</b> (end of life) from ${EOL_PCT} %. Laser hours are read directly from each projector.`;
+  } else {
+    summary = [
+      ['Projectors', R.rows.length], ['Answering', `${R.answering} of ${R.rows.length}`],
+      ['Normal', R.hc.ok], ['Warning', R.hc.warn], ['Error / unreachable', R.hc.bad], ['Not reported', R.hc.muted],
+    ];
+    table = `<table><thead><tr><th>Projector</th><th>Zone</th><th>Health</th><th>Air intake</th><th>Mainboard</th><th class="r">Illumination</th><th>Power</th></tr></thead><tbody>
+      ${[...R.rows].sort(byPrjSort).map(r => { const { p, st, alarms } = r, hs = healthStatus(r);
+        const t = (v, w, e) => v == null ? '—' : `${dot(tempLevel(v, w, e))}${Math.round(v)}°C`;
+        return `<tr><td class="b">${esc(PROJ_SHORT[p.id])}</td><td>${esc(p.zone)}</td>
+          <td class="st ${hs.level}">${dot(hs.level)}${esc(hs.text)}${alarms.length ? `<div class="why">${esc(alarmDetail(alarms))}</div>` : ''}</td>
+          <td>${t(st.amb, st.ambWarn, st.ambError)}</td><td>${t(st.temp, st.tempWarn, st.tempError)}</td>
+          <td class="r">${st.illum == null ? '—' : Math.round(st.illum) + ' %'}</td>
+          <td>${esc((POWER_BADGE[st.power] || POWER_BADGE.unknown).text)}${st.power === 'on' && st.shutter ? ', shutter ' + esc(String(st.shutter).toLowerCase()) : ''}</td></tr>`; }).join('')}
+      </tbody></table>`;
+    notes = `Health is each projector's own self-check (Barco system health), with the reason it reports. Temperatures are compared with the projector's own warning and error limits. The F80-4K12 units do not report health.`;
+  }
+  const issues = R.issues.filter(([, t]) => section === 'aging' ? /laser/.test(t) : !/laser/.test(t));
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>Projector Report — ${title} — ${R.takenAt.toISOString().slice(0, 10)}</title>
+<style>
+  @page { size: letter; margin: 16mm 14mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #1c1c22; font-size: 10.5pt; margin: 0; }
+  .wrap { max-width: 190mm; margin: 0 auto; padding: 8mm 0; }
+  header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1c1c22; padding-bottom: 10pt; margin-bottom: 14pt; }
+  header img { height: 84pt; }
+  .t { text-align: right; }
+  .t h1 { margin: 0; font-size: 20pt; letter-spacing: -0.01em; }
+  .t h2 { margin: 2pt 0 0; font-size: 12pt; font-weight: 500; color: #555; }
+  .t .meta { margin-top: 6pt; font-size: 9pt; color: #666; }
+  .summary { display: grid; grid-template-columns: repeat(${summary.length > 6 ? 4 : 3}, 1fr); gap: 6pt; margin-bottom: 12pt; }
+  .kv { border: 1px solid #e2e2e6; border-radius: 6pt; padding: 7pt 9pt; }
+  .kv .k { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.08em; color: #777; }
+  .kv .v { font-size: 12pt; font-weight: 600; margin-top: 2pt; }
+  .issues { border: 1px solid #f0d9a8; background: #fff8ea; border-radius: 6pt; padding: 8pt 10pt; margin-bottom: 12pt; }
+  .issues.ok { border-color: #cfe9d6; background: #f1faf3; }
+  .issues h3 { margin: 0 0 4pt; font-size: 10.5pt; }
+  .issues ul { margin: 0; padding-left: 14pt; } .issues li { margin: 2pt 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: auto; }
+  thead th { text-align: left; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.07em; color: #666; border-bottom: 1.5px solid #1c1c22; padding: 5pt 4pt; white-space: nowrap; }
+  td { padding: 5pt 4pt; border-bottom: 1px solid #e6e6ea; vertical-align: middle; white-space: nowrap; }
+  tr { page-break-inside: avoid; }
+  .r { text-align: right; } .b { font-weight: 600; white-space: nowrap; }
+  .why { font-size: 8pt; color: #777; margin-top: 1pt; white-space: normal; }
+  .dot { display: inline-block; width: 6pt; height: 6pt; border-radius: 50%; margin-right: 5pt; vertical-align: 0.5pt; background: #9a9aa2; }
+  .dot.ok { background: #2e9e55; } .dot.warn { background: #d98b00; } .dot.bad { background: #d23a30; }
+  .st.warn { color: #a86a00; font-weight: 600; } .st.bad { color: #c0322a; font-weight: 700; }
+  .bar { display: inline-block; width: 56pt; height: 5pt; background: #ececf0; border-radius: 3pt; overflow: hidden; vertical-align: 1pt; margin-right: 4pt; }
+  .bar span { display: block; height: 100%; background: #2e9e55; } .bar.warn span { background: #d98b00; } .bar.bad span { background: #d23a30; }
+  .notes { margin-top: 12pt; font-size: 8.5pt; color: #555; line-height: 1.5; }
+  footer { margin-top: 14pt; padding-top: 6pt; border-top: 1px solid #e2e2e6; font-size: 8pt; color: #888; display: flex; justify-content: space-between; }
+  @media screen { body { background: #f4f4f6; } .wrap { background: #fff; padding: 14mm; margin: 10mm auto; box-shadow: 0 2px 16px rgba(0,0,0,0.12); } }
+</style></head>
+<body onload="setTimeout(function(){ window.print(); }, 300)">
+<div class="wrap">
+  <header>
+    <img src="${logo}" alt="Cipriani · Moment Factory">
+    <div class="t"><h1>Projector Report</h1><h2>${title}</h2>
+      <div class="meta">25 Broadway, New York · ${date}, ${time}</div></div>
+  </header>
+  <div class="summary">${summary.map(([k, v]) => `<div class="kv"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
+  <div class="issues ${issues.length ? '' : 'ok'}">
+    <h3>${issues.length ? `Needs attention (${issues.length})` : section === 'aging' ? 'No laser is aging or at end of life' : 'No health issues reported'}</h3>
+    ${issues.length ? `<ul>${issues.map(([, t]) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+  </div>
+  ${table}
+  <div class="notes">${notes}</div>
+  <footer><span>Projector Report · ${title}</span><span>Readings taken ${date}, ${time} · 25 Broadway Experience Control ${APP_VERSION}</span></footer>
+</div></body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) { showToast('Allow pop-ups for this dashboard to export PDFs', 'error'); return; }
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 // ── Settings: Test connection buttons ─────────────────────────────────────────

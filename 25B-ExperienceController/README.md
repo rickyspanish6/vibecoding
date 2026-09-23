@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.19.1
+# 25 Broadway — Experience Controller · v1.20.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -196,6 +196,26 @@ Each card shows:
 
 Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name, IP, Zone or Status, with the same direction button. Views: **Tile / List**.
 
+### Projector report
+
+**Settings → Projector report** is a focused report on the projector fleet, taken fresh each time it's opened (**Refresh** takes a new one).
+
+- **Header:** number of projectors, how many answer, the rated laser life (**20,000 h** — every projector here, UDM-4K30 and F80-4K12, is rated 20,000 h by Barco in normal mode) and the fleet's average use.
+- **Summary:** "All projectors are healthy", or the projector issues that need attention — not reachable, a warning or error reported by the projector (with its own reason, e.g. *Pump fan RPM*), hot temperatures, aging or end-of-life lasers.
+- **Aging:** for each projector — zone, model, install date, laser hours, % of rated life used (bar) and status:
+
+  | Status | Rated life used |
+  |---|---|
+  | **Good** | below 70 % |
+  | **Aging** (amber) | from 70 % |
+  | **EOL** (red) | from 90 % — **flashes** from 100 % |
+
+- **Health:** each projector's own self-check (**Normal** / **Warning** / **Error**, with the reason and since when), air-intake and mainboard temperatures against its limits, illumination, power and shutter. The F80-4K12 units don't report health.
+
+**Export PDF** on each section (Aging, Health) opens a standalone, print-ready report and the print dialog — choose **Save as PDF** (on iPad: Share → Print, then share the preview as PDF). Each PDF has the logo, title, date and time of the readings, a summary, what needs attention, the full table and a short explanation, so it can be sent to someone without access to the dashboard. If nothing opens, allow pop-ups for the dashboard.
+
+The report shows the current state only; readings are not recorded over time.
+
 ### Settings
 
 Settings is organized by what each part of the system does. Each section shows what it is and its live status on the left, and its fields and buttons on the right. Where there's something to verify, it has a **Test connection** button that reports **✓ Success** or **✕ Failed** with the reason.
@@ -230,27 +250,27 @@ The file formats are described under [File formats](#file-formats).
 
 ### Projectors
 
-| Zone | Projector | Model | IP | Notes |
-|---|---|---|---|---|
-| **North** | A07-PRJ01 | UDM-4K30 | 172.16.202.11 | |
-| | S01-PRJ02 | UDM-4K30 | 172.16.202.12 | |
-| | A06-PRJ03 | UDM-4K30 | 172.16.202.13 | |
-| **South** | A02-PRJ04 | UDM-4K30 | 172.16.202.14 | |
-| | N01-PRJ05 | UDM-4K30 | 172.16.202.15 | |
-| | A03-PRJ06 | UDM-4K30 | 172.16.202.16 | |
-| **Dome** | A06-PRJ07 | UDM-4K30 | 172.16.202.17 | |
-| | A03-PRJ08 | UDM-4K30 | 172.16.202.18 | |
-| **West** | A01-PRJ09 | UDM-4K30 | 172.16.202.19 | |
-| | A01-PRJ10 | UDM-4K30 | 172.16.202.20 | |
-| | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | Kept on by **Toast Only** |
-| | A05-PRJ12 | UDM-4K30 | 172.16.202.22 | |
-| | A05-PRJ13 | UDM-4K30 | 172.16.202.23 | |
-| **East** | A04-PRJ14 | UDM-4K30 | 172.16.202.24 | |
-| | A04-PRJ15 | UDM-4K30 | 172.16.202.25 | |
-| | A08-PRJ16 | UDM-4K30 | 172.16.202.26 | |
-| | A08-PRJ17 | UDM-4K30 | 172.16.202.27 | |
-| **South Window** | S01-PRJ18 | F80-4K12 | 172.16.202.28 | Optional: only installed sometimes |
-| | S01-PRJ19 | F80-4K12 | 172.16.202.29 | Optional: only installed sometimes |
+| Zone | Projector | Model | IP | Installed | Notes |
+|---|---|---|---|---|---|
+| **North** | A07-PRJ01 | UDM-4K30 | 172.16.202.11 | Jan 2025 | |
+| | S01-PRJ02 | UDM-4K30 | 172.16.202.12 | Jan 2025 | |
+| | A06-PRJ03 | UDM-4K30 | 172.16.202.13 | Jan 2025 | |
+| **South** | A02-PRJ04 | UDM-4K30 | 172.16.202.14 | Jan 2025 | |
+| | N01-PRJ05 | UDM-4K30 | 172.16.202.15 | Jan 2025 | |
+| | A03-PRJ06 | UDM-4K30 | 172.16.202.16 | Jan 2025 | |
+| **Dome** | A06-PRJ07 | UDM-4K30 | 172.16.202.17 | Jan 2025 | |
+| | A03-PRJ08 | UDM-4K30 | 172.16.202.18 | Jan 2025 | |
+| **West** | A01-PRJ09 | UDM-4K30 | 172.16.202.19 | Jan 2025 | |
+| | A01-PRJ10 | UDM-4K30 | 172.16.202.20 | Jan 2025 | |
+| | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | Jan 2025 | Kept on by **Toast Only** |
+| | A05-PRJ12 | UDM-4K30 | 172.16.202.22 | Jan 2025 | |
+| | A05-PRJ13 | UDM-4K30 | 172.16.202.23 | Jan 2025 | |
+| **East** | A04-PRJ14 | UDM-4K30 | 172.16.202.24 | Jan 2025 | |
+| | A04-PRJ15 | UDM-4K30 | 172.16.202.25 | Jan 2025 | |
+| | A08-PRJ16 | UDM-4K30 | 172.16.202.26 | Jan 2025 | |
+| | A08-PRJ17 | UDM-4K30 | 172.16.202.27 | Jan 2025 | |
+| **South Window** | S01-PRJ18 | F80-4K12 | 172.16.202.28 | Unknown | Optional: only installed sometimes |
+| | S01-PRJ19 | F80-4K12 | 172.16.202.29 | Mar 2026 | Optional: only installed sometimes |
 
 ### Matrox ConvertIP
 
@@ -382,6 +402,7 @@ All exports are JSON with a `type` field. A projector list (`25b-projectors`):
 | `bulkPower` | Included in Power On All / Power Off All (default: `true` unless optional) |
 | `optional` | Only installed sometimes: never raises errors, retries every 30 s |
 | `toast` | The one projector **Toast Only** keeps on |
+| `installed` | Install date as `"YYYY-MM"` (e.g. `"2025-01"`), shown in the Projector report; leave empty or `null` if unknown |
 
 A scene list (`25b-scenes`) has `scenes: [{ "key": "artnyc", "label": "ArtNYC", "section": "New Looks 2026", "tlKey": "Timeline 03", "tlValue": 210 }, …]`. `key` must match a scene in the dashboard; `label` and `section` are only there to help you read the file. Leave `tlKey` empty and `tlValue` `null` for a scene with no timeline.
 
@@ -407,7 +428,7 @@ JSON-RPC 2.0 over TCP 9090 (Barco ref. TDE9629). The browser opens one WebSocket
 - Reconnect uses exponential backoff: 1 s → 2 s → … → 60 s.
 - The optional PRJ18/19 retry every 30 s and never raise errors.
 
-**Methods:** `property.get`, `property.set` (shutter), `property.subscribe`, `system.poweron`, `system.poweroff`.
+**Methods:** `property.get`, `property.set` (shutter), `property.subscribe`, `system.poweron`, `system.poweroff`, and — for the Projector report — `environment.getalarminfo` (read-only: severity, source, time and description of active alarms).
 
 **Properties**
 
@@ -416,6 +437,7 @@ JSON-RPC 2.0 over TCP 9090 (Barco ref. TDE9629). The browser opens one WebSocket
 | `system.state` | `on` · `ready` · `standby` · `eco` · `boot` · `conditioning` · `deconditioning` · `error`. Simple mode treats `standby` / `eco` / `ready` as **Off** |
 | `optics.shutter.position` / `.target` | `Open` / `Closed` (read / write) |
 | `system.serialnumber` | Read once per connection |
+| `system.health` | `Normal` / `Warning` / `Error` self-check, read by the Projector report (UDM-4K30 only; the F80-4K12 doesn't have it) |
 | `illumination.sources.laser.actualpower` | Actual laser output in % (with limits). Read each refresh while on, and subscribed |
 
 Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each was verified with `introspect` on the real projectors:
@@ -472,6 +494,11 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.20.0 — 2026-09-23
+- **Feature:** **Projector report** page in Settings — fleet header (rated life 20,000 h, average use), summary of projector issues, **Aging** (install date, laser hours, % of rated life: Good < 70 %, **Aging** ≥ 70 %, **EOL** ≥ 90 % in red, flashing ≥ 100 %) and **Health** (each projector's own self-check via `system.health`, with the reason from `environment.getalarminfo`, temperatures, illumination, power). Fresh readings each time it's opened
+- **Feature:** **Export PDF** for the Aging and Health sections — standalone, print-ready report with logo, title, timestamp, summary, issues, table and explanation, for sharing outside the team
+- **Feature:** Projector install dates (`installed`, `YYYY-MM`) in the projector list and its JSON format — built-in: UDM-4K30 units Jan 2025, S01-PRJ18 unknown, S01-PRJ19 Mar 2026
 
 ### v1.19.1 — 2026-09-23
 - **Change:** Sort direction button simplified to one word and a vertical arrow — **↑ Low** / **↓ High** (**↑ A** / **↓ Z** for names); the full meaning is in its tooltip
