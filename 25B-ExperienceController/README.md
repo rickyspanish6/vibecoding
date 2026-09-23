@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.13.0
+# 25 Broadway — Experience Controller · v1.15.2
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -79,7 +79,7 @@ Open **Settings** (the status/gear button, top right):
 
 1. **Control Center**: enter the IP address of the Synology running Control Center, then press **Test connection**.
 2. **Matrox ConvertIP**: enter the Matrox username and password, then press **Test connection**.
-3. **Scene buttons**: enter the timeline key and value for each scene (see [Scene Library](#scene-library)).
+3. **Scene buttons**: press **Export JSON**, fill in the timeline key and value for each scene, then **Import JSON** (see [Import and export](#import-and-export)).
 4. Press **Save Changes**.
 
 Settings are saved on the server, so every screen shares them. The one exception is the dashboard server address, which is saved per screen.
@@ -116,7 +116,7 @@ Each button plays a scene through Control Center. The playing scene is highlight
 | Alpha Overlay | 9 |
 | Multimedia | 11 |
 
-A scene shows **Not configured** until its timeline is set in **Settings → Scene buttons**.
+A scene shows **Not configured** until it has a timeline, imported in **Settings → Scene buttons**.
 
 **Tags** help you find scenes:
 
@@ -137,7 +137,7 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 |---|---|---|
 | **⏻ Power** | `ON` (green) | Asks **"Power off …?"** and only powers off if you confirm. It asks every time, for every projector |
 | | `OFF` | Powers on, with no confirmation |
-| | `Warming up…` / `Cooling down…` / `Booting…` / `Error` / `—` | Disabled: wait, or use Advanced |
+| | `Warming…` / `Cooling…` / `Booting…` / `Error` / `—` | Disabled: wait, or use Advanced |
 | **Shutter** | `OPEN` (blue) | Closes the shutter |
 | | `CLOSED` (red) | Opens the shutter |
 | | `—` | Disabled: the shutter only works while the projector is on |
@@ -199,17 +199,31 @@ Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name,
 
 ### Settings
 
-Settings is organized by what each part of the system does. Each section explains itself and shows its live status. Where there's something to verify, it has a **Test connection** button that reports **✓ Success** or **✕ Failed** with the reason.
+Settings is organized by what each part of the system does. Each section shows what it is and its live status on the left, and its fields and buttons on the right. Where there's something to verify, it has a **Test connection** button that reports **✓ Success** or **✕ Failed** with the reason.
 
 | Section | What you set | Test connection checks | Saved |
 |---|---|---|---|
 | **Dashboard server** | Server address (leave blank = automatic) | This screen reaches the server, and the projector link opens | On this screen only |
 | **Control Center** | IP address of the Synology running Control Center | Control Center answers on port 3030 | Server |
-| **Scene buttons** | Timeline key and value per scene, plus a JSON import | (tap a scene to try it) | Server |
-| **Projectors** | Nothing: the addresses are built in | Every projector answers | — |
-| **Matrox ConvertIP** | Username and password | Signs in to a Matrox device with the account entered | Server |
+| **Scene buttons** | The scene timelines (export / import JSON) | (tap a scene to try it) | Server |
+| **Projectors** | The projector list (export / import JSON) | Every projector answers | Server |
+| **Matrox ConvertIP** | Username and password; the device list (export / import JSON) | Signs in to a Matrox device with the account entered | Server |
+| **Project backup** | Export / import everything above in one file | — | — |
 
 The Matrox password is never shown again once saved. Leave the field blank to keep it.
+
+### Import and export
+
+Scene timelines, the projector list and the Matrox device list are all edited the same way: **Export JSON**, edit the file, **Import JSON**.
+
+- **Scene buttons** shows how many scenes have a timeline. The export lists every scene (name, section, key) with its timeline key and value; blank ones are not configured. Importing replaces all timelines. The older `{ "artnyc": { "tlKey": …, "tlValue": … } }` format is also accepted.
+- **Projectors** and **Matrox ConvertIP** each show which list is in use (built-in or imported), and offer **Restore built-in list** when an imported list is active.
+- **Project backup → Export project** saves everything in Settings to one file: Control Center address, scene timelines, tags, sort order, both device lists and the Matrox username. **Import project** loads it back.
+- **The Matrox password is never exported.** After importing a project on a new machine, enter it again in Settings.
+- Every import is checked first: valid JSON, the right kind of file, and for scenes known scene keys and numeric values; for device lists valid IP addresses, known projector models, no duplicate names or addresses, and a number in every name. If anything is wrong, nothing is saved and the reason is shown.
+- Before anything is replaced, a confirmation lists what the file contains. Scene timelines apply immediately; after a device-list import the screen reloads. Other open screens pick up changes when they reload.
+
+The file formats are described under [File formats](#file-formats).
 
 ---
 
@@ -255,7 +269,7 @@ All 38 devices are SMPTE ST 2110 over 10/25 GbE SFP. Decoder *n* feeds projector
 |---|---|
 | **Control Room** | CTL-VEN01 – CTL-VEN21 |
 
-To change equipment or zones, edit the `PROJECTORS` / `PROJ_ZONES` and `CIP_DEVICES` / `CIP_ZONES` lists in `25broadway_dashboard.html`.
+These are the **built-in lists**. To change equipment, names or zones, export the list from Settings, edit the JSON and import it back (see [Import and export](#import-and-export)). **Restore built-in list** returns to the tables above.
 
 ---
 
@@ -279,7 +293,9 @@ Run these from the `25B-ExperienceController` folder:
 
 ### Settings file
 
-All shared settings live in a single file, `settings.json`: the Control Center address, scene timelines, tags, sort order and the Matrox account.
+All shared settings live in a single file, `settings.json`: the Control Center address, scene timelines, tags, sort order, imported device lists and the Matrox account.
+
+The easiest backup is **Settings → Project backup → Export project** (everything except the Matrox password). The commands above copy the raw file, password included.
 
 - **With Docker**, it's stored in the `settings` Docker volume (`/data/settings.json`), so it survives rebuilds and updates. **`docker compose down -v` deletes it.**
 - It's excluded from git and is never served over the web. Back it up before moving the dashboard to another machine.
@@ -333,7 +349,7 @@ npm start
 | GET | `/` | The dashboard |
 | GET | `/api/health` | `{ ok, version }`. CORS enabled, for the Settings server test |
 | GET | `/api/settings` | Shared settings; Matrox is returned as `{ username, hasPassword }` only |
-| PUT | `/api/settings` | Merges the top-level keys given: `ccIp`, `sceneMap`, `sceneTags`, `knownTags`, `sceneSortOrder`, `matrox` |
+| PUT | `/api/settings` | Merges the top-level keys given: `ccIp`, `sceneMap`, `sceneTags`, `knownTags`, `sceneSortOrder`, `projectorConfig`, `cipConfig` (`null` = built-in list), `matrox` |
 | POST | `/api/status[?fresh=1]` | Body `{ projectors: [ip…], matrox: [ip…] }` → `{ controlCenter, projectors: {ip: bool}, matrox: { devices: {ip: bool}, login } }`. Results are cached 10 s; `fresh=1` bypasses the cache |
 | GET | `/api/cc/status[?ip=…]` | Control Center reachability, `{ ip, port, reachable, latencyMs, error }`. `?ip=` tests an unsaved address |
 | POST | `/api/cc/trigger` | Forwards a `Task.Execute` body to Control Center. Returns `502` if unreachable |
@@ -341,7 +357,38 @@ npm start
 | GET/POST | `/api/matrox/<ip>/<path>` | Pass-through to the device's REST API, signed in with the saved account |
 | WebSocket | `/?host=<ip>&port=9090` | Bridge to a projector's TCP control port |
 
-`settings.json` and dotfiles are never served.
+`settings.json` and dotfiles are never served. When serving the dashboard page, `proxy.js` fills in `window.SERVER_CONFIG` with the saved device lists, so they're available before the page's script runs.
+
+### File formats
+
+All exports are JSON with a `type` field. A projector list (`25b-projectors`):
+
+```json
+{
+  "type": "25b-projectors", "version": 1,
+  "zones": ["North", "South", "Dome", "West", "East", "South Window"],
+  "projectors": [
+    { "name": "A07-PRJ01", "model": "UDM-4K30", "ip": "172.16.202.11", "zone": "North", "bulkPower": true },
+    { "name": "A05-PRJ11", "model": "UDM-4K30", "ip": "172.16.202.21", "zone": "West",  "bulkPower": true, "toast": true },
+    { "name": "S01-PRJ18", "model": "F80-4K12", "ip": "172.16.202.28", "zone": "South Window", "bulkPower": false, "optional": true }
+  ]
+}
+```
+
+| Projector field | Meaning |
+|---|---|
+| `name` | Shown on the card. Must contain a number; projector *n* is linked to Matrox decoder *n* |
+| `model` | `UDM-4K30` or `F80-4K12` (decides which properties are read) |
+| `ip`, `zone` | Control address and the section it appears in |
+| `bulkPower` | Included in Power On All / Power Off All (default: `true` unless optional) |
+| `optional` | Only installed sometimes: never raises errors, retries every 30 s |
+| `toast` | The one projector **Toast Only** keeps on |
+
+A scene list (`25b-scenes`) has `scenes: [{ "key": "artnyc", "label": "ArtNYC", "section": "New Looks 2026", "tlKey": "Timeline 03", "tlValue": 210 }, …]`. `key` must match a scene in the dashboard; `label` and `section` are only there to help you read the file. Leave `tlKey` empty and `tlValue` `null` for a scene with no timeline.
+
+A Matrox list (`25b-convertip`) has `devices: [{ "name": "A07-VDE01", "ip": "172.16.201.171", "type": "rx", "zone": "North" }, …]`, with `type` `"tx"` (encoder) or `"rx"` (decoder).
+
+A project file (`25b-project`) wraps `settings: { ccIp, sceneMap, sceneTags, knownTags, sceneSortOrder, matroxUsername, projectors, convertip }`, where each list also carries `"source": "built-in" | "imported"`. `zones` gives the section order; any zone used by a device but missing from `zones` is added at the end.
 
 ### Control Center
 
@@ -425,6 +472,24 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.15.2 — 2026-09-23
+- **Fix:** Simple mode Power / Shutter buttons no longer overflow — in List view they have inner padding and a fixed, equal width; in Tile view the label sits above the state (e.g. ⏻ Power / WARMING…). Long states shortened to `Warming…` / `Cooling…`
+
+### v1.15.1 — 2026-09-23
+- **Change:** Wider, less cluttered Settings — each section shows what it is (and its live status) on the left and its fields and buttons on the right; **Test connection** sits next to its field; Matrox username and password side by side. Stacks to one column on narrow screens
+
+### v1.15.0 — 2026-09-23
+- **Feature:** Scene timelines use the same **Export JSON / Import JSON** as the device lists; the export lists every scene with its section, key and timeline, and imports are validated and confirmed
+- **Change:** Removed the per-scene timeline key / value fields and the "Import many at once" box from Settings; **Scene buttons** now shows how many scenes have a timeline
+- **Fix:** **Save Changes** no longer rewrites the scene timelines, so it can't undo a newer import made from another screen
+
+### v1.14.0 — 2026-09-23
+- **Feature:** Export / import the **projector list** and the **Matrox device list** as JSON from Settings, with **Restore built-in list**; the active list (built-in or imported) is shown in each section
+- **Feature:** **Project backup** — export / import all settings in one file (Control Center address, scene timelines, tags, both device lists, Matrox username). The Matrox password is never exported
+- **Feature:** Imports are validated (JSON, file type, IP addresses, models, duplicates) and confirmed before anything is replaced
+- **Change:** Device lists are now settings (`projectorConfig`, `cipConfig` in `settings.json`); the lists built into the dashboard are the defaults, so existing installs are unchanged
+- **Change:** "Toast Only" uses a `toast` flag on A05-PRJ11 instead of a fixed internal number; decoder ↔ projector links match by the number in the name
 
 ### v1.13.0 — 2026-09-23
 - **Feature:** Advanced mode shows each projector's **Laser** status (`illumination.state`: On / Off, amber if the projector is on but the laser is off) and **Illumination** level (`illumination.sources.laser.actualpower`, actual output in %), updated live

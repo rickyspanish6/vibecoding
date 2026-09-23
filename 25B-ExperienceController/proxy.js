@@ -49,9 +49,26 @@ const SETTINGS_DEFAULTS = {
   sceneTags:      {},
   knownTags:      [],
   sceneSortOrder: 'default',
+  projectorConfig: null,   // null = use the list built into the dashboard
+  cipConfig:       null,   // null = use the list built into the dashboard
   matrox:         { username: '', password: '' },
 };
-const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder'];
+const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder', 'projectorConfig', 'cipConfig'];
+
+// Device lists: the dashboard validates imports in detail; the server only makes
+// sure it stores a well-formed list (or null to restore the built-in one).
+function validDeviceConfig(cfg, listKey) {
+  if (cfg === null) return true;
+  return !!cfg && typeof cfg === 'object' && Array.isArray(cfg[listKey]) && cfg[listKey].length > 0 &&
+    cfg[listKey].length <= 256 && cfg[listKey].every(d => d && typeof d.name === 'string' && typeof d.ip === 'string');
+}
+
+// The dashboard page gets the device lists inline, so they exist before its script runs
+function injectServerConfig(html) {
+  const cfg = JSON.stringify({ projectorConfig: settings.projectorConfig, cipConfig: settings.cipConfig })
+    .replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+  return html.replace('window.SERVER_CONFIG = null;', `window.SERVER_CONFIG = ${cfg};`);
+}
 
 let settings = loadSettings();
 
@@ -266,6 +283,12 @@ const httpServer = http.createServer(async (req, res) => {
       let patch;
       try { patch = JSON.parse(await readBody(req) || '{}'); }
       catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
+      if (patch.projectorConfig !== undefined && !validDeviceConfig(patch.projectorConfig, 'projectors')) {
+        sendJson(res, 400, { error: 'Invalid projector list' }); return;
+      }
+      if (patch.cipConfig !== undefined && !validDeviceConfig(patch.cipConfig, 'devices')) {
+        sendJson(res, 400, { error: 'Invalid Matrox device list' }); return;
+      }
       SHARED_KEYS.forEach(k => { if (patch[k] !== undefined) settings[k] = patch[k]; });
       if (patch.matrox) {
         const m = settings.matrox;
@@ -425,6 +448,7 @@ const httpServer = http.createServer(async (req, res) => {
     }
     const ext  = path.extname(filePath).toLowerCase();
     const mime = MIME[ext] || 'application/octet-stream';
+    if (path.basename(filePath) === '25broadway_dashboard.html') data = injectServerConfig(data.toString());
     res.writeHead(200, {
       'Content-Type': mime,
       'Cache-Control': 'no-cache',
