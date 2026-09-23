@@ -1167,7 +1167,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.8.0</div>
+        <div class="brand-sub">Experience Control · v1.9.0</div>
       </div>
     </div>
 
@@ -1224,19 +1224,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div id="proj-nav-links"></div>
     </div>
 
-    <!-- ConvertIP nav    </div>
-
     <!-- ConvertIP nav (hidden by default) -->
     <div id="matrox-nav" style="display:none">
       <div class="nav-group-label" style="margin-top:8px">ConvertIP</div>
-      <a class="nav-item active" href="#" onclick="navToSection(event,'cip-senders')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.69 3.4 2 2 0 0 1 3.66 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><path d="M23 7l-7 7"/><path d="M16 7h7v7"/></svg>
-        Senders (21)
-      </a>
-      <a class="nav-item" href="#" onclick="navToSection(event,'cip-receivers')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.69 3.4 2 2 0 0 1 3.66 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><path d="M23 14l-7-7"/><path d="M16 14h7V7"/></svg>
-        Receivers (17)
-      </a>
+      <div id="cip-nav-links"></div>
     </div>
 
     <div class="sidebar-spacer"></div>
@@ -1370,23 +1361,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </select>
     </div>
 
-    <div class="cip-section" id="cip-senders">
-      <div class="section-hd">
-        <div class="section-title">Senders</div>
-        <div class="section-rule"></div>
-        <div class="section-ct">21 devices</div>
-      </div>
-      <div class="cip-grid" id="cip-grid-tx"></div>
-    </div>
-
-    <div class="cip-section" id="cip-receivers">
-      <div class="section-hd">
-        <div class="section-title">Receivers</div>
-        <div class="section-rule"></div>
-        <div class="section-ct">17 devices</div>
-      </div>
-      <div class="cip-grid" id="cip-grid-rx"></div>
-    </div>
+    <!-- ConvertIP sections — one per zone, built by buildCipCards() -->
+    <div id="cip-sections"></div>
 
   </main>
 
@@ -2323,7 +2299,7 @@ function buildProjCards() {
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
         <div class="proj-detail"><span class="metric-label">IP address</span><span class="metric-value mono">${p.ip}</span></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
-        <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox receiver — updates while the ConvertIP tab is polling">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE) — updates while the ConvertIP tab is polling">—</span></div>
         <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Mainboard temp</span><span class="metric-value" id="temp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Serial no.</span><span class="metric-value mono" id="serial-${p.id}">—</span></div>
@@ -2465,9 +2441,7 @@ function setProjView(mode) {
 
 function setCipView(mode) {
   localStorage.setItem('cipView', mode);
-  ['cip-grid-tx', 'cip-grid-rx'].forEach(id => {
-    document.getElementById(id)?.classList.toggle('list-view', mode === 'list');
-  });
+  document.querySelectorAll('#cip-sections .cip-grid').forEach(g => g.classList.toggle('list-view', mode === 'list'));
   document.querySelectorAll('.cip-view-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === mode));
 }
@@ -3166,7 +3140,7 @@ function openConfig() {
       cfgTest('testProjectors', 'tProj'), 'proj') +
 
     cfgSection('Matrox ConvertIP',
-      `The ${CIP_DEVICES.length} Matrox video devices shown in the ConvertIP tab (${tx} senders, ${rx} receivers). The dashboard server signs in to each one with this account to read its status and restart it.`,
+      `The ${CIP_DEVICES.length} Matrox video devices shown in the ConvertIP tab (${tx} encoders in the Control Room, ${rx} decoders at the projectors). The dashboard server signs in to each one with this account to read its status and restart it.`,
       `<div class="cfg-field">
          <label for="cfgMatroxUser">Username</label>
          <input class="cfg-input" id="cfgMatroxUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="admin" value="${escAttr(matroxCfg.username)}" oninput="clearTest('tMatrox')">
@@ -3347,40 +3321,40 @@ document.getElementById('configModal').addEventListener('click', e => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CONVERTIP — Matrox ConvertIP senders & receivers
+// CONVERTIP — Matrox ConvertIP encoders (VEN) & decoders (VDE)
 // REST API over HTTPS/443 with cookie auth, proxied through /api/matrox
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CIP_DEVICES = [
-  // ── Senders (TX) — located in server room ────────────────────────────────
-  { id:'ven01', name:'CTL-VEN01', ip:'172.16.201.141', type:'tx', zone:'Server Room' },
-  { id:'ven02', name:'CTL-VEN02', ip:'172.16.201.142', type:'tx', zone:'Server Room' },
-  { id:'ven03', name:'CTL-VEN03', ip:'172.16.201.143', type:'tx', zone:'Server Room' },
-  { id:'ven04', name:'CTL-VEN04', ip:'172.16.201.144', type:'tx', zone:'Server Room' },
-  { id:'ven05', name:'CTL-VEN05', ip:'172.16.201.145', type:'tx', zone:'Server Room' },
-  { id:'ven06', name:'CTL-VEN06', ip:'172.16.201.146', type:'tx', zone:'Server Room' },
-  { id:'ven07', name:'CTL-VEN07', ip:'172.16.201.147', type:'tx', zone:'Server Room' },
-  { id:'ven08', name:'CTL-VEN08', ip:'172.16.201.148', type:'tx', zone:'Server Room' },
-  { id:'ven09', name:'CTL-VEN09', ip:'172.16.201.149', type:'tx', zone:'Server Room' },
-  { id:'ven10', name:'CTL-VEN10', ip:'172.16.201.150', type:'tx', zone:'Server Room' },
-  { id:'ven11', name:'CTL-VEN11', ip:'172.16.201.151', type:'tx', zone:'Server Room' },
-  { id:'ven12', name:'CTL-VEN12', ip:'172.16.201.152', type:'tx', zone:'Server Room' },
-  { id:'ven13', name:'CTL-VEN13', ip:'172.16.201.153', type:'tx', zone:'Server Room' },
-  { id:'ven14', name:'CTL-VEN14', ip:'172.16.201.154', type:'tx', zone:'Server Room' },
-  { id:'ven15', name:'CTL-VEN15', ip:'172.16.201.155', type:'tx', zone:'Server Room' },
-  { id:'ven16', name:'CTL-VEN16', ip:'172.16.201.156', type:'tx', zone:'Server Room' },
-  { id:'ven17', name:'CTL-VEN17', ip:'172.16.201.157', type:'tx', zone:'Server Room' },
-  { id:'ven18', name:'CTL-VEN18', ip:'172.16.201.158', type:'tx', zone:'Server Room' },
-  { id:'ven19', name:'CTL-VEN19', ip:'172.16.201.159', type:'tx', zone:'Server Room' },
-  { id:'ven20', name:'CTL-VEN20', ip:'172.16.201.160', type:'tx', zone:'Server Room' },
-  { id:'ven21', name:'CTL-VEN21', ip:'172.16.201.161', type:'tx', zone:'Server Room' },
-  // ── Receivers (RX) — zones match connected projector areas ───────────────
+  // ── Encoders (VEN, TX) — Control Room ────────────────────────────────────
+  { id:'ven01', name:'CTL-VEN01', ip:'172.16.201.141', type:'tx', zone:'Control Room' },
+  { id:'ven02', name:'CTL-VEN02', ip:'172.16.201.142', type:'tx', zone:'Control Room' },
+  { id:'ven03', name:'CTL-VEN03', ip:'172.16.201.143', type:'tx', zone:'Control Room' },
+  { id:'ven04', name:'CTL-VEN04', ip:'172.16.201.144', type:'tx', zone:'Control Room' },
+  { id:'ven05', name:'CTL-VEN05', ip:'172.16.201.145', type:'tx', zone:'Control Room' },
+  { id:'ven06', name:'CTL-VEN06', ip:'172.16.201.146', type:'tx', zone:'Control Room' },
+  { id:'ven07', name:'CTL-VEN07', ip:'172.16.201.147', type:'tx', zone:'Control Room' },
+  { id:'ven08', name:'CTL-VEN08', ip:'172.16.201.148', type:'tx', zone:'Control Room' },
+  { id:'ven09', name:'CTL-VEN09', ip:'172.16.201.149', type:'tx', zone:'Control Room' },
+  { id:'ven10', name:'CTL-VEN10', ip:'172.16.201.150', type:'tx', zone:'Control Room' },
+  { id:'ven11', name:'CTL-VEN11', ip:'172.16.201.151', type:'tx', zone:'Control Room' },
+  { id:'ven12', name:'CTL-VEN12', ip:'172.16.201.152', type:'tx', zone:'Control Room' },
+  { id:'ven13', name:'CTL-VEN13', ip:'172.16.201.153', type:'tx', zone:'Control Room' },
+  { id:'ven14', name:'CTL-VEN14', ip:'172.16.201.154', type:'tx', zone:'Control Room' },
+  { id:'ven15', name:'CTL-VEN15', ip:'172.16.201.155', type:'tx', zone:'Control Room' },
+  { id:'ven16', name:'CTL-VEN16', ip:'172.16.201.156', type:'tx', zone:'Control Room' },
+  { id:'ven17', name:'CTL-VEN17', ip:'172.16.201.157', type:'tx', zone:'Control Room' },
+  { id:'ven18', name:'CTL-VEN18', ip:'172.16.201.158', type:'tx', zone:'Control Room' },
+  { id:'ven19', name:'CTL-VEN19', ip:'172.16.201.159', type:'tx', zone:'Control Room' },
+  { id:'ven20', name:'CTL-VEN20', ip:'172.16.201.160', type:'tx', zone:'Control Room' },
+  { id:'ven21', name:'CTL-VEN21', ip:'172.16.201.161', type:'tx', zone:'Control Room' },
+  // ── Decoders (VDE, RX) — same zone as the projector they feed (VDE n → PRJ n) ─
   { id:'vde01', name:'A07-VDE01', ip:'172.16.201.171', type:'rx', zone:'North' },      // A07 → PRJ01 North
   { id:'vde02', name:'S01-VDE02', ip:'172.16.201.172', type:'rx', zone:'North' },      // S01 → PRJ02 North
-  { id:'vde03', name:'A03-VDE03', ip:'172.16.201.173', type:'rx', zone:'North' },      // A03 → PRJ06/08 North
+  { id:'vde03', name:'A06-VDE03', ip:'172.16.201.173', type:'rx', zone:'North' },      // A06 → PRJ03 North
   { id:'vde04', name:'A02-VDE04', ip:'172.16.201.174', type:'rx', zone:'South' },      // A02 → PRJ04 South
   { id:'vde05', name:'N01-VDE05', ip:'172.16.201.175', type:'rx', zone:'South' },      // N01 → PRJ05 South
-  { id:'vde06', name:'A03-VDE06', ip:'172.16.201.176', type:'rx', zone:'North' },      // A03 → PRJ06/08 North
+  { id:'vde06', name:'A03-VDE06', ip:'172.16.201.176', type:'rx', zone:'South' },      // A03 → PRJ06 South
   { id:'vde07', name:'A06-VDE07', ip:'172.16.201.177', type:'rx', zone:'Dome'  },      // A06 → PRJ07 Dome
   { id:'vde08', name:'A03-VDE08', ip:'172.16.201.178', type:'rx', zone:'Dome'  },      // A03 → PRJ08 Dome
   { id:'vde09', name:'A01-VDE09', ip:'172.16.201.179', type:'rx', zone:'West'  },      // A01 → PRJ09 West
@@ -3393,6 +3367,12 @@ const CIP_DEVICES = [
   { id:'vde16', name:'A08-VDE16', ip:'172.16.201.186', type:'rx', zone:'East'  },      // A08 → PRJ16 East
   { id:'vde17', name:'A08-VDE17', ip:'172.16.201.187', type:'rx', zone:'East'  },      // A08 → PRJ17 East
 ];
+
+// ConvertIP sections, in display order: decoders by zone, then all encoders.
+// Within a section, cards are ordered by device number (VDE01, VDE02 …).
+const CIP_ZONES   = ['North', 'South', 'Dome', 'West', 'East', 'Control Room'];
+const cipDevNum   = d => parseInt(d.id.replace(/\D/g, ''), 10);
+const byCipNumber = (a, b) => cipDevNum(a) - cipDevNum(b);
 
 // Per-device state: online | offline | unknown, stream: true|false|null, ptp: true|false|null
 const cipState = {};
@@ -3418,19 +3398,31 @@ function updateProjVdeBadge(projId) {
   const vde   = vdeId && CIP_DEVICES.find(d => d.id === vdeId);
   const st    = vdeId && cipState[vdeId];
   el.className = 'metric-value';
-  if (!vde) { el.textContent = 'No receiver'; return; }
+  if (!vde) { el.textContent = 'No decoder'; return; }
   if (!st || st.online !== 'online' || st.stream === null) { el.textContent = '—'; return; }
   el.textContent = st.stream ? `Receiving · ${vde.name.replace('CTL-', '')}` : `No stream · ${vde.name.replace('CTL-', '')}`;
   if (st.stream) el.classList.add('feed-on');
 }
 // ── Card builder ─────────────────────────────────────────────────────────────
 function buildCipCards() {
-  const txGrid = document.getElementById('cip-grid-tx');
-  const rxGrid = document.getElementById('cip-grid-rx');
-  txGrid.innerHTML = '';
-  rxGrid.innerHTML = '';
+  // One section per zone (+ matching sidebar link)
+  const icon = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M6 12h.01M10 12h.01"/></svg>';
+  document.getElementById('cip-sections').innerHTML = CIP_ZONES.map(z => {
+    const n = CIP_DEVICES.filter(d => d.zone === z).length;
+    return `<div class="cip-section" id="cip-${zoneSlug(z)}">
+      <div class="section-hd">
+        <div class="section-title">${z}</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">${n} device${n === 1 ? '' : 's'}</div>
+      </div>
+      <div class="cip-grid" id="cip-grid-${zoneSlug(z)}"></div>
+    </div>`;
+  }).join('');
+  document.getElementById('cip-nav-links').innerHTML = CIP_ZONES.map((z, i) =>
+    `<a class="nav-item${i === 0 ? ' active' : ''}" href="#" onclick="navToSection(event,'cip-${zoneSlug(z)}')">${icon}${z} (${CIP_DEVICES.filter(d => d.zone === z).length})</a>`
+  ).join('');
 
-  CIP_DEVICES.forEach(d => {
+  [...CIP_DEVICES].sort(byCipNumber).forEach(d => {
     const card = document.createElement('div');
     card.className = 'cip-card';
     card.id = `cip-card-${d.id}`;
@@ -3449,7 +3441,7 @@ function buildCipCards() {
       </div>
       <div class="cip-info-block" id="cip-info-${d.id}"></div>
       <div class="cip-expand-panel" id="cip-panel-${d.id}"></div>`;
-    (d.type === 'tx' ? txGrid : rxGrid).appendChild(card);
+    document.getElementById(`cip-grid-${zoneSlug(d.zone)}`).appendChild(card);
   });
 }
 
@@ -3461,8 +3453,7 @@ cipInitFilters();
 function cipInitFilters() {
   const sel = document.getElementById('cipFilterZone');
   if (!sel) return;
-  const zones = [...new Set(CIP_DEVICES.map(d => d.zone).filter(Boolean))].sort();
-  zones.forEach(z => {
+  CIP_ZONES.forEach(z => {
     const o = document.createElement('option');
     o.value = o.textContent = z;
     sel.appendChild(o);
@@ -3483,7 +3474,7 @@ function cipApplyFilters() {
   const sortEl = document.getElementById('cipSortBy');
   if (sortEl) sortEl.classList.toggle('active', sort !== 'default');
 
-  let devices = [...CIP_DEVICES];
+  let devices = [...CIP_DEVICES].sort(byCipNumber);
   if (type)   devices = devices.filter(d => d.type === type);
   if (zone)   devices = devices.filter(d => d.zone === zone);
   if (status) devices = devices.filter(d => cipState[d.id]?.online === status);
@@ -3493,9 +3484,6 @@ function cipApplyFilters() {
   if (sort === 'ip')     devices.sort((a,b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
   if (sort === 'zone')   devices.sort((a,b) => (a.zone||'').localeCompare(b.zone||''));
   if (sort === 'status') devices.sort((a,b) => (order[cipState[a.id]?.online]??1) - (order[cipState[b.id]?.online]??1));
-
-  const txGrid = document.getElementById('cip-grid-tx');
-  const rxGrid = document.getElementById('cip-grid-rx');
 
   // Hide all cards first
   CIP_DEVICES.forEach(d => {
@@ -3508,27 +3496,18 @@ function cipApplyFilters() {
     const c = document.getElementById(`cip-card-${d.id}`);
     if (!c) return;
     c.style.display = '';
-    const grid = d.type === 'tx' ? txGrid : rxGrid;
-    if (grid) grid.appendChild(c);
+    document.getElementById(`cip-grid-${zoneSlug(d.zone)}`)?.appendChild(c);
   });
 
   // Show/hide sections based on visible cards
-  const txSection = document.getElementById('cip-senders');
-  const rxSection = document.getElementById('cip-receivers');
-  const txCount = devices.filter(d => d.type === 'tx').length;
-  const rxCount = devices.filter(d => d.type === 'rx').length;
-  if (txSection) {
-    txSection.style.display = txCount ? '' : 'none';
-    const ct = txSection.querySelector('.section-ct');
-    if (ct) ct.textContent = txCount === CIP_DEVICES.filter(d=>d.type==='tx').length
-      ? `${txCount} devices` : `${txCount} shown`;
-  }
-  if (rxSection) {
-    rxSection.style.display = rxCount ? '' : 'none';
-    const ct = rxSection.querySelector('.section-ct');
-    if (ct) ct.textContent = rxCount === CIP_DEVICES.filter(d=>d.type==='rx').length
-      ? `${rxCount} devices` : `${rxCount} shown`;
-  }
+  CIP_ZONES.forEach(z => {
+    const sec   = document.getElementById(`cip-${zoneSlug(z)}`);
+    if (!sec) return;
+    const shown = devices.filter(d => d.zone === z).length;
+    const total = CIP_DEVICES.filter(d => d.zone === z).length;
+    sec.style.display = shown ? '' : 'none';
+    sec.querySelector('.section-ct').textContent = shown === total ? `${total} device${total === 1 ? '' : 's'}` : `${shown} shown`;
+  });
 }
 
 // PTP locked states from Matrox /device/status

@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.8.0
+# 25 Broadway — Experience Controller · v1.9.0
 
 Local web dashboard for AV control at 25 Broadway, NYC.  
 Three tabs: **Scene Library** (plays scenes through **Control Center**, the show-control software), **Projectors** (monitors and controls the 19 **Barco** laser projectors), and **ConvertIP** (monitors the 38 **Matrox** ConvertIP video encoders/decoders).
@@ -335,7 +335,23 @@ Sort by IP, State, Zone, or Name. Active filters are highlighted gold. The displ
 
 ### Inventory
 
-21 TX encoders (`CTL-VEN01`–`CTL-VEN21`, `172.16.201.141`–`.161`) and 17 RX decoders (`CTL-VDE01`–`CTL-VDE17`, `172.16.201.171`–`.187`). All SMPTE ST 2110 over 10/25 GbE SFP.
+38 Matrox ConvertIP devices, SMPTE ST 2110 over 10/25 GbE SFP:
+
+- **VEN — video encoders (TX):** 21 units, `CTL-VEN01`–`CTL-VEN21`, `172.16.201.141`–`.161`, all in the Control Room
+- **VDE — video decoders (RX):** 17 units, `172.16.201.171`–`.187`, one per projector — decoder *n* feeds PRJ*n* and sits in the same zone
+
+The ConvertIP tab shows one section per zone, in this order (cards sorted by device number); the sidebar links jump to each:
+
+| Section | Devices |
+|---|---|
+| **North** | A07-VDE01 · S01-VDE02 · A06-VDE03 |
+| **South** | A02-VDE04 · N01-VDE05 · A03-VDE06 |
+| **Dome** | A06-VDE07 · A03-VDE08 |
+| **West** | A01-VDE09 · A01-VDE10 · A05-VDE11 · A05-VDE12 · A05-VDE13 |
+| **East** | A04-VDE14 · A04-VDE15 · A08-VDE16 · A08-VDE17 |
+| **Control Room** | CTL-VEN01 – CTL-VEN21 |
+
+The **TX / RX** filter still narrows to encoders or decoders. Zones and order are defined by `zone` in `CIP_DEVICES` and `CIP_ZONES` in the HTML.
 
 ### Per-card display
 
@@ -437,6 +453,13 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org) — `MAJOR.
 The version lives in `package.json` (source of truth), the dashboard header (`brand-sub`), the README title and the changelog below — bump all four together.
 
 ## Changelog
+
+### v1.9.0 — 2026-09-23
+- **Feature:** ConvertIP devices grouped into sections — North, South, Dome, West, East (decoders, sorted by number) and **Control Room** (all 21 encoders) — with a sidebar link per section; replaces Senders / Receivers
+- **Change:** Decoder 03 renamed `A03-VDE03` → **`A06-VDE03`** (same location as A06-PRJ03, which it feeds); A03-VDE06 moved from North to **South**; encoders' zone renamed Server Room → **Control Room**
+- **Change:** Wording uses encoders (VEN) / decoders (VDE) instead of senders / receivers
+- **Fix:** Removed a garbled comment left in the sidebar markup by the v1.8.0 change (no visible effect)
+- **Docs:** ConvertIP inventory by section (the previous text also named the decoders `CTL-VDE…`)
 
 ### v1.8.0 — 2026-09-23
 - **Feature:** Projectors grouped into six zone sections — North, South, Dome, West, East, South Window — each sorted by PRJ number, with a sidebar link per zone (replaces Multimedia / North Show)
