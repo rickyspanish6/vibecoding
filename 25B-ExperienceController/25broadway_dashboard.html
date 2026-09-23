@@ -1167,7 +1167,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.7.0</div>
+        <div class="brand-sub">Experience Control · v1.8.0</div>
       </div>
     </div>
 
@@ -1221,15 +1221,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
     <!-- Projector nav (hidden by default) -->
     <div id="proj-nav" style="display:none">
       <div class="nav-group-label" style="margin-top:8px">Projectors</div>
-      <a class="nav-item active" href="#" onclick="navToProj(event,'proj-main')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a7 7 0 0 1 14 0"/><rect x="2" y="12" width="20" height="6" rx="2"/><circle cx="12" cy="15" r="1"/></svg>
-        Multimedia (1–17)
-      </a>
-      <a class="nav-item" href="#" onclick="navToProj(event,'proj-north')">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/></svg>
-        North Show (18–19)
-      </a>
+      <div id="proj-nav-links"></div>
     </div>
+
+    <!-- ConvertIP nav    </div>
 
     <!-- ConvertIP nav (hidden by default) -->
     <div id="matrox-nav" style="display:none">
@@ -1437,6 +1432,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         <option value="East">East</option>
         <option value="West">West</option>
         <option value="Dome">Dome</option>
+        <option value="South Window">South Window</option>
       </select>
       <select class="filter-select" id="filterState" onchange="applyFilters()">
         <option value="">All States</option>
@@ -1468,25 +1464,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </div>
     </div>
 
-    <!-- Multimedia projectors 1–17 -->
-    <div class="proj-section" id="proj-main">
-      <div class="section-hd">
-        <div class="section-title">Multimedia</div>
-        <div class="section-rule"></div>
-        <div class="section-ct">17 projectors</div>
-      </div>
-      <div class="proj-grid" id="proj-grid-main"></div>
-    </div>
-
-    <!-- North show projectors 18–19 -->
-    <div class="proj-section" id="proj-north">
-      <div class="section-hd">
-        <div class="section-title">North Show</div>
-        <div class="section-rule"></div>
-        <div class="section-ct">2 projectors</div>
-      </div>
-      <div class="proj-grid" id="proj-grid-north"></div>
-    </div>
+    <!-- Projector sections — one per zone, built by buildProjCards() -->
+    <div id="proj-sections"></div>
 
   </main>
 
@@ -2193,11 +2172,11 @@ const serverBase     = host => `http://${host || serverHost()}:${SERVER_PORT}`;
 
 // Projector definitions — from screenshot
 const PROJECTORS = [
-  // Multimedia (1–17) — zones from reference screenshot
+  // Multimedia (1–17) — `group: 'main'` = included in the bulk Power On/Off All buttons
   { id: 1,  name: 'B25-A01-PRJ09', model: 'UDM-4K30', ip: '172.16.202.19',  group: 'main',  zone: 'West'  },
   { id: 2,  name: 'B25-A01-PRJ10', model: 'UDM-4K30', ip: '172.16.202.20',  group: 'main',  zone: 'West'  },
   { id: 3,  name: 'B25-A02-PRJ04', model: 'UDM-4K30', ip: '172.16.202.14',  group: 'main',  zone: 'South' },
-  { id: 4,  name: 'B25-A03-PRJ06', model: 'UDM-4K30', ip: '172.16.202.16',  group: 'main',  zone: 'North' },
+  { id: 4,  name: 'B25-A03-PRJ06', model: 'UDM-4K30', ip: '172.16.202.16',  group: 'main',  zone: 'South' },
   { id: 5,  name: 'B25-A03-PRJ08', model: 'UDM-4K30', ip: '172.16.202.18',  group: 'main',  zone: 'Dome'  },
   { id: 6,  name: 'B25-A04-PRJ14', model: 'UDM-4K30', ip: '172.16.202.24',  group: 'main',  zone: 'East'  },
   { id: 7,  name: 'B25-A04-PRJ15', model: 'UDM-4K30', ip: '172.16.202.25',  group: 'main',  zone: 'East'  },
@@ -2211,10 +2190,16 @@ const PROJECTORS = [
   { id: 15, name: 'B25-A08-PRJ17', model: 'UDM-4K30', ip: '172.16.202.27',  group: 'main',  zone: 'East'  },
   { id: 16, name: 'B25-N01-PRJ05', model: 'UDM-4K30', ip: '172.16.202.15',  group: 'main',  zone: 'South' },
   { id: 17, name: 'B25-S01-PRJ02', model: 'UDM-4K30', ip: '172.16.202.12',  group: 'main',  zone: 'North' },
-  // North Show (18–19) — optional, only installed sometimes
-  { id: 18, name: 'B25-S01-PRJ18', model: 'F80-4K12', ip: '172.16.202.28', group: 'north', zone: 'North Show', optional: true },
-  { id: 19, name: 'B25-S01-PRJ19', model: 'F80-4K12', ip: '172.16.202.29', group: 'north', zone: 'North Show', optional: true },
+  // South Window (18–19) — optional, only installed sometimes; excluded from bulk power
+  { id: 18, name: 'B25-S01-PRJ18', model: 'F80-4K12', ip: '172.16.202.28', group: 'window', zone: 'South Window', optional: true },
+  { id: 19, name: 'B25-S01-PRJ19', model: 'F80-4K12', ip: '172.16.202.29', group: 'window', zone: 'South Window', optional: true },
 ];
+
+// Projector sections, in display order. Within a zone, cards are ordered by PRJ number.
+const PROJ_ZONES = ['North', 'South', 'Dome', 'West', 'East', 'South Window'];
+const zoneSlug   = z => z.toLowerCase().replace(/\s+/g, '-');
+const prjNumber  = p => parseInt((p.name.match(/PRJ(\d+)/) || [])[1], 10);
+const byPrjNumber = (a, b) => prjNumber(a) - prjNumber(b);
 
 // Per-projector state
 const projState = {};
@@ -2296,12 +2281,24 @@ function ensureConnected(projId) {
 
 // Build projector cards
 function buildProjCards() {
-  const gridMain  = document.getElementById('proj-grid-main');
-  const gridNorth = document.getElementById('proj-grid-north');
-  gridMain.innerHTML = '';
-  gridNorth.innerHTML = '';
+  // One section per zone (+ matching sidebar link)
+  const icon = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8a7 7 0 0 1 14 0"/><rect x="2" y="12" width="20" height="6" rx="2"/><circle cx="12" cy="15" r="1"/></svg>';
+  document.getElementById('proj-sections').innerHTML = PROJ_ZONES.map(z => {
+    const n = PROJECTORS.filter(p => p.zone === z).length;
+    return `<div class="proj-section" id="proj-${zoneSlug(z)}">
+      <div class="section-hd">
+        <div class="section-title">${z}</div>
+        <div class="section-rule"></div>
+        <div class="section-ct">${n} projector${n === 1 ? '' : 's'}</div>
+      </div>
+      <div class="proj-grid" id="proj-grid-${zoneSlug(z)}"></div>
+    </div>`;
+  }).join('');
+  document.getElementById('proj-nav-links').innerHTML = PROJ_ZONES.map((z, i) =>
+    `<a class="nav-item${i === 0 ? ' active' : ''}" href="#" onclick="navToProj(event,'proj-${zoneSlug(z)}')">${icon}${z} (${PROJECTORS.filter(p => p.zone === z).length})</a>`
+  ).join('');
 
-  PROJECTORS.forEach(p => {
+  [...PROJECTORS].sort(byPrjNumber).forEach(p => {
     const card = document.createElement('div');
     card.className = 'proj-card';
     card.id = `proj-card-${p.id}`;
@@ -2322,7 +2319,7 @@ function buildProjCards() {
         </div>
       </div>
       <div class="proj-details">
-        <div class="proj-detail"><span class="metric-label">Model</span><span class="metric-value">Barco ${p.model}</span></div>
+        <div class="proj-detail"><span class="metric-label">Model</span><span class="metric-value">${p.model}</span></div>
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
         <div class="proj-detail"><span class="metric-label">IP address</span><span class="metric-value mono">${p.ip}</span></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
@@ -2342,7 +2339,7 @@ function buildProjCards() {
 
         <button class="proj-btn proj-btn-shutter" id="sh-btn-${p.id}" onclick="projToggleShutter(${p.id})" title="Toggle Shutter">Shutter</button>
       </div>`;
-    (p.group === 'main' ? gridMain : gridNorth).appendChild(card);
+    document.getElementById(`proj-grid-${zoneSlug(p.zone)}`).appendChild(card);
   });
 }
 
@@ -2461,9 +2458,7 @@ function setProjDetail(mode) {
 
 function setProjView(mode) {
   localStorage.setItem('projView', mode);
-  ['proj-grid-main', 'proj-grid-north'].forEach(id => {
-    document.getElementById(id)?.classList.toggle('list-view', mode === 'list');
-  });
+  document.querySelectorAll('#proj-sections .proj-grid').forEach(g => g.classList.toggle('list-view', mode === 'list'));
   document.querySelectorAll('.proj-view-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === mode));
 }
@@ -2801,9 +2796,7 @@ function applyFilters() {
 
   // Sort — reorder cards within their grid containers
   if (sortBy !== 'default') {
-    ['proj-grid-main', 'proj-grid-north'].forEach(gridId => {
-      const grid = document.getElementById(gridId);
-      if (!grid) return;
+    document.querySelectorAll('#proj-sections .proj-grid').forEach(grid => {
       const cards = [...grid.querySelectorAll('.proj-card')];
       cards.sort((a, b) => {
         const pa = PROJECTORS.find(p => `proj-card-${p.id}` === a.id);
@@ -2854,15 +2847,12 @@ function clearFilters() {
     if (card) { card.style.display = ''; }
   });
   // Re-append in original id order
-  ['proj-grid-main','proj-grid-north'].forEach(gridId => {
-    const grid = document.getElementById(gridId);
-    if (!grid) return;
-    PROJECTORS.filter(p => gridId === 'proj-grid-main' ? p.group === 'main' : p.group === 'north')
-      .sort((a,b) => a.id - b.id)
-      .forEach(p => {
-        const card = document.getElementById(`proj-card-${p.id}`);
-        if (card) grid.appendChild(card);
-      });
+  PROJ_ZONES.forEach(z => {
+    const grid = document.getElementById(`proj-grid-${zoneSlug(z)}`);
+    PROJECTORS.filter(p => p.zone === z).sort(byPrjNumber).forEach(p => {
+      const card = document.getElementById(`proj-card-${p.id}`);
+      if (card) grid.appendChild(card);
+    });
   });
   document.querySelectorAll('.proj-section').forEach(sec => sec.style.display = '');
 }
@@ -3172,7 +3162,7 @@ function openConfig() {
        </details>`) +
 
     cfgSection('Projectors',
-      `The ${PROJECTORS.length} Barco laser projectors controlled from the Projectors tab — ${main} always installed, plus ${opt} optional North Show units. Their addresses are built into the dashboard, so there is nothing to set here.`,
+      `The ${PROJECTORS.length} Barco laser projectors controlled from the Projectors tab — ${main} always installed, plus ${opt} optional South Window units. Their addresses are built into the dashboard, so there is nothing to set here.`,
       cfgTest('testProjectors', 'tProj'), 'proj') +
 
     cfgSection('Matrox ConvertIP',
@@ -3254,7 +3244,7 @@ async function testProjectors() {
     const main = PROJECTORS.filter(p => !p.optional), opt = PROJECTORS.filter(p => p.optional);
     const down = main.filter(p => !res[p.ip]);
     const optUp = opt.filter(p => res[p.ip]).length;
-    const optTxt = opt.length ? ` Optional North Show: ${optUp} of ${opt.length}.` : '';
+    const optTxt = opt.length ? ` Optional South Window: ${optUp} of ${opt.length}.` : '';
     if (!down.length) showTest('tProj', true);
     else showTest('tProj', false, `${main.length - down.length} of ${main.length} answering. Not answering: ${down.map(p => PROJ_SHORT[p.id]).join(', ')}.${optTxt}`);
   } catch {
@@ -3926,13 +3916,13 @@ function applyStatus(s) {
   if (cc.reachable) setConn('cc', 'ok', 'Connected', `Answering at ${cc.ip} (${cc.latencyMs} ms).`);
   else setConn('cc', 'down', 'Disconnected', `${cc.error || 'Not answering'} — check the Control Center address in Settings.`);
 
-  // Projectors — optional North Show units don't count against the status
+  // Projectors — optional South Window units don't count against the status
   const pr   = s.projectors || {};
   const main = PROJECTORS.filter(p => !p.optional), opt = PROJECTORS.filter(p => p.optional);
   const down = main.filter(p => !pr[p.ip]);
   const up   = main.length - down.length;
   const optUp = opt.filter(p => pr[p.ip]).length;
-  const optTxt = opt.length ? ` Optional North Show: ${optUp} of ${opt.length}.` : '';
+  const optTxt = opt.length ? ` Optional South Window: ${optUp} of ${opt.length}.` : '';
   const names  = down.slice(0, 4).map(p => PROJ_SHORT[p.id]).join(', ') + (down.length > 4 ? '…' : '');
   if (!down.length)   setConn('proj', 'ok',   'Connected',    `All ${main.length} projectors answering.${optTxt}`);
   else if (up > 0)    setConn('proj', 'warn', `${up} of ${main.length} connected`, `Not answering: ${names}.${optTxt}`, `${up}/${main.length}`);

@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.7.0
+# 25 Broadway — Experience Controller · v1.8.0
 
 Local web dashboard for AV control at 25 Broadway, NYC.  
 Three tabs: **Scene Library** (plays scenes through **Control Center**, the show-control software), **Projectors** (monitors and controls the 19 **Barco** laser projectors), and **ConvertIP** (monitors the 38 **Matrox** ConvertIP video encoders/decoders).
@@ -123,7 +123,7 @@ Individual connections (shown in Settings):
 |---|---|
 | **Dashboard server** | This screen → dashboard server |
 | **Control Center** | Dashboard server → Control Center, port 3030 |
-| **Projectors** | Dashboard server → each Barco projector, port 9090 (the 2 optional North Show units never count as a problem) |
+| **Projectors** | Dashboard server → each Barco projector, port 9090 (the 2 optional South Window units never count as a problem) |
 | **Matrox** | Dashboard server → each Matrox device + sign-in with the saved account |
 
 - Checked every 20 s, when the tab comes back into focus, and after a failed scene.
@@ -189,7 +189,7 @@ All 19 projector connections open as soon as the dashboard loads (staggered 150 
 
 Each projector WebSocket uses **exponential backoff**: 1 s → 2 s → 4 s → … → 60 s cap. Resets to 1 s on successful connection.
 
-PRJ18 and PRJ19 are marked **optional** — they are only installed sometimes. When unplugged they are silently ignored (no error toast, no offline flash) and reconnect is retried every 30 s.
+PRJ18 and PRJ19 (South Window) are marked **optional** — they are only installed sometimes. When unplugged they are silently ignored (no error toast, no offline flash) and reconnect is retried every 30 s.
 
 ---
 
@@ -248,27 +248,31 @@ Scene triggers are sent **through the dashboard server**, so the indicator and t
 
 ### Inventory
 
-| # | Name | Model | IP | Zone |
+The Projectors tab shows one section per zone, in this order (cards sorted by PRJ number). The sidebar links jump to each zone.
+
+| Zone | Projector | Model | IP | Notes |
 |---|---|---|---|---|
-| 1 | A01-PRJ09 | UDM-4K30 | 172.16.202.19 | West |
-| 2 | A01-PRJ10 | UDM-4K30 | 172.16.202.20 | West |
-| 3 | A02-PRJ04 | UDM-4K30 | 172.16.202.14 | South |
-| 4 | A03-PRJ06 | UDM-4K30 | 172.16.202.16 | North |
-| 5 | A03-PRJ08 | UDM-4K30 | 172.16.202.18 | North |
-| 6 | A04-PRJ14 | UDM-4K30 | 172.16.202.24 | East |
-| 7 | A04-PRJ15 | UDM-4K30 | 172.16.202.25 | East |
-| 8 | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | West |
-| 9 | A05-PRJ12 | UDM-4K30 | 172.16.202.22 | West |
-| 10 | A05-PRJ13 | UDM-4K30 | 172.16.202.23 | West |
-| 11 | A06-PRJ03 | UDM-4K30 | 172.16.202.13 | North |
-| 12 | A06-PRJ07 | UDM-4K30 | 172.16.202.17 | Dome |
-| 13 | A07-PRJ01 | UDM-4K30 | 172.16.202.11 | North |
-| 14 | A08-PRJ16 | UDM-4K30 | 172.16.202.26 | East |
-| 15 | A08-PRJ17 | UDM-4K30 | 172.16.202.27 | East |
-| 16 | N01-PRJ05 | UDM-4K30 | 172.16.202.15 | South |
-| 17 | S01-PRJ02 | UDM-4K30 | 172.16.202.12 | North |
-| 18 | S01-PRJ18 | F80-4K12 | 172.16.202.28 | North Show | optional |
-| 19 | S01-PRJ19 | F80-4K12 | 172.16.202.29 | North Show | optional |
+| **North** | A07-PRJ01 | UDM-4K30 | 172.16.202.11 | |
+| | S01-PRJ02 | UDM-4K30 | 172.16.202.12 | |
+| | A06-PRJ03 | UDM-4K30 | 172.16.202.13 | |
+| **South** | A02-PRJ04 | UDM-4K30 | 172.16.202.14 | |
+| | N01-PRJ05 | UDM-4K30 | 172.16.202.15 | |
+| | A03-PRJ06 | UDM-4K30 | 172.16.202.16 | |
+| **Dome** | A06-PRJ07 | UDM-4K30 | 172.16.202.17 | |
+| | A03-PRJ08 | UDM-4K30 | 172.16.202.18 | |
+| **West** | A01-PRJ09 | UDM-4K30 | 172.16.202.19 | |
+| | A01-PRJ10 | UDM-4K30 | 172.16.202.20 | |
+| | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | "Toast Only" keeps this one on |
+| | A05-PRJ12 | UDM-4K30 | 172.16.202.22 | |
+| | A05-PRJ13 | UDM-4K30 | 172.16.202.23 | |
+| **East** | A04-PRJ14 | UDM-4K30 | 172.16.202.24 | |
+| | A04-PRJ15 | UDM-4K30 | 172.16.202.25 | |
+| | A08-PRJ16 | UDM-4K30 | 172.16.202.26 | |
+| | A08-PRJ17 | UDM-4K30 | 172.16.202.27 | |
+| **South Window** | S01-PRJ18 | F80-4K12 | 172.16.202.28 | optional |
+| | S01-PRJ19 | F80-4K12 | 172.16.202.29 | optional |
+
+Zones and order are defined by `zone` in the `PROJECTORS` list and `PROJ_ZONES` in the HTML.
 
 ### Simple / Advanced
 
@@ -311,8 +315,8 @@ After a shutter press the toggle shows `Working…` until the projector confirms
 
 | Button | Action |
 |---|---|
-| Power On All | Powers on Multimedia projectors 1–17 only |
-| Power Off All | Powers off Multimedia projectors 1–17 only |
+| Power On All | Powers on PRJ01–PRJ17 only (South Window excluded) |
+| Power Off All | Powers off PRJ01–PRJ17 only (South Window excluded) |
 | Open All Shutters | Opens shutters on all projectors currently On or Ready |
 | Close All Shutters | Closes shutters on all projectors currently On or Ready |
 | Refresh All | One-shot poll of all projectors (staggered 200 ms apart) |
@@ -320,7 +324,7 @@ After a shutter press the toggle shows `Working…` until the projector confirms
 
 ### Filters & sort
 
-Filter by **Zone** (North / South / East / West / Dome) and **State** (On / Ready / Standby / Error).  
+Filter by **Zone** (North / South / Dome / West / East / South Window) and **State** (On / Ready / Standby / Error).  
 Sort by IP, State, Zone, or Name. Active filters are highlighted gold. The display options — **Simple / Advanced** and **Tile / List** — are at the right end of the same row.
 
 ---
@@ -433,6 +437,12 @@ This project follows [Semantic Versioning 2.0.0](https://semver.org) — `MAJOR.
 The version lives in `package.json` (source of truth), the dashboard header (`brand-sub`), the README title and the changelog below — bump all four together.
 
 ## Changelog
+
+### v1.8.0 — 2026-09-23
+- **Feature:** Projectors grouped into six zone sections — North, South, Dome, West, East, South Window — each sorted by PRJ number, with a sidebar link per zone (replaces Multimedia / North Show)
+- **Change:** A03-PRJ06 moved from North to **South**; PRJ18/19 renamed from North Show to **South Window**; zone filter includes South Window
+- **Change:** Advanced mode **Model** shows the model only (e.g. `UDM-4K30`), without the manufacturer
+- **Docs:** Projector inventory regrouped by zone (the previous table also listed A03-PRJ08 as North; it is Dome)
 
 ### v1.7.0 — 2026-09-23
 - **Feature:** Simple mode reduced to two state toggles per projector — **Power** (ON/OFF) and **Shutter** (OPEN/CLOSED). The label shows the current feedback state; pressing sends the opposite command
