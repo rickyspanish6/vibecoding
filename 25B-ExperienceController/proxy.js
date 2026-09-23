@@ -1,6 +1,8 @@
 // proxy.js — 25 Broadway Dashboard Server
 // ─────────────────────────────────────────
 // Serves the dashboard HTML over HTTP, bridges WebSocket ↔ Barco TCP (port 9090),
+// forwards scene triggers to Control Center (show-control software), reports
+// connection status for Control Center / projectors / Matrox,
 // proxies Matrox ConvertIP HTTPS, and stores shared settings (settings.json)
 //
 // Run with Docker (recommended):
@@ -30,6 +32,7 @@ try {
   process.exit(1);
 }
 
+const VERSION       = require('./package.json').version;
 const HTTP_PORT     = parseInt(process.env.PORT || '8080', 10);
 const DIR           = __dirname;
 // DATA_DIR lets Docker keep settings.json on a volume, outside the app folder
@@ -38,7 +41,7 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // ── Shared settings (settings.json) ──────────────────────────────────────────
 // Single source of truth for every browser that opens the dashboard.
-// Holds scene mappings, tags, CC IP and the Matrox login. The Matrox password
+// Holds scene mappings, tags, the Control Center address and the Matrox login. The Matrox password
 // is never sent back to the browser.
 const SETTINGS_DEFAULTS = {
   ccIp:           '172.16.0.20',
@@ -149,6 +152,96 @@ async function matroxGet(ip, apiPath) {
   return res;
 }
 
+// ── Reachability checks ──────────────────────────────────────────────────────
+const HOST_RE = /^[A-Za-z0-9.\-]{1,253}$/;
+
+// Open a TCP connection to ip:port and time it
+function tcpCheck(ip, port, timeoutMs = 3000) {
+  return new Promise(resolve => {
+    const t0   = Date.now();
+    const sock = net.createConnection({ host: ip, port });
+    const done = (reachable, error) => {
+      sock.destroy();
+      resolve({ ip, port, reachable, latencyMs: reachable ? Date.now() - t0 : null, error: error || null });
+    };
+    sock.setTimeout(timeoutMs, () => done(false, 'No answer (timeout)'));
+    sock.once('connect', () => done(true));
+    sock.once('error', e => done(false, friendlyNetError(e)));
+  });
+}
+
+function friendlyNetError(e) {
+  return ({
+    ECONNREFUSED: 'Device answered but the service is not running',
+    EHOSTUNREACH: 'No network route to this address',
+    ENETUNREACH:  'No network route to this address',
+    ENOTFOUND:    'Address not found',
+    ETIMEDOUT:    'No answer (timeout)',
+  })[e.code] || e.message;
+}
+
+// Short cache so several open browsers don't multiply the checks
+const checkCache = new Map(); // key → { at, promise }
+function cached(key, ttlMs, fn) {
+  const hit = checkCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.promise;
+  const promise = fn();
+  checkCache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+// ── Control Center (show-control software — scene triggers on port 3030) ─────
+const CC_PORT = 3030;
+const CC_TASK = '/sc-datastore/projectData/taskFlow';
+
+const ccCheck = ip => tcpCheck(ip, CC_PORT);
+
+// Forward a Task.Execute JSON-RPC body to Control Center
+function ccTrigger(ip, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: ip, port: CC_PORT, path: CC_TASK, method: 'POST', timeout: 5000,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    }, res => {
+      let data = '';
+      res.on('data', c => { data += c; });
+      res.on('end',  () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+// Sign-in check with the saved account, reusing the normal session logic
+async function matroxLoginStatus(ip) {
+  const { username, password } = settings.matrox;
+  if (!username || !password) return { ok: false, device: ip, error: 'Sign-in not set — enter the Matrox account in Settings' };
+  try {
+    const r = await matroxGet(ip, '/device/status');
+    if (isNotLoggedIn(r)) return { ok: false, device: ip, error: 'Sign-in rejected — check username and password' };
+    if (r.status >= 400)  return { ok: false, device: ip, error: `Device error (HTTP ${r.status})` };
+    return { ok: true, device: ip, error: null };
+  } catch (e) {
+    return { ok: false, device: ip, error: e.message };
+  }
+}
+
+// One-off sign-in with the given (possibly unsaved) account; does not keep the session
+async function matroxTestLogin(ip, username, password) {
+  if (!username || !password) return { reachable: null, signedIn: false, error: 'Enter a username and password' };
+  try {
+    const r = await matroxRequest(ip, 'POST', '/user/login', null, JSON.stringify({ username, password }));
+    const signedIn = r.status < 400 && !!r.cookie && !r.body.includes('"Not logged in"');
+    return { reachable: true, signedIn, error: signedIn ? null : `Sign-in rejected (HTTP ${r.status}) — check username and password` };
+  } catch (e) {
+    return { reachable: false, signedIn: false, error: e.message === 'timeout' ? 'No answer (timeout)' : friendlyNetError(e) };
+  }
+}
+
+// ── Projectors (Barco) — bridge sockets currently connected ─────────────────
+const liveBarco = new Map(); // ip → open TCP socket count
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript',
@@ -158,6 +251,9 @@ const MIME = {
   '.jpg':  'image/jpeg',
   '.svg':  'image/svg+xml',
   '.ico':  'image/x-icon',
+  '.webp': 'image/webp',
+  '.jpeg': 'image/jpeg',
+  '.webmanifest': 'application/manifest+json',
 };
 
 // ── HTTP file server + Matrox API proxy ──────────────────────────────────────
@@ -187,6 +283,89 @@ const httpServer = http.createServer(async (req, res) => {
       return;
     }
     res.writeHead(405); res.end(); return;
+  }
+
+  const urlPath0 = (req.url || '').split('?')[0];
+
+  // Health: lets a browser verify it can reach this dashboard server (CORS so the
+  // Settings test works even when the page was opened through another address)
+  if (urlPath0 === '/api/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-cache' });
+    res.end(JSON.stringify({ ok: true, version: VERSION }));
+    return;
+  }
+
+  // Connection status for the top bar: Control Center, projectors, Matrox.
+  // Body: { projectors: [ip…], matrox: [ip…] } — device lists live in the dashboard.
+  // ?fresh=1 bypasses the cache (used by the Settings "Test connection" buttons).
+  if (urlPath0 === '/api/status' && req.method === 'POST') {
+    let body;
+    try { body = JSON.parse(await readBody(req) || '{}'); }
+    catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
+    const fresh = /[?&]fresh=1/.test(req.url);
+    const ttl   = fresh ? 0 : 10000;
+    const ips   = list => (Array.isArray(list) ? list : []).filter(ip => HOST_RE.test(ip)).slice(0, 64);
+    const out   = {};
+
+    if (settings.ccIp && HOST_RE.test(settings.ccIp)) {
+      out.controlCenter = await cached(`cc:${settings.ccIp}`, ttl, () => ccCheck(settings.ccIp));
+    } else {
+      out.controlCenter = { ip: settings.ccIp, reachable: false, error: 'Control Center address not set' };
+    }
+
+    if (body.projectors) {
+      const results = await Promise.all(ips(body.projectors).map(ip =>
+        liveBarco.get(ip) ? { ip, reachable: true } : cached(`prj:${ip}`, ttl, () => tcpCheck(ip, 9090))));
+      out.projectors = Object.fromEntries(results.map(r => [r.ip, r.reachable]));
+    }
+
+    if (body.matrox) {
+      const list    = ips(body.matrox);
+      const results = await Promise.all(list.map(ip => cached(`mx:${ip}`, ttl, () => tcpCheck(ip, 443))));
+      const first   = results.find(r => r.reachable);
+      out.matrox = {
+        devices: Object.fromEntries(results.map(r => [r.ip, r.reachable])),
+        login:   first ? await cached(`mxlogin:${first.ip}`, fresh ? 0 : 30000, () => matroxLoginStatus(first.ip))
+                       : { ok: false, device: null, error: 'No Matrox device reachable' },
+      };
+    }
+    sendJson(res, 200, out);
+    return;
+  }
+
+  // Matrox sign-in test from Settings: { ip, username, password } — blank password = saved one
+  if (urlPath0 === '/api/matrox-test' && req.method === 'POST') {
+    let b;
+    try { b = JSON.parse(await readBody(req) || '{}'); }
+    catch { sendJson(res, 400, { error: 'Invalid JSON' }); return; }
+    if (!b.ip || !HOST_RE.test(b.ip)) { sendJson(res, 400, { error: 'Invalid device address' }); return; }
+    const username = (b.username ?? settings.matrox.username).trim();
+    const password = b.password || settings.matrox.password;
+    sendJson(res, 200, { ip: b.ip, ...(await matroxTestLogin(b.ip, username, password)) });
+    return;
+  }
+
+  // Control Center: status check (optionally for an unsaved ?ip=) and scene trigger
+  if (urlPath0 === '/api/cc/status' && req.method === 'GET') {
+    const ip = new URLSearchParams((req.url || '').split('?')[1] || '').get('ip') || settings.ccIp;
+    if (!ip || !HOST_RE.test(ip)) { sendJson(res, 400, { error: 'Invalid Control Center IP' }); return; }
+    sendJson(res, 200, await ccCheck(ip));
+    return;
+  }
+  if (urlPath0 === '/api/cc/trigger' && req.method === 'POST') {
+    const ip = settings.ccIp;
+    if (!ip) { sendJson(res, 400, { error: 'Control Center IP not set' }); return; }
+    const body = await readBody(req);
+    try {
+      const r = await ccTrigger(ip, body);
+      console.log(`[CC] trigger ${ip} → HTTP ${r.status}`);
+      res.writeHead(r.status, { 'Content-Type': 'application/json' });
+      res.end(r.body || '{}');
+    } catch (e) {
+      console.log(`[CC] trigger ${ip} → ERROR ${e.message}`);
+      sendJson(res, 502, { error: e.message, unreachable: true });
+    }
+    return;
   }
 
   // Matrox ConvertIP pass-through: GET|POST /api/matrox/172.16.201.141/device/status
@@ -274,8 +453,11 @@ wss.on('connection', (ws, req) => {
   let tcpBuf  = '';
   let ready   = false;
 
+  let counted = false;
   tcp.on('connect', () => {
     ready = true;
+    counted = true;
+    liveBarco.set(host, (liveBarco.get(host) || 0) + 1);
     console.log(`[Barco] ✓ Connected  ${host}:${port}`);
   });
 
@@ -332,6 +514,7 @@ wss.on('connection', (ws, req) => {
   });
 
   tcp.on('close', () => {
+    if (counted) { counted = false; liveBarco.set(host, Math.max(0, (liveBarco.get(host) || 1) - 1)); }
     console.log(`[Barco] TCP closed ${host}`);
     if (ws.readyState === ws.OPEN) ws.close();
   });

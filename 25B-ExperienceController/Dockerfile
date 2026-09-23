@@ -12,7 +12,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
-COPY proxy.js 25broadway_dashboard.html ./
+COPY proxy.js 25broadway_dashboard.html manifest.webmanifest ./
 COPY images ./images
 
 # settings.json lives on a volume so it survives container rebuilds/updates

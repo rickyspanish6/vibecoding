@@ -4,7 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>25B — Experience Control</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+<link rel="icon" type="image/png" sizes="32x32" href="images/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="images/icons/favicon-16.png">
+<link rel="apple-touch-icon" href="images/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="25B Control">
+<meta name="theme-color" content="#0c0c0e">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -51,12 +56,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 .topbar-brand { width: var(--sidebar-w); padding: 0 20px; display: flex; align-items: center; gap: 11px; flex-shrink: 0; border-right: 1px solid var(--border); height: 100%; }
 
-.brand-mark { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(145deg, #c9a96e 0%, #7a5a2a 100%); display: flex; align-items: center; justify-content: center; font-family: 'Playfair Display', serif; font-size: 12px; font-weight: 600; color: #0c0c0e; flex-shrink: 0; letter-spacing: 0.02em; }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; display: block; object-fit: cover; }
 
 .brand-name { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; line-height: 1.2; }
 .brand-sub  { font-size: 10px; color: var(--text-3); letter-spacing: 0.04em; margin-top: 1px; }
 
-.topbar-body { flex: 1; display: flex; align-items: center; padding: 0 24px; gap: 6px; }
+.topbar-body { flex: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 24px; gap: 12px; height: 100%; }
 
 /* Tab switcher in topbar */
 .tab-bar { display: flex; gap: 2px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 9px; padding: 3px; }
@@ -65,7 +70,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.04); }
 .tab-btn.active { background: var(--bg-card); color: var(--text); border: 1px solid var(--border-md); }
 
-.topbar-right { display: flex; align-items: center; gap: 10px; padding-right: 24px; margin-left: auto; }
+.topbar-right { display: flex; align-items: center; gap: 10px; justify-self: end; }
 
 .now-pill { display: flex; align-items: center; gap: 8px; padding: 6px 14px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 40px; font-size: 11px; color: var(--text-2); max-width: 210px; }
 
@@ -77,11 +82,36 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 .ip-wrap { display: flex; align-items: center; gap: 7px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; height: 32px; }
 .ip-tag   { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
-.ip-input { background: none; border: none; outline: none; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11px; width: 114px; }
-.ip-input::placeholder { color: var(--text-3); }
+.conn-btn  { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 11px; color: var(--text-2); white-space: nowrap; transition: border-color 0.18s, background 0.18s; }
+.conn-btn:hover { border-color: var(--border-md); background: var(--bg-hover); color: var(--text); }
+.conn-sep { width: 1px; height: 14px; background: var(--border-md); margin: 0 2px; }
+.conn-dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.conn-dot.ok      { background: var(--green); box-shadow: 0 0 6px rgba(94,207,122,0.55); }
+.conn-dot.warn    { background: var(--amber); }
+.conn-dot.down    { background: var(--red); }
+.conn-dot.unknown { background: var(--text-3); }
+.conn-dot.checking { background: var(--text-3); animation: blink 1.2s infinite; }
 
-.settings-btn { display: flex; align-items: center; gap: 6px; padding: 0 14px; height: 32px; background: var(--white-dim); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.18s; letter-spacing: 0.02em; white-space: nowrap; }
-.settings-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
+/* Settings sections */
+.cfg-sec { border: 1px solid var(--border); border-radius: 12px; padding: 16px 16px 14px; margin-bottom: 12px; background: rgba(255,255,255,0.015); }
+.cfg-sec-hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.cfg-sec-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.cfg-sec-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.cfg-sec-status.ok { color: var(--green); } .cfg-sec-status.warn { color: var(--amber); } .cfg-sec-status.down { color: var(--red); }
+.cfg-sec-desc { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-bottom: 12px; }
+.cfg-field { margin-bottom: 10px; }
+.cfg-field label { display: block; font-size: 11px; color: var(--text-2); margin-bottom: 5px; }
+.cfg-field .cfg-input { font-family: monospace; }
+.cfg-hint { font-size: 10px; color: var(--text-3); line-height: 1.55; margin-top: 5px; }
+.cfg-test { display: flex; align-items: flex-start; gap: 10px; margin-top: 4px; }
+.cfg-test .btn-teal { margin-top: 0; white-space: nowrap; }
+.cfg-test-result { font-size: 11px; line-height: 1.5; padding-top: 5px; color: var(--text-3); }
+.cfg-test-result.ok   { color: var(--green); }
+.cfg-test-result.down { color: var(--red); }
+.cfg-details { margin-top: 12px; }
+.cfg-details summary { font-size: 11px; color: var(--text-3); cursor: pointer; }
+.cfg-details[open] summary { margin-bottom: 8px; }
+
 
 /* ── SIDEBAR ── */
 .sidebar { background: var(--bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 0 0; overflow-y: auto; }
@@ -366,13 +396,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   margin-top: 2px;
 }
 
-.proj-ip {
-  font-size: 10px;
-  color: var(--text-3);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  padding-top: 1px;
-}
 
 /* State indicators */
 .proj-status-row {
@@ -479,20 +502,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .proj-btn-shutter { flex: 0; font-size: 10px; padding: 0 10px; height: 40px; color: #4a3070; background: rgba(40,20,80,0.35); border-color: rgba(60,30,100,0.4); letter-spacing: 0.04em; }
 .proj-btn-shutter:hover { color: #7c5cbf; border-color: rgba(90,50,160,0.45); background: rgba(60,30,110,0.45); }
 
-/* ── PROJECTOR METRICS ROW ── */
-.proj-metrics {
-  padding: 2px 14px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.proj-metric {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
+/* ── PROJECTOR DETAILS (Advanced mode) ── */
+.proj-details { display: none; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 2px 14px 12px; }
+#panel-proj.proj-advanced .proj-details { display: grid; }
+.proj-detail { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 
 .metric-label {
   font-size: 9px;
@@ -500,40 +513,56 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-3);
-  flex-shrink: 0;
 }
 
 .metric-value {
   font-size: 11px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.metric-value.mono     { font-family: monospace; font-size: 10.5px; }
+.metric-value.feed-on  { color: var(--teal); }
+.metric-value.link-ok  { color: var(--green); }
+.metric-value.link-down { color: var(--red); }
 
 .metric-value.temp-ok   { color: var(--green); }
 .metric-value.temp-warn { color: var(--amber); }
 .metric-value.temp-hot  { color: var(--red); }
 
-.proj-expand-btn {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: none;
-  color: var(--text-3);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-  flex-shrink: 0;
-  padding: 0;
-  font-family: 'Inter', sans-serif;
-}
-.proj-expand-btn:hover { background: var(--bg-hover); border-color: var(--border-md); color: var(--text); }
-.proj-expand-btn.open  { color: var(--gold-lt); border-color: rgba(201,169,110,0.3); background: var(--gold-dim); }
+/* Simple / Advanced: which parts of a card each mode shows */
+#panel-proj:not(.proj-advanced) .adv-only { display: none !important; }
+#panel-proj.proj-advanced .simple-only    { display: none !important; }
+
+/* Simple mode state toggles — label shows the current state, press = opposite */
+.tgl { flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--white-dim); color: var(--text-3); font-family: 'Inter', sans-serif; font-size: 11px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+.tgl:disabled { cursor: default; opacity: 0.55; }
+.tgl-name  { font-weight: 500; letter-spacing: 0.02em; opacity: 0.8; }
+.tgl-state { font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.tgl-ico   { font-size: 15px; line-height: 1; }
+.tgl.is-on     { color: var(--green); background: var(--green-dim); border-color: rgba(94,207,122,0.35); }
+.tgl.is-off    { color: var(--text-2); }
+.tgl.is-open   { color: var(--teal); background: var(--teal-dim); border-color: rgba(94,207,190,0.35); }
+.tgl.is-closed { color: var(--red); background: var(--red-dim); border-color: rgba(224,90,82,0.3); }
+.tgl.is-busy   { color: var(--amber); background: var(--amber-dim); border-color: rgba(245,166,35,0.3); }
+.tgl.is-busy .tgl-state { animation: blink 1s ease-in-out infinite; }
+.tgl.is-error  { color: var(--red); border-color: rgba(224,90,82,0.3); }
+.tgl:not(:disabled):hover { border-color: var(--border-hi); }
+
+/* Confirmation dialog */
+.confirm-modal { width: 380px; }
+.confirm-modal .modal-desc { margin-bottom: 0; }
+.btn-danger { flex: 1; padding: 10px 20px; background: var(--red); border: none; border-radius: 8px; color: #fff; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; }
+.btn-danger:hover { opacity: 0.88; }
+
+/* Simple / Advanced segmented control */
+.seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+.seg-btn { background: none; border: none; padding: 5px 12px; cursor: pointer; color: var(--text-3); font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 500; transition: color 0.15s, background 0.15s; }
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover  { color: var(--text); background: var(--bg-hover); }
+.seg-btn.active { color: var(--text); background: var(--bg-hover); }
 
 /* Projector tab toolbar */
 .proj-toolbar {
@@ -873,7 +902,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   grid-area: status;
   justify-content: flex-start;
 }
-.proj-grid.list-view .proj-metrics  { display: none !important; }
+.proj-grid.list-view .proj-details { grid-area: details; flex-wrap: wrap; gap: 8px 28px; padding: 10px 14px; border-top: 1px solid var(--border); }
+#panel-proj.proj-advanced .proj-grid.list-view .proj-details { display: flex; }
+.proj-grid.list-view .proj-detail .metric-label { white-space: nowrap; }
+#panel-proj.proj-advanced .proj-grid.list-view .proj-card { grid-template-areas: "head status controls" "details details details"; }
 .proj-grid.list-view .proj-divider  { display: none; }
 .proj-grid.list-view .proj-controls {
   grid-area: controls;
@@ -881,7 +913,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   border-left: 1px solid var(--border);
   padding: 8px 12px;
 }
-.proj-grid.list-view .proj-expand-btn { display: none; }
 .proj-grid.list-view .proj-btn { height: 34px; padding: 0 10px; font-size: 14px; }
 .proj-grid.list-view .proj-btn.power-on,
 .proj-grid.list-view .proj-btn.power-off { height: 34px; }
@@ -992,8 +1023,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .topbar-brand { width: auto; border-right: none; padding: 0 14px; }
   .brand-sub    { display: none; }
   .topbar-body  { padding: 0 8px; }
-  .topbar-right { padding-right: 12px; gap: 6px; }
-  .ip-wrap      { display: none; }   /* CC IP accessible via Settings modal */
+  .topbar-right { gap: 6px; }
+  .conn-label { display: none; }   /* compact: status dot only — tap for Settings */
   .now-pill     { max-width: 130px; }
 
   /* Main panels */
@@ -1015,7 +1046,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .topbar-brand  { padding: 0 10px; gap: 8px; }
   .brand-name    { font-size: 12px; }
   .tab-btn       { padding: 5px 9px; font-size: 11px; }
-  .settings-text { display: none; }   /* icon-only on phone */
   .now-pill      { display: none; }   /* no room */
 
   /* Main */
@@ -1076,7 +1106,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   .proj-grid.list-view .proj-status-row  { grid-area: unset; }
   .proj-grid.list-view .proj-divider     { display: block; }
   .proj-grid.list-view .proj-controls    { grid-area: unset; border-left: none; border-top: 1px solid var(--border); padding: 10px 12px; }
-  .proj-grid.list-view .proj-expand-btn  { display: flex !important; }
+  #panel-proj.proj-advanced .proj-grid.list-view .proj-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; border-top: none; padding: 2px 14px 12px; }
 
   .cip-grid.list-view { display: grid !important; }
   .cip-grid.list-view .cip-card {
@@ -1134,34 +1164,32 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   <!-- TOPBAR -->
   <header class="topbar">
     <div class="topbar-brand">
-      <div class="brand-mark">25</div>
+      <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.4</div>
+        <div class="brand-sub">Experience Control · v1.7.0</div>
       </div>
     </div>
 
     <div class="topbar-body">
+      <div></div>
       <div class="tab-bar">
         <button class="tab-btn active" id="tab-scenes" onclick="switchTab('scenes')">Scene Library</button>
         <button class="tab-btn"        id="tab-proj"   onclick="switchTab('proj')">Projectors</button>
         <button class="tab-btn"        id="tab-matrox" onclick="switchTab('matrox')">ConvertIP</button>
       </div>
-    </div>
-
-    <div class="topbar-right">
-      <div class="now-pill" id="nowPill" style="display:none">
-        <div class="now-dot" id="nowDot"></div>
-        <span class="now-label" id="nowLabel">No scene active</span>
+      <div class="topbar-right">
+        <div class="now-pill" id="nowPill" style="display:none">
+          <div class="now-dot" id="nowDot"></div>
+          <span class="now-label" id="nowLabel">No scene active</span>
+        </div>
+        <button class="conn-btn" id="connBtn" onclick="openConfig()" aria-label="Settings and connection status" title="Settings — connection details">
+          <span class="conn-dot checking" id="connDot"></span>
+          <span class="conn-label" id="connLabel">Checking…</span>
+          <span class="conn-sep"></span>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
-      <div class="ip-wrap">
-        <span class="ip-tag">CC</span>
-        <input class="ip-input" id="ccIp" type="text" placeholder="172.16.0.20" value="172.16.0.20" spellcheck="false">
-      </div>
-      <button class="settings-btn" onclick="openConfig()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.55"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span class="settings-text">Settings</span>
-      </button>
     </div>
   </header>
 
@@ -1389,11 +1417,6 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Refresh All
       </button>
-      <div style="width:1px;height:20px;background:var(--border);margin:0 4px"></div>
-      <div class="view-toggle">
-        <button class="view-toggle-btn proj-view-btn" data-view="tile" onclick="setProjView('tile')" title="Tile view">⊞</button>
-        <button class="view-toggle-btn proj-view-btn" data-view="list" onclick="setProjView('list')" title="List view">☰</button>
-      </div>
     </div>
 
     <!-- System status bar -->
@@ -1433,6 +1456,16 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </select>
       <button class="filter-clear" id="filterClear" onclick="clearFilters()">✕ Clear</button>
       <span class="filter-results" id="filterResults"></span>
+      <div style="flex:1"></div>
+      <!-- Display options: Simple / Advanced applies to every projector at once -->
+      <div class="seg" role="group" aria-label="Projector detail level">
+        <button class="seg-btn proj-detail-btn active" data-mode="simple"   aria-pressed="true"  onclick="setProjDetail('simple')">Simple</button>
+        <button class="seg-btn proj-detail-btn"        data-mode="advanced" aria-pressed="false" onclick="setProjDetail('advanced')">Advanced</button>
+      </div>
+      <div class="view-toggle">
+        <button class="view-toggle-btn proj-view-btn" data-view="tile" onclick="setProjView('tile')" title="Tile view">⊞</button>
+        <button class="view-toggle-btn proj-view-btn" data-view="list" onclick="setProjView('list')" title="List view">☰</button>
+      </div>
     </div>
 
     <!-- Multimedia projectors 1–17 -->
@@ -1466,6 +1499,18 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   <span class="toast-time" id="toastTime"></span>
 </div>
 
+<!-- CONFIRM MODAL (e.g. power off in Simple mode) -->
+<div class="modal-backdrop" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="modal confirm-modal">
+    <div class="modal-hd"><div class="modal-title" id="confirmTitle"></div></div>
+    <p class="modal-desc" id="confirmMsg"></p>
+    <div class="modal-actions">
+      <button class="btn-danger" id="confirmOk">Confirm</button>
+      <button class="btn-ghost" id="confirmCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIG MODAL -->
 <div class="modal-backdrop" id="configModal">
   <div class="modal">
@@ -1473,7 +1518,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <div class="modal-title">Settings</div>
       <button class="modal-x" onclick="closeConfig()">✕</button>
     </div>
-    <p class="modal-desc">Settings are saved on the server and shared by every browser that opens the dashboard. Proxy Host is the only per-device setting.</p>
+    <p class="modal-desc">Changes here apply to every screen that opens the dashboard — except the dashboard server address, which is saved on this screen only.</p>
     <div id="configForm"></div>
     <div class="modal-actions">
       <button class="btn-gold" onclick="saveConfig()">Save Changes</button>
@@ -1589,11 +1634,6 @@ let activeScene = null;
 let ccIp        = localStorage.getItem('ccIp') || '172.16.0.20';
 let sceneMap    = JSON.parse(localStorage.getItem('sceneMap') || '{}');
 
-document.getElementById('ccIp').value = ccIp;
-document.getElementById('ccIp').addEventListener('change', e => {
-  ccIp = e.target.value.trim();
-  persistShared({ ccIp });
-});
 
 function allScenes() {
   return [...SCENES.techLooks, ...SCENES.demos, ...SCENES.newLooks,
@@ -1675,10 +1715,10 @@ function renderAll() {
 renderAll();
 
 // ── Shared settings (server-side settings.json via proxy.js) ─────────────────
-// Scene mappings, tags, sort order and CC IP live on the server so every
+// Scene mappings, tags, sort order and the Control Center address live on the server so every
 // browser sees the same setup. localStorage is only a cache, used for a fast
 // first paint and as a fallback when the page is opened without the proxy.
-// Per-device preferences (proxy host, tile/list views) stay in localStorage.
+// Per-screen preferences (dashboard server address, tile/list views) stay in localStorage.
 const SHARED_KEYS = ['ccIp', 'sceneMap', 'sceneTags', 'knownTags', 'sceneSortOrder'];
 let matroxCfg = { username: '', hasPassword: false };
 
@@ -1712,7 +1752,6 @@ function applySharedSettings(s) {
   knownTags         = new Set(s.knownTags || []);
   matroxCfg         = s.matrox || matroxCfg;
   cacheShared(s);
-  document.getElementById('ccIp').value = ccIp;
   setSortOrder(s.sceneSortOrder || 'default', false); // re-renders scenes
 }
 
@@ -1742,8 +1781,7 @@ async function loadSharedSettings() {
 loadSharedSettings();
 
 async function fire(key, label, el) {
-  const ip = document.getElementById('ccIp').value.trim();
-  if (!ip) { showToast('Set a Control Center IP first', 'error'); return; }
+  if (!ccIp) { showToast('Set a Control Center IP in Settings', 'error'); return; }
   const cfg = sceneMap[key];
   if (!cfg || !cfg.tlKey || cfg.tlValue === undefined) { showToast(`${label} — not configured`, 'error'); return; }
   if (activeScene) { const p = document.getElementById('scene-' + activeScene); if (p) p.classList.remove('active'); }
@@ -1754,13 +1792,15 @@ async function fire(key, label, el) {
   document.getElementById('nowLabel').textContent = label;
   document.getElementById('nowDot').classList.add('live');
   try {
-    const res = await fetch(`http://${ip}:${CC_PORT}/sc-datastore/projectData/taskFlow`, {
+    const res = await fetch('/api/cc/trigger', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc:'2.0', method:'Task.Execute', id:Date.now(), params: { taskInternalName: TASK_INTERNAL_NAME, taskCatalogName: TASK_CATALOG_NAME, taskParams:[{internalName:'timelines',value:[{Key:cfg.tlKey,Value:cfg.tlValue}]}] } })
     });
-    showToast(res.ok ? label : `Server error ${res.status}`, res.ok ? 'success' : 'error');
+    if (res.status === 502) throw new Error('unreachable');
+    showToast(res.ok ? label : `Control Center error ${res.status}`, res.ok ? 'success' : 'error');
   } catch {
     showToast('Could not reach Control Center', 'error');
+    checkConnections(true);
     el.classList.remove('active'); activeScene = null;
     document.getElementById('nowDot').classList.remove('live');
     document.getElementById('nowLabel').textContent = 'No scene active';
@@ -2127,12 +2167,29 @@ function refreshCardTags(key) {
 // The proxy bridges ws://localhost:8080?host=IP to TCP IP:9090
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const BARCO_PROXY_PORT = 8080;
+// Dashboard server port — the one this page was opened on
+const SERVER_PORT = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
 const METRICS_POLL_MS  = 2 * 60 * 1000; // laser runtime + temp: every 2 min
 
-// Proxy server host — defaults to the host the page was served from so remote
-// access works automatically. Override in Settings if needed.
-let proxyHost = localStorage.getItem('proxyHost') || window.location.hostname || 'localhost';
+// Model-specific Pulse API properties (verified with the introspect call on each model).
+//   tempSensor — mainboard temperature sensor; read <sensor>.value, and its
+//                threshold.highwarning / threshold.higherror to colour the reading
+//   laser      — laser runtime counter, in `laserUnit` seconds (UDM: seconds, F80: minutes)
+const MODEL_PROPS = {
+  'UDM-4K30': { tempSensor: 'environment.temperature.mainboard.cpu', laser: 'statistics.laserruntime.value',      laserUnit: 1 },
+  'F80-4K12': { tempSensor: 'environment.temperature.mainboard',     laser: 'statistics.operating.laseron.value', laserUnit: 60 },
+};
+const modelProps = projId => MODEL_PROPS[PROJECTORS.find(p => p.id === projId).model];
+const tempSensor = projId => modelProps(projId).tempSensor;
+const laserProp  = projId => modelProps(projId).laser;
+
+// Dashboard server address — normally the address this page was opened from.
+// A per-screen override (Settings → Dashboard server) is kept in localStorage.
+let serverHostOverride = localStorage.getItem('proxyHost') || '';
+if (serverHostOverride === window.location.hostname) serverHostOverride = ''; // legacy value = automatic
+const autoServerHost = () => window.location.hostname || 'localhost';
+const serverHost     = () => serverHostOverride || autoServerHost();
+const serverBase     = host => `http://${host || serverHost()}:${SERVER_PORT}`;
 
 // Projector definitions — from screenshot
 const PROJECTORS = [
@@ -2162,7 +2219,7 @@ const PROJECTORS = [
 // Per-projector state
 const projState = {};
 PROJECTORS.forEach(p => {
-  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, serial: null, lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
+  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, tempWarn: null, tempError: null, serial: null, subscribed: new Set(), lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
 });
 
 // ── Persistent connection manager ─────────────────────────────────────────────
@@ -2173,10 +2230,11 @@ function connectProj(projId) {
   if (st.connecting || (st.ws && st.ws.readyState === WebSocket.OPEN)) return;
   st.connecting = true;
 
-  const ws = new WebSocket(`ws://${proxyHost}:${BARCO_PROXY_PORT}?host=${proj.ip}&port=9090`);
+  const ws = new WebSocket(`ws://${serverHost()}:${SERVER_PORT}?host=${proj.ip}&port=9090`);
 
   ws.addEventListener('open', () => {
     st.ws = ws;
+    setLink(projId, true);
     st.connecting = false;
     st.reconnectDelay = 1000; // reset backoff on successful connect
     console.log(`[WS] Connected ${proj.ip}`);
@@ -2193,6 +2251,8 @@ function connectProj(projId) {
   ws.addEventListener('close', () => {
     st.ws = null;
     st.connecting = false;
+    st.subscribed.clear(); // subscriptions end with the connection
+    setLink(projId, false);
     const delay = st.reconnectDelay;
     if (proj.optional) {
       st.reconnectDelay = 30000; // poll slowly when optional projector is unplugged
@@ -2206,6 +2266,13 @@ function connectProj(projId) {
   ws.addEventListener('error', () => {
     st.connecting = false;
   });
+}
+
+function setLink(projId, up) {
+  const el = document.getElementById(`link-${projId}`);
+  if (!el) return;
+  el.textContent = up ? 'Connected' : 'Not connected — retrying';
+  el.className   = 'metric-value ' + (up ? 'link-ok' : 'link-down');
 }
 
 function ensureConnected(projId) {
@@ -2243,12 +2310,8 @@ function buildProjCards() {
         <div>
           <div class="proj-name">${p.name.replace('B25-','')}</div>
         </div>
-        <div style="display:flex;align-items:flex-start;gap:8px">
-          <div class="proj-ip">${p.ip}</div>
-          <button class="proj-expand-btn" id="expand-btn-${p.id}" onclick="toggleMetrics(${p.id})" title="Lamp hours &amp; temperature">+</button>
-        </div>
       </div>
-      <div class="proj-status-row">
+      <div class="proj-status-row adv-only">
         <span id="pw-badge-${p.id}" class="status-badge badge-unknown">
           <span class="badge-dot"></span> —
         </span>
@@ -2256,29 +2319,24 @@ function buildProjCards() {
           <span id="sh-badge-${p.id}" class="status-badge badge-unknown" style="display:none">
             <span class="badge-dot"></span> Shutter —
           </span>
-          <span id="vde-badge-${p.id}" class="status-badge" style="display:none"></span>
         </div>
       </div>
-      <div class="proj-metrics" id="metrics-${p.id}" style="display:none">
-        <div class="proj-metric">
-          <span class="metric-label">Model</span>
-          <span class="metric-value" style="color:var(--text-2)">Barco ${p.model}</span>
-        </div>
-        <div class="proj-metric">
-          <span class="metric-label">Laser Hrs</span>
-          <span class="metric-value" id="lamp-${p.id}">—</span>
-        </div>
-        <div class="proj-metric">
-          <span class="metric-label">Temp</span>
-          <span class="metric-value" id="temp-${p.id}">—</span>
-        </div>
-        <div class="proj-metric">
-          <span class="metric-label">S/N</span>
-          <span class="metric-value" id="serial-${p.id}" style="font-size:10px;color:var(--text-3)">—</span>
-        </div>
+      <div class="proj-details">
+        <div class="proj-detail"><span class="metric-label">Model</span><span class="metric-value">Barco ${p.model}</span></div>
+        <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
+        <div class="proj-detail"><span class="metric-label">IP address</span><span class="metric-value mono">${p.ip}</span></div>
+        <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
+        <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox receiver — updates while the ConvertIP tab is polling">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Mainboard temp</span><span class="metric-value" id="temp-${p.id}">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Serial no.</span><span class="metric-value mono" id="serial-${p.id}">—</span></div>
       </div>
       <div class="proj-divider"></div>
-      <div class="proj-controls">
+      <div class="proj-controls simple-only">
+        <button class="tgl" id="s-pw-${p.id}" onclick="simplePowerToggle(${p.id})"></button>
+        <button class="tgl" id="s-sh-${p.id}" onclick="simpleShutterToggle(${p.id})"></button>
+      </div>
+      <div class="proj-controls adv-only">
         <button class="proj-btn power-on"  onclick="projPowerOn(${p.id})"  title="Power On">⏻</button>
         <button class="proj-btn power-off" onclick="projPowerOff(${p.id})" title="Power Off">⏻</button>
 
@@ -2290,7 +2348,117 @@ function buildProjCards() {
 
 buildProjCards();
 
+// Open every projector connection at page load so their status is live without
+// visiting the Projectors tab. Each connection reads the state once, then the
+// projector pushes changes (property.subscribe) — no polling until the tab is opened.
+PROJECTORS.forEach((p, i) => setTimeout(() => connectProj(p.id), i * 150));
+
 // ── View toggle (tile ↔ list) ─────────────────────────────────────────────────
+// ── Simple mode controls ─────────────────────────────────────────────────────
+// Two state toggles per projector. The label always shows the projector's
+// current feedback state; pressing sends the opposite command using the same
+// functions as Advanced mode (projPowerOn / projPowerOff / projToggleShutter).
+const POWER_OFF_STATES = ['standby', 'eco', 'ready'];
+const POWER_BUSY_TEXT  = { boot: 'Booting…', conditioning: 'Warming up…', deconditioning: 'Cooling down…', transitioning: 'Working…' };
+
+function renderSimpleControls(projId) {
+  const st = projState[projId];
+  const pw = document.getElementById(`s-pw-${projId}`);
+  const sh = document.getElementById(`s-sh-${projId}`);
+  if (!pw || !sh) return;
+
+  // Power
+  let pState, pCls, pOk = false;
+  if (st.power === 'on')                        { pState = 'On';    pCls = 'is-on';  pOk = true; }
+  else if (POWER_OFF_STATES.includes(st.power)) { pState = 'Off';   pCls = 'is-off'; pOk = true; }
+  else if (POWER_BUSY_TEXT[st.power])           { pState = POWER_BUSY_TEXT[st.power]; pCls = 'is-busy'; }
+  else if (st.power === 'error')                { pState = 'Error'; pCls = 'is-error'; }
+  else                                          { pState = '—';     pCls = ''; }
+  pw.className = `tgl ${pCls}`;
+  pw.disabled  = !pOk;
+  pw.setAttribute('aria-pressed', st.power === 'on');
+  pw.innerHTML = `<span class="tgl-ico">⏻</span><span class="tgl-name">Power</span><span class="tgl-state">${pState}</span>`;
+  pw.title = st.power === 'on' ? 'Projector is on — press to power off'
+           : pOk ? 'Projector is off — press to power on'
+           : st.power === 'error' ? 'Projector reports an error — use Advanced for details'
+           : 'Not available right now';
+
+  // Shutter — only operable while the projector is on
+  let sState, sCls, sOk = false;
+  if (st.power !== 'on')             { sState = '—';        sCls = ''; }
+  else if (st.shutterBusy)           { sState = 'Working…'; sCls = 'is-busy'; }
+  else if (st.shutter === 'Open')    { sState = 'Open';     sCls = 'is-open';   sOk = true; }
+  else if (st.shutter === 'Closed')  { sState = 'Closed';   sCls = 'is-closed'; sOk = true; }
+  else                               { sState = '—';        sCls = ''; }
+  sh.className = `tgl ${sCls}`;
+  sh.disabled  = !sOk;
+  sh.innerHTML = `<span class="tgl-name">Shutter</span><span class="tgl-state">${sState}</span>`;
+  sh.title = !sOk ? (st.power !== 'on' ? 'Available when the projector is on' : 'Not available right now')
+           : st.shutter === 'Open' ? 'Shutter is open — press to close' : 'Shutter is closed — press to open';
+}
+
+async function simplePowerToggle(projId) {
+  const st   = projState[projId];
+  const proj = PROJECTORS.find(p => p.id === projId);
+  if (st.power === 'on') {
+    const ok = await confirmDialog({
+      title:   `Power off ${PROJ_SHORT[projId]}?`,
+      message: 'The projector will turn off and its image will go dark. Powering back on takes a few minutes.',
+      confirm: 'Power off',
+    });
+    if (ok && projState[projId].power === 'on') projPowerOff(projId);
+  } else if (POWER_OFF_STATES.includes(st.power)) {
+    projPowerOn(projId);
+  }
+}
+
+function simpleShutterToggle(projId) {
+  const st = projState[projId];
+  if (st.power !== 'on' || !['Open', 'Closed'].includes(st.shutter)) return;
+  st.shutterBusy = true;
+  renderSimpleControls(projId);
+  projToggleShutter(projId); // inverts the current state
+  // If no new feedback arrives (e.g. command failed), release the busy state
+  setTimeout(() => { if (st.shutterBusy) { st.shutterBusy = false; renderSimpleControls(projId); } }, 8000);
+}
+
+PROJECTORS.forEach(p => renderSimpleControls(p.id)); // initial state, before any feedback
+
+// Reusable confirmation popup — resolves true (confirmed) or false (cancelled)
+function confirmDialog({ title, message, confirm = 'Confirm' }) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirmModal');
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent   = message;
+    const okBtn = document.getElementById('confirmOk');
+    const noBtn = document.getElementById('confirmCancel');
+    okBtn.textContent = confirm;
+    const done = result => {
+      modal.classList.remove('open');
+      okBtn.onclick = noBtn.onclick = modal.onclick = null;
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = e => { if (e.key === 'Escape') done(false); };
+    okBtn.onclick = () => done(true);
+    noBtn.onclick = () => done(false);
+    modal.onclick = e => { if (e.target === modal) done(false); };
+    document.addEventListener('keydown', onKey);
+    modal.classList.add('open');
+    noBtn.focus(); // safe default
+  });
+}
+
+// Simple / Advanced — applies to every projector at once. Always starts in
+// Simple on page load; switching only changes what is shown, never settings.
+function setProjDetail(mode) {
+  document.getElementById('panel-proj').classList.toggle('proj-advanced', mode === 'advanced');
+  document.querySelectorAll('.proj-detail-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+    b.setAttribute('aria-pressed', b.dataset.mode === mode);
+  });
+}
+
 function setProjView(mode) {
   localStorage.setItem('projView', mode);
   ['proj-grid-main', 'proj-grid-north'].forEach(id => {
@@ -2339,14 +2507,13 @@ function handleProjMsg(projId, msg) {
       if (!obj || typeof obj !== 'object') return;
       if (obj['system.state']                        !== undefined) updatePowerBadge(projId,   obj['system.state']);
       if (obj['optics.shutter.position']             !== undefined) updateShutterBadge(projId, obj['optics.shutter.position']);
-      if (obj['statistics.laserruntime.value']     !== undefined) updateLampHours(projId,    obj['statistics.laserruntime.value']);
-      if (obj['environment.temperature.mainboard'] !== undefined) updateTemp(projId,          obj['environment.temperature.mainboard']);
+      if (obj[laserProp(projId)]                    !== undefined) updateLampHours(projId,    obj[laserProp(projId)]);
+      if (obj[tempSensor(projId) + '.value']        !== undefined) updateTemp(projId,          obj[tempSensor(projId) + '.value']);
       if (obj['system.serialnumber']               !== undefined) updateSerial(projId,        obj['system.serialnumber']);
-      // Also handle flat property names without dot-path (last segment of each property)
+      // Also handle flat property names without dot-path (last segment of each property).
+      // Not for laser runtime / temperature: both end in ".value", so a flat "value" is ambiguous.
       if (obj['state']        !== undefined) updatePowerBadge(projId,   obj['state']);
       if (obj['position']     !== undefined) updateShutterBadge(projId, obj['position']);
-      if (obj['value']        !== undefined) updateLampHours(projId,    obj['value']);
-      if (obj['mainboard']    !== undefined) updateTemp(projId,          obj['mainboard']);
       if (obj['serialnumber'] !== undefined) updateSerial(projId,        obj['serialnumber']);
     });
   }
@@ -2390,6 +2557,14 @@ function unwrap(result, property) {
   return String(result);
 }
 
+// property.subscribe lasts for the whole connection — send each one only once
+function subscribeOnce(projId, property) {
+  const st = projState[projId];
+  if (st.subscribed.has(property)) return;
+  st.subscribed.add(property);
+  rpcSend(projId, 'property.subscribe', { property }).catch(() => st.subscribed.delete(property));
+}
+
 async function projRefresh(projId) {
   const proj = PROJECTORS.find(p => p.id === projId);
   try {
@@ -2403,13 +2578,13 @@ async function projRefresh(projId) {
       const doMetrics = (Date.now() - st.lastMetricsFetch) > METRICS_POLL_MS;
       const [sRaw, lhRaw, tRaw] = await Promise.all([
         rpcGet(projId, 'optics.shutter.position').catch(() => null),
-        doMetrics ? rpcGet(projId, 'statistics.laserruntime.value').catch(() => null)     : Promise.resolve(null),
-        doMetrics ? rpcGet(projId, 'environment.temperature.mainboard').catch(() => null) : Promise.resolve(null),
+        doMetrics ? rpcGet(projId, laserProp(projId)).catch(() => null)                   : Promise.resolve(null),
+        doMetrics ? rpcGet(projId, tempSensor(projId) + '.value').catch(() => null)       : Promise.resolve(null),
       ]);
       updateShutterBadge(projId, sRaw ? unwrap(sRaw, 'optics.shutter.position') : 'unknown');
       if (doMetrics) {
-        updateLampHours(projId, lhRaw ? unwrap(lhRaw, 'statistics.laserruntime.value')     : null);
-        updateTemp(projId,      tRaw  ? unwrap(tRaw,  'environment.temperature.mainboard') : null);
+        updateLampHours(projId, lhRaw !== null ? unwrap(lhRaw, laserProp(projId)) : null);
+        updateTemp(projId,      tRaw !== null ? unwrap(tRaw, tempSensor(projId) + '.value') : null);
         st.lastMetricsFetch = Date.now();
       }
     } else {
@@ -2421,12 +2596,23 @@ async function projRefresh(projId) {
         .then(raw => updateSerial(projId, unwrap(raw, 'system.serialnumber')))
         .catch(() => {});
     }
-    // Subscribe to push notifications for live updates
-    rpcSend(projId, 'property.subscribe', { property: 'system.state' }).catch(() => {});
+    // Temperature warning/error limits — fixed per projector, fetched once
+    if (projState[projId].tempWarn === null) {
+      Promise.all([
+        rpcGet(projId, tempSensor(projId) + '.threshold.highwarning'),
+        rpcGet(projId, tempSensor(projId) + '.threshold.higherror'),
+      ]).then(([w, e]) => {
+        projState[projId].tempWarn  = Number(w);
+        projState[projId].tempError = Number(e);
+        updateTemp(projId, projState[projId].temp); // recolour with the real limits
+      }).catch(() => {});
+    }
+    // Subscribe to push notifications for live updates — once per connection
+    subscribeOnce(projId, 'system.state');
     if (state === 'on' || state === 'ready') {
-      rpcSend(projId, 'property.subscribe', { property: 'optics.shutter.position' }).catch(() => {});
-      rpcSend(projId, 'property.subscribe', { property: 'statistics.laserruntime.value' }).catch(() => {});
-      rpcSend(projId, 'property.subscribe', { property: 'environment.temperature.mainboard' }).catch(() => {});
+      subscribeOnce(projId, 'optics.shutter.position');
+      subscribeOnce(projId, laserProp(projId));
+      subscribeOnce(projId, tempSensor(projId) + '.value');
     }
   } catch (e) {
     if (proj.optional) {
@@ -2492,6 +2678,7 @@ function setPowerBadge(projId, stateKey) {
   b.className = `status-badge ${def.cls}`;
   b.innerHTML = `<span class="badge-dot"></span> ${def.text}`;
   projState[projId].power = stateKey;
+  renderSimpleControls(projId);
 }
 
 function updatePowerBadge(projId, rawState) {
@@ -2524,7 +2711,7 @@ function updateShutterBadge(projId, position) {
   const b = document.getElementById(`sh-badge-${projId}`);
   projState[projId].shutter = position;
   const pw = projState[projId].power;
-  if (pw !== 'on') { b.style.display = 'none'; return; }
+  if (pw !== 'on') { b.style.display = 'none'; projState[projId].shutterBusy = false; renderSimpleControls(projId); return; }
   b.style.display = '';
   if (position === 'Open') {
     b.className = 'status-badge badge-open';
@@ -2539,16 +2726,19 @@ function updateShutterBadge(projId, position) {
   // Update shutter button label
   const btn = document.getElementById(`sh-btn-${projId}`);
   if (btn) btn.textContent = 'Shutter';
+  projState[projId].shutterBusy = false;
+  renderSimpleControls(projId);
 }
 
-function updateLampHours(projId, seconds) {
-  projState[projId].lampHours = seconds;
+// `raw` is the model's laser counter (see MODEL_PROPS.laserUnit)
+function updateLampHours(projId, raw) {
+  projState[projId].lampHours = raw;
   const el = document.getElementById(`lamp-${projId}`);
   if (!el) return;
-  if (seconds === null || seconds === undefined) {
+  if (raw === null || raw === undefined) {
     el.textContent = '—';
   } else {
-    const h = Math.round(Number(seconds) / 3600);
+    const h = Math.round(Number(raw) * modelProps(projId).laserUnit / 3600);
     el.textContent = isNaN(h) ? '—' : h.toLocaleString() + ' h';
   }
 }
@@ -2563,7 +2753,9 @@ function updateTemp(projId, celsius) {
   } else {
     const t = Math.round(Number(celsius));
     el.textContent = isNaN(t) ? '—' : t + '°C';
-    el.className = 'metric-value ' + (t >= 70 ? 'temp-hot' : t >= 55 ? 'temp-warn' : 'temp-ok');
+    const { tempWarn, tempError } = projState[projId];
+    el.className = 'metric-value ' + (tempError && t >= tempError ? 'temp-hot' : tempWarn && t >= tempWarn ? 'temp-warn' : 'temp-ok');
+    el.title = tempWarn ? `Mainboard — warning at ${tempWarn}°C, error at ${tempError}°C` : 'Mainboard';
   }
 }
 
@@ -2574,14 +2766,6 @@ function updateSerial(projId, sn) {
   el.textContent = (sn !== null && sn !== undefined && String(sn).trim()) ? String(sn).trim() : '—';
 }
 
-function toggleMetrics(projId) {
-  const row = document.getElementById(`metrics-${projId}`);
-  const btn = document.getElementById(`expand-btn-${projId}`);
-  const willOpen = row.style.display === 'none';
-  row.style.display = willOpen ? '' : 'none';
-  btn.textContent = willOpen ? '−' : '+';
-  btn.classList.toggle('open', willOpen);
-}
 
 // ── Filters & Sort ────────────────────────────────────────────────────────────
 const STATE_ORDER = { on:0, ready:1, conditioning:2, deconditioning:3, standby:4, eco:5, boot:6, error:7, unknown:8 };
@@ -2939,45 +3123,168 @@ function showToast(msg, type = 'success') {
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONFIG MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
+function cfgSection(title, desc, body, statusKey) {
+  const status = statusKey ? `<span class="cfg-sec-status" data-k="${statusKey}"></span>` : '';
+  return `<section class="cfg-sec"><div class="cfg-sec-hd"><span class="cfg-sec-title">${title}</span>${status}</div><p class="cfg-sec-desc">${desc}</p>${body}</section>`;
+}
+function cfgTest(fn, id) {
+  return `<div class="cfg-test"><button class="btn-teal" onclick="${fn}()">Test connection</button><span class="cfg-test-result" id="${id}"></span></div>`;
+}
+function clearTest(id) { const el = document.getElementById(id); if (el) { el.textContent = ''; el.className = 'cfg-test-result'; } }
+
 function openConfig() {
   const scenes = allScenes();
-  document.getElementById('configForm').innerHTML = `
-    <div class="bulk-lbl">Server</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Proxy Host</label>
-      <input class="cfg-input" id="cfgProxyHost" type="text" placeholder="${window.location.hostname || 'localhost'}" value="${proxyHost}" style="flex:1;font-family:monospace">
-      <span style="font-size:10px;color:var(--text-3)">:${BARCO_PROXY_PORT}</span>
-    </div>
-    <p style="font-size:10px;color:var(--text-3);margin-bottom:10px;line-height:1.6">Defaults to the page hostname. Set to the server IP (e.g. <code style="color:var(--teal)">172.16.0.32</code>) if auto-detect is wrong. Changing this reconnects all projector WebSockets.</p>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">CC IP</label>
-      <input class="cfg-input" id="cfgCcIp" type="text" placeholder="172.16.0.20" value="${ccIp}" style="flex:1;font-family:monospace">
-    </div>
-    <p style="font-size:10px;color:var(--text-3);margin-bottom:4px;line-height:1.6">Barco Control Center IP for scene triggering. Also editable in the top bar on desktop.</p>
-    <div class="modal-rule"></div>
-    <div class="bulk-lbl">ConvertIP — Matrox Login</div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Username</label>
-      <input class="cfg-input" id="cfgMatroxUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="admin" value="${escAttr(matroxCfg.username)}" style="flex:1;font-family:monospace">
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <label style="font-size:11px;color:var(--text-3);white-space:nowrap;min-width:80px">Password</label>
-      <input class="cfg-input" id="cfgMatroxPass" type="password" autocomplete="new-password" placeholder="${matroxCfg.hasPassword ? '•••••••• (unchanged)' : 'Not set'}" style="flex:1;font-family:monospace">
-    </div>
-    <p style="font-size:10px;color:var(--text-3);margin-bottom:4px;line-height:1.6">Used by the server to log in to all 38 ConvertIP devices. Leave the password blank to keep the current one. It is stored on the server only and never shown here.</p>
-    <div class="modal-rule"></div>
-    <div class="bulk-lbl">Scene Timelines</div>
-    <p style="font-size:10px;color:var(--text-3);margin-bottom:10px;line-height:1.6">Map each scene to its Control Center timeline key and value. Get IDs via CTRL+ALT+SHIFT+F1 in the Taskflow Editor.</p>
-    <div class="cfg-header"><span>Scene</span><span>Timeline Key</span><span>Value</span></div>
-    <div class="cfg-rows">
-      ${scenes.map(s => { const c = sceneMap[s.key]||{}; return `<div class="cfg-row"><span class="cfg-lbl">${s.label}</span><input class="cfg-input" id="k-${s.key}" type="text" placeholder="Timeline 01" value="${c.tlKey||''}"><input class="cfg-input" id="v-${s.key}" type="number" placeholder="0" value="${c.tlValue!==undefined?c.tlValue:''}"></div>`; }).join('')}
-    </div>
-    <div class="modal-rule"></div>
-    <div class="bulk-lbl">Bulk Import — JSON</div>
-    <textarea class="bulk-ta" id="bulkJson" placeholder='{"artnyc":{"tlKey":"Timeline 03","tlValue":210}}'></textarea>
-    <button class="btn-teal" onclick="importBulk()">Import JSON</button>
-`;
+  const main   = PROJECTORS.filter(p => !p.optional).length;
+  const opt    = PROJECTORS.length - main;
+  const tx     = CIP_DEVICES.filter(d => d.type === 'tx').length;
+  const rx     = CIP_DEVICES.length - tx;
+  document.getElementById('configForm').innerHTML =
+
+    cfgSection('Dashboard server',
+      'The computer running this dashboard. Every command to Control Center, the projectors and the Matrox devices goes through it.',
+      `<div class="cfg-field">
+         <label for="cfgServerHost">Server address</label>
+         <input class="cfg-input" id="cfgServerHost" type="text" spellcheck="false" autocapitalize="off" placeholder="Automatic (${escAttr(autoServerHost())})" value="${escAttr(serverHostOverride)}" oninput="clearTest('tServer')">
+         <div class="cfg-hint">Saved on this screen only. Leave blank unless this screen opens the dashboard through a different address than the server's.</div>
+       </div>
+       ${cfgTest('testServer', 'tServer')}`, 'server') +
+
+    cfgSection('Control Center',
+      'The show-control software that plays the scenes. When you tap a scene, the dashboard server tells Control Center which timeline to play.',
+      `<div class="cfg-field">
+         <label for="cfgCcIp">Control Center address</label>
+         <input class="cfg-input" id="cfgCcIp" type="text" spellcheck="false" autocapitalize="off" placeholder="172.16.0.20" value="${escAttr(ccIp)}" oninput="clearTest('tCc')">
+         <div class="cfg-hint">IP address of the Synology running Control Center. Scenes are sent to it on port ${CC_PORT}.</div>
+       </div>
+       ${cfgTest('testCc', 'tCc')}`, 'cc') +
+
+    cfgSection('Scene buttons',
+      'Links each scene button to the Control Center timeline it plays. Scenes left blank show “Not configured” and can’t be played.',
+      `<div class="cfg-header"><span>Scene</span><span>Timeline key</span><span>Value</span></div>
+       <div class="cfg-rows">
+         ${scenes.map(s => { const c = sceneMap[s.key]||{}; return `<div class="cfg-row"><span class="cfg-lbl">${s.label}</span><input class="cfg-input" id="k-${s.key}" type="text" placeholder="Timeline 01" value="${escAttr(c.tlKey||'')}"><input class="cfg-input" id="v-${s.key}" type="number" placeholder="0" value="${c.tlValue!==undefined?c.tlValue:''}"></div>`; }).join('')}
+       </div>
+       <div class="cfg-hint">Find the key and value in Control Center’s Taskflow Editor (Ctrl+Alt+Shift+F1).</div>
+       <details class="cfg-details">
+         <summary>Import many at once (JSON)</summary>
+         <textarea class="bulk-ta" id="bulkJson" placeholder='{"artnyc":{"tlKey":"Timeline 03","tlValue":210}}'></textarea>
+         <button class="btn-teal" onclick="importBulk()">Import</button>
+       </details>`) +
+
+    cfgSection('Projectors',
+      `The ${PROJECTORS.length} Barco laser projectors controlled from the Projectors tab — ${main} always installed, plus ${opt} optional North Show units. Their addresses are built into the dashboard, so there is nothing to set here.`,
+      cfgTest('testProjectors', 'tProj'), 'proj') +
+
+    cfgSection('Matrox ConvertIP',
+      `The ${CIP_DEVICES.length} Matrox video devices shown in the ConvertIP tab (${tx} senders, ${rx} receivers). The dashboard server signs in to each one with this account to read its status and restart it.`,
+      `<div class="cfg-field">
+         <label for="cfgMatroxUser">Username</label>
+         <input class="cfg-input" id="cfgMatroxUser" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="admin" value="${escAttr(matroxCfg.username)}" oninput="clearTest('tMatrox')">
+       </div>
+       <div class="cfg-field">
+         <label for="cfgMatroxPass">Password</label>
+         <input class="cfg-input" id="cfgMatroxPass" type="password" autocomplete="new-password" placeholder="${matroxCfg.hasPassword ? '•••••••• (saved — leave blank to keep)' : 'Not set'}" oninput="clearTest('tMatrox')">
+         <div class="cfg-hint">Stored on the dashboard server only; it is never shown again.</div>
+       </div>
+       ${cfgTest('testMatrox', 'tMatrox')}`, 'matrox');
+
+  renderConn();
   document.getElementById('configModal').classList.add('open');
+}
+
+// ── Settings: Test connection buttons ─────────────────────────────────────────
+function showTest(id, ok, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className   = 'cfg-test-result ' + (ok === null ? '' : ok ? 'ok' : 'down');
+  el.textContent = ok === null ? msg : (ok ? '✓ Success' : '✕ Failed') + (msg ? ` — ${msg}` : '');
+}
+
+function fetchTimeout(url, opts = {}, ms = 5000) {
+  const ctl = new AbortController();
+  const t   = setTimeout(() => ctl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctl.signal, cache: 'no-store' }).finally(() => clearTimeout(t));
+}
+
+async function testServer() {
+  const host = document.getElementById('cfgServerHost').value.trim() || autoServerHost();
+  showTest('tServer', null, 'Testing…');
+  let health;
+  try {
+    const r = await fetchTimeout(`${serverBase(host)}/api/health`);
+    health = await r.json();
+  } catch {
+    showTest('tServer', false, `no dashboard server answered at ${host}:${SERVER_PORT}. Check the address and that the server is running.`);
+    return;
+  }
+  // The projector link is a WebSocket to the same server — make sure it opens too
+  const wsOk = await new Promise(resolve => {
+    const ws = new WebSocket(`ws://${host}:${SERVER_PORT}`);
+    const t  = setTimeout(() => { ws.close(); resolve(false); }, 4000);
+    ws.onopen  = () => { clearTimeout(t); ws.close(); resolve(true); };
+    ws.onerror = () => { clearTimeout(t); resolve(false); };
+  });
+  if (wsOk) showTest('tServer', true, `dashboard server v${health.version} is running at ${host} and the projector link works.`);
+  else      showTest('tServer', false, `the server answered (v${health.version}) but the projector link could not open.`);
+}
+
+async function testCc() {
+  const ip = document.getElementById('cfgCcIp').value.trim();
+  if (!ip) { showTest('tCc', false, 'enter the Control Center address first.'); return; }
+  showTest('tCc', null, 'Testing…');
+  try {
+    const r = await fetchTimeout('/api/cc/status?ip=' + encodeURIComponent(ip));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    if (d.reachable) showTest('tCc', true, `Control Center is answering at ${ip} (${d.latencyMs} ms).`);
+    else             showTest('tCc', false, `${d.error}. Is Control Center running on ${ip}?`);
+  } catch (e) {
+    showTest('tCc', false, e.name === 'AbortError' ? 'the dashboard server did not respond.' : e.message);
+  }
+}
+
+async function testProjectors() {
+  showTest('tProj', null, `Testing ${PROJECTORS.length} projectors…`);
+  try {
+    const r = await fetchTimeout('/api/status?fresh=1', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectors: PROJECTORS.map(p => p.ip) }),
+    }, 10000);
+    const res = (await r.json()).projectors || {};
+    const main = PROJECTORS.filter(p => !p.optional), opt = PROJECTORS.filter(p => p.optional);
+    const down = main.filter(p => !res[p.ip]);
+    const optUp = opt.filter(p => res[p.ip]).length;
+    const optTxt = opt.length ? ` Optional North Show: ${optUp} of ${opt.length}.` : '';
+    if (!down.length) showTest('tProj', true);
+    else showTest('tProj', false, `${main.length - down.length} of ${main.length} answering. Not answering: ${down.map(p => PROJ_SHORT[p.id]).join(', ')}.${optTxt}`);
+  } catch {
+    showTest('tProj', false, 'the dashboard server did not respond.');
+  }
+}
+
+async function testMatrox() {
+  const username = document.getElementById('cfgMatroxUser').value.trim();
+  const password = document.getElementById('cfgMatroxPass').value;
+  if (!username) { showTest('tMatrox', false, 'enter a username first.'); return; }
+  if (!password && !matroxCfg.hasPassword) { showTest('tMatrox', false, 'enter a password first.'); return; }
+  showTest('tMatrox', null, 'Signing in…');
+  // Try a few devices so one unplugged unit doesn't fail the whole test
+  const tried = [];
+  for (const dev of CIP_DEVICES.slice(0, 3)) {
+    try {
+      const r = await fetchTimeout('/api/matrox-test', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: dev.ip, username, password }),
+      }, 9000);
+      const d = await r.json();
+      if (d.signedIn) { showTest('tMatrox', true); return; }
+      if (d.reachable) { showTest('tMatrox', false, `${dev.name}: ${d.error}.`); return; }
+      tried.push(dev.name);
+    } catch {
+      tried.push(dev.name);
+    }
+  }
+  showTest('tMatrox', false, `no Matrox device answered (tried ${tried.join(', ')}).`);
 }
 
 function closeConfig() { document.getElementById('configModal').classList.remove('open'); }
@@ -2987,18 +3294,16 @@ function escAttr(v) {
 }
 
 async function saveConfig() {
-  // Proxy host
-  const newProxyHost = (document.getElementById('cfgProxyHost')?.value.trim()) || window.location.hostname || 'localhost';
-  const hostChanged  = newProxyHost !== proxyHost;
-  proxyHost = newProxyHost;
-  localStorage.setItem('proxyHost', proxyHost);
+  // Dashboard server address (this screen only; blank = automatic)
+  const newOverride = document.getElementById('cfgServerHost')?.value.trim() || '';
+  const hostChanged = newOverride !== serverHostOverride;
+  serverHostOverride = newOverride;
+  if (newOverride) localStorage.setItem('proxyHost', newOverride); else localStorage.removeItem('proxyHost');
 
-  // CC IP (editable from modal on mobile)
+  // Control Center address
   const newCcIp = document.getElementById('cfgCcIp')?.value.trim();
   if (newCcIp) {
     ccIp = newCcIp;
-    const topbarInput = document.getElementById('ccIp');
-    if (topbarInput) topbarInput.value = ccIp;
   }
 
   // Scene mappings
@@ -3016,6 +3321,7 @@ async function saveConfig() {
 
   const saved = await persistShared({ ccIp, sceneMap, matrox });
   renderAll();
+  checkConnections(true);
   closeConfig();
   if (saved && matroxChanged) cipRefreshAll();
 
@@ -3026,7 +3332,7 @@ async function saveConfig() {
       if (st.ws) { st.ws.close(); st.ws = null; }
       st.connecting = false;
     });
-    showToast(`Proxy host → ${proxyHost} · reconnecting…`, 'info');
+    showToast(`Dashboard server → ${serverHost()} · reconnecting projectors…`, 'info');
   } else if (saved) {
     showToast('Settings saved', 'success');
   }
@@ -3116,25 +3422,17 @@ const PRJ_TO_VDE = (() => {
 
 // Update the stream badge on a projector card from its associated RX device state
 function updateProjVdeBadge(projId) {
-  const el = document.getElementById(`vde-badge-${projId}`);
+  const el = document.getElementById(`feed-${projId}`);
   if (!el) return;
   const vdeId = PRJ_TO_VDE[projId];
-  if (!vdeId) { el.style.display = 'none'; return; }
-  const st = cipState[vdeId];
-  if (!st || st.online !== 'online' || st.stream === null) {
-    el.style.display = 'none';
-    return;
-  }
-  el.style.display = '';
-  if (st.stream) {
-    el.className = 'status-badge badge-stream';
-    el.innerHTML = '<span class="badge-dot"></span> Stream';
-  } else {
-    el.className = 'status-badge badge-off';
-    el.innerHTML = '<span class="badge-dot"></span> No Stream';
-  }
+  const vde   = vdeId && CIP_DEVICES.find(d => d.id === vdeId);
+  const st    = vdeId && cipState[vdeId];
+  el.className = 'metric-value';
+  if (!vde) { el.textContent = 'No receiver'; return; }
+  if (!st || st.online !== 'online' || st.stream === null) { el.textContent = '—'; return; }
+  el.textContent = st.stream ? `Receiving · ${vde.name.replace('CTL-', '')}` : `No stream · ${vde.name.replace('CTL-', '')}`;
+  if (st.stream) el.classList.add('feed-on');
 }
-
 // ── Card builder ─────────────────────────────────────────────────────────────
 function buildCipCards() {
   const txGrid = document.getElementById('cip-grid-tx');
@@ -3604,6 +3902,109 @@ function navToSection(e, id) {
   document.querySelectorAll('#matrox-nav .nav-item').forEach(el => el.classList.remove('active'));
   e.currentTarget.classList.add('active');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONNECTION STATUS
+// The top bar shows one combined indicator; Settings shows each connection.
+// Each connection names exactly what is checked:
+//   Server         — this screen → dashboard server            (GET /api/health)
+//   Control Center — dashboard server → Control Center, port 3030
+//   Projectors     — dashboard server → each Barco projector, port 9090
+//   Matrox         — dashboard server → Matrox devices + sign-in with the saved account
+// If the dashboard server can't be reached, the other three can't be verified.
+// ═══════════════════════════════════════════════════════════════════════════════
+const CONN_CHECK_MS = 20000;
+const CONN_NAMES    = { server: 'Dashboard server', cc: 'Control Center', proj: 'Projectors', matrox: 'Matrox' };
+const connState     = {};
+let   connTimer     = null;
+
+function setConn(k, level, text, detail, count = '') { connState[k] = { level, text, detail, count }; }
+
+function applyStatus(s) {
+  // Control Center
+  const cc = s.controlCenter || {};
+  if (cc.reachable) setConn('cc', 'ok', 'Connected', `Answering at ${cc.ip} (${cc.latencyMs} ms).`);
+  else setConn('cc', 'down', 'Disconnected', `${cc.error || 'Not answering'} — check the Control Center address in Settings.`);
+
+  // Projectors — optional North Show units don't count against the status
+  const pr   = s.projectors || {};
+  const main = PROJECTORS.filter(p => !p.optional), opt = PROJECTORS.filter(p => p.optional);
+  const down = main.filter(p => !pr[p.ip]);
+  const up   = main.length - down.length;
+  const optUp = opt.filter(p => pr[p.ip]).length;
+  const optTxt = opt.length ? ` Optional North Show: ${optUp} of ${opt.length}.` : '';
+  const names  = down.slice(0, 4).map(p => PROJ_SHORT[p.id]).join(', ') + (down.length > 4 ? '…' : '');
+  if (!down.length)   setConn('proj', 'ok',   'Connected',    `All ${main.length} projectors answering.${optTxt}`);
+  else if (up > 0)    setConn('proj', 'warn', `${up} of ${main.length} connected`, `Not answering: ${names}.${optTxt}`, `${up}/${main.length}`);
+  else                setConn('proj', 'down', 'Disconnected', `No projector is answering.${optTxt}`);
+
+  // Matrox — reachable devices + sign-in with the saved account
+  const mx    = s.matrox || { devices: {}, login: {} };
+  const mxUp  = CIP_DEVICES.filter(d => mx.devices[d.ip]).length;
+  const total = CIP_DEVICES.length;
+  if (mxUp && !mx.login.ok) setConn('matrox', 'down', 'Sign-in failed', `${mx.login.error}.`);
+  else if (mxUp === total)  setConn('matrox', 'ok',   'Connected', `All ${total} devices answering; signed in.`);
+  else if (mxUp > 0) {
+    const missing = CIP_DEVICES.filter(d => !mx.devices[d.ip]);
+    const list = missing.slice(0, 4).map(d => d.name).join(', ') + (missing.length > 4 ? '…' : '');
+    setConn('matrox', 'warn', `${mxUp} of ${total} connected`, `Not answering: ${list}. Signed in on the others.`, `${mxUp}/${total}`);
+  }
+  else                      setConn('matrox', 'down', 'Disconnected', 'No Matrox device is answering.');
+}
+
+async function checkConnections(fresh = false) {
+  clearTimeout(connTimer);
+  try {
+    const r = await fetchTimeout(`${serverBase()}/api/health`, {}, 5000);
+    if (!r.ok) throw new Error();
+    setConn('server', 'ok', 'Connected', `This screen can reach the dashboard server (${serverHost()}).`);
+    try {
+      const st = await fetchTimeout('/api/status' + (fresh ? '?fresh=1' : ''), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectors: PROJECTORS.map(p => p.ip), matrox: CIP_DEVICES.map(d => d.ip) }),
+      }, 15000);
+      applyStatus(await st.json());
+    } catch {
+      ['cc', 'proj', 'matrox'].forEach(k => setConn(k, 'unknown', 'Unknown', 'The dashboard server did not finish the check. Trying again shortly.'));
+    }
+  } catch {
+    setConn('server', 'down', 'Disconnected', `This screen can't reach the dashboard server at ${serverHost()}.`);
+    ['cc', 'proj', 'matrox'].forEach(k => setConn(k, 'unknown', 'Unknown', 'Can’t be checked while the dashboard server is unreachable.'));
+  }
+  renderConn();
+  connTimer = setTimeout(checkConnections, CONN_CHECK_MS);
+}
+
+// Combined top-bar status: worst of the four, in plain words
+function renderConn() {
+  const keys   = Object.keys(CONN_NAMES);
+  const states = keys.map(k => connState[k]);
+  const dot    = document.getElementById('connDot');
+  const label  = document.getElementById('connLabel');
+  const btn    = document.getElementById('connBtn');
+  if (states.some(st => !st)) {
+    dot.className = 'conn-dot checking'; label.textContent = 'Checking…';
+  } else {
+    const problems = keys.filter(k => connState[k].level !== 'ok');
+    const level = problems.some(k => ['down', 'unknown'].includes(connState[k].level)) ? 'down' : problems.length ? 'warn' : 'ok';
+    dot.className = 'conn-dot ' + level;
+    label.textContent = { ok: 'All connected', warn: 'Partly connected', down: 'Connection problem' }[level];
+    btn.title = problems.length
+      ? problems.map(k => `${CONN_NAMES[k]}: ${connState[k].text}`).join(' · ') + ' — Settings for details'
+      : 'All connected — Settings for details';
+  }
+  // Per-connection status in the Settings sections (when the modal is open)
+  document.querySelectorAll('.cfg-sec-status').forEach(el => {
+    const st = connState[el.dataset.k] || { level: 'checking', text: 'Checking…' };
+    el.className = 'cfg-sec-status ' + st.level;
+    el.innerHTML = `<span class="conn-dot ${st.level}"></span>${st.text}`;
+    el.title = st.detail || '';
+  });
+}
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkConnections(); });
+renderConn();
+checkConnections();
 </script>
 </body>
 </html>
