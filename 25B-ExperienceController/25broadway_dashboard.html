@@ -529,14 +529,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .metric-link { color: var(--text); text-decoration: underline dotted; text-decoration-color: var(--text-3); text-underline-offset: 3px; }
 .metric-link:hover { color: var(--gold-lt); text-decoration-color: var(--gold-lt); }
 /* Status values: neutral text + coloured dot; text is coloured only when something is wrong */
+.metric-value.st-ok::before, .metric-value.st-warn::before,
 .metric-value.feed-on::before, .metric-value.feed-off::before,
 .metric-value.link-ok::before, .metric-value.link-down::before,
 .metric-value.temp-ok::before, .metric-value.temp-warn::before, .metric-value.temp-hot::before {
   content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 1px;
 }
-.metric-value.feed-on::before, .metric-value.link-ok::before, .metric-value.temp-ok::before { background: var(--green); }
-.metric-value.feed-off, .metric-value.temp-warn { color: var(--amber); }
-.metric-value.feed-off::before, .metric-value.temp-warn::before { background: var(--amber); }
+.metric-value.st-ok::before, .metric-value.feed-on::before, .metric-value.link-ok::before, .metric-value.temp-ok::before { background: var(--green); }
+.metric-value.st-warn, .metric-value.feed-off, .metric-value.temp-warn { color: var(--amber); }
+.metric-value.st-warn::before, .metric-value.feed-off::before, .metric-value.temp-warn::before { background: var(--amber); }
 .metric-value.link-down, .metric-value.temp-hot { color: var(--red); }
 .metric-value.link-down::before, .metric-value.temp-hot::before { background: var(--red); }
 
@@ -1177,7 +1178,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.12.0</div>
+        <div class="brand-sub">Experience Control · v1.13.0</div>
       </div>
     </div>
 
@@ -2190,7 +2191,7 @@ const byPrjNumber = (a, b) => prjNumber(a) - prjNumber(b);
 // Per-projector state
 const projState = {};
 PROJECTORS.forEach(p => {
-  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, tempWarn: null, tempError: null, serial: null, subscribed: new Set(), lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
+  projState[p.id] = { power: 'unknown', shutter: 'unknown', lampHours: null, temp: null, tempWarn: null, tempError: null, laser: null, illum: null, serial: null, subscribed: new Set(), lastMetricsFetch: 0, ws: null, rpcId: 1, pending: {}, connecting: false, reconnectDelay: 1000 };
 });
 
 // ── Persistent connection manager ─────────────────────────────────────────────
@@ -2309,6 +2310,8 @@ function buildProjCards() {
         <div class="proj-detail"><span class="metric-label">Zone</span><span class="metric-value">${p.zone}</span></div>
         <div class="proj-detail"><span class="metric-label">IP address</span><a class="metric-value mono metric-link" href="http://${p.ip}/" target="_blank" rel="noopener" title="Open the projector's web interface (new tab)">${p.ip}</a></div>
         <div class="proj-detail"><span class="metric-label">Connection</span><span class="metric-value" id="link-${p.id}">Connecting…</span></div>
+        <div class="proj-detail"><span class="metric-label">Laser</span><span class="metric-value" id="laser-${p.id}" title="illumination.state">—</span></div>
+        <div class="proj-detail"><span class="metric-label">Illumination</span><span class="metric-value" id="illum-${p.id}" title="Actual laser output (illumination.sources.laser.actualpower)">—</span></div>
         <div class="proj-detail"><span class="metric-label">Video feed</span><span class="metric-value" id="feed-${p.id}" title="From the matching Matrox decoder (VDE)">—</span></div>
         <div class="proj-detail"><span class="metric-label">Laser hours</span><span class="metric-value" id="lamp-${p.id}">—</span></div>
         <div class="proj-detail"><span class="metric-label">Mainboard temp</span><span class="metric-value" id="temp-${p.id}">—</span></div>
@@ -2489,6 +2492,8 @@ function handleProjMsg(projId, msg) {
       if (obj[laserProp(projId)]                    !== undefined) updateLampHours(projId,    obj[laserProp(projId)]);
       if (obj[tempSensor(projId) + '.value']        !== undefined) updateTemp(projId,          obj[tempSensor(projId) + '.value']);
       if (obj['system.serialnumber']               !== undefined) updateSerial(projId,        obj['system.serialnumber']);
+      if (obj['illumination.state']                 !== undefined) updateLaser(projId,         obj['illumination.state']);
+      if (obj['illumination.sources.laser.actualpower'] !== undefined) updateIllum(projId,     obj['illumination.sources.laser.actualpower']);
       // Also handle flat property names without dot-path (last segment of each property).
       // Not for laser runtime / temperature: both end in ".value", so a flat "value" is ambiguous.
       if (obj['state']        !== undefined) updatePowerBadge(projId,   obj['state']);
@@ -2555,11 +2560,15 @@ async function projRefresh(projId) {
     if (state === 'on' || state === 'ready') {
       const st = projState[projId];
       const doMetrics = (Date.now() - st.lastMetricsFetch) > METRICS_POLL_MS;
-      const [sRaw, lhRaw, tRaw] = await Promise.all([
+      const [sRaw, lhRaw, tRaw, lsRaw, ilRaw] = await Promise.all([
         rpcGet(projId, 'optics.shutter.position').catch(() => null),
         doMetrics ? rpcGet(projId, laserProp(projId)).catch(() => null)                   : Promise.resolve(null),
         doMetrics ? rpcGet(projId, tempSensor(projId) + '.value').catch(() => null)       : Promise.resolve(null),
+        rpcGet(projId, 'illumination.state').catch(() => null),
+        rpcGet(projId, 'illumination.sources.laser.actualpower').catch(() => null),
       ]);
+      updateLaser(projId, lsRaw !== null ? unwrap(lsRaw, 'illumination.state') : null);
+      updateIllum(projId, ilRaw !== null ? unwrap(ilRaw, 'illumination.sources.laser.actualpower') : null);
       updateShutterBadge(projId, sRaw ? unwrap(sRaw, 'optics.shutter.position') : 'unknown');
       if (doMetrics) {
         updateLampHours(projId, lhRaw !== null ? unwrap(lhRaw, laserProp(projId)) : null);
@@ -2568,6 +2577,8 @@ async function projRefresh(projId) {
       }
     } else {
       document.getElementById(`sh-badge-${projId}`).style.display = 'none';
+      updateLaser(projId, null);   // laser values only apply while the projector is on
+      updateIllum(projId, null);
     }
     // Fetch serial number once per connection (available in any power state)
     if (projState[projId].serial === null) {
@@ -2592,6 +2603,8 @@ async function projRefresh(projId) {
       subscribeOnce(projId, 'optics.shutter.position');
       subscribeOnce(projId, laserProp(projId));
       subscribeOnce(projId, tempSensor(projId) + '.value');
+      subscribeOnce(projId, 'illumination.state');
+      subscribeOnce(projId, 'illumination.sources.laser.actualpower');
     }
   } catch (e) {
     if (proj.optional) {
@@ -2720,6 +2733,24 @@ function updateLampHours(projId, raw) {
     const h = Math.round(Number(raw) * modelProps(projId).laserUnit / 3600);
     el.textContent = isNaN(h) ? '—' : h.toLocaleString() + ' h';
   }
+}
+
+// Laser status (illumination.state): On → green dot; Off while the projector is on → amber
+function updateLaser(projId, state) {
+  projState[projId].laser = state;
+  const el = document.getElementById(`laser-${projId}`);
+  if (!el) return;
+  el.className   = 'metric-value' + (state === 'On' ? ' st-ok' : state === 'Off' ? ' st-warn' : '');
+  el.textContent = state === 'On' || state === 'Off' ? state : '—';
+}
+
+// Illumination level: actual laser output in % (a level, so no status colour)
+function updateIllum(projId, pct) {
+  projState[projId].illum = pct;
+  const el = document.getElementById(`illum-${projId}`);
+  if (!el) return;
+  const n = Number(pct);
+  el.textContent = pct === null || pct === undefined || isNaN(n) ? '—' : `${Math.round(n)} %`;
 }
 
 function updateTemp(projId, celsius) {

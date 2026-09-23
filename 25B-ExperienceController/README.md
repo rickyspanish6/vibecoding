@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.12.0
+# 25 Broadway — Experience Controller · v1.13.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -153,6 +153,8 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 | Model | `UDM-4K30` or `F80-4K12` |
 | Zone / IP address | Where it is and its network address. The IP address (underlined) is a link to the projector's own web interface (port 80, opens in a new tab) |
 | Connection | Whether the dashboard's link to the projector is up |
+| Laser | Whether the laser light is `On` or `Off`. Amber if the projector is on but its laser is off |
+| Illumination | Actual laser output in %, including any power limits |
 | Video feed | `Receiving` / `No stream` from its Matrox decoder (hover for the decoder's name) |
 | Laser hours | Laser runtime |
 | Mainboard temp | Coloured against the projector's own warning and error limits |
@@ -368,6 +370,8 @@ JSON-RPC 2.0 over TCP 9090 (Barco ref. TDE9629). The browser opens one WebSocket
 | `system.state` | `on` · `ready` · `standby` · `eco` · `boot` · `conditioning` · `deconditioning` · `error`. Simple mode treats `standby` / `eco` / `ready` as **Off** |
 | `optics.shutter.position` / `.target` | `Open` / `Closed` (read / write) |
 | `system.serialnumber` | Read once per connection |
+| `illumination.state` | Laser light `On` / `Off`. Read each refresh while on, and subscribed |
+| `illumination.sources.laser.actualpower` | Actual laser output in % (with limits). Read each refresh while on, and subscribed |
 
 Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each was verified with `introspect` on the real projectors:
 
@@ -421,6 +425,9 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.13.0 — 2026-09-23
+- **Feature:** Advanced mode shows each projector's **Laser** status (`illumination.state`: On / Off, amber if the projector is on but the laser is off) and **Illumination** level (`illumination.sources.laser.actualpower`, actual output in %), updated live
 
 ### v1.12.0 — 2026-09-23
 - **Change:** Clearer colours in Advanced mode — plain facts are grey, the IP address is an underlined link, and status values (Connection, Video feed, Mainboard temp) show a green dot when OK and only turn amber/red when something is wrong
