@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.16.0
+# 25 Broadway — Experience Controller · v1.19.1
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -121,7 +121,7 @@ A scene shows **Not configured** until it has a timeline, imported in **Settings
 **Tags** help you find scenes:
 
 - **Filter**: tap a tag (on a card or in the filter bar) to show only scenes with that tag. You can combine tags; **Clear** resets.
-- **Sort**: Default (by section), A → Z, or **By Tag**.
+- **Sort**: Default (by section), **Name**, or **By Tag**. The direction button next to it switches **↑ A** (A first) / **↓ Z** (Z first).
 - **Edit**: use the tag edit button on a card (it appears when you hover, on desktop) to add or remove that scene's tags.
 - **More**: the tag manager creates, renames or deletes a tag across all scenes.
 
@@ -169,7 +169,7 @@ Projectors are grouped by zone (North, South, Dome, West, East, South Window). T
 | Start / Stop Polling | Refreshes every projector every 5 s |
 | Refresh All | Refreshes every projector once |
 
-The filter row also has a **Zone** / **State** filter, a **Sort** (IP, State, Zone, Name) and **Tile / List** view.
+The filter row also has a **Zone** / **State** filter, a **Sort** and **Tile / List** view. Choosing a sort (IP, State, Zone or Name) shows all projectors as **one list, without the zone sections**; **Default** brings the zone sections back. In **Advanced** mode you can also sort by **Ambient temp**, **Mainboard temp**, **Laser hours** or **Illumination**; these start highest first, projectors without a reading go last, and the list re-sorts as readings change. The direction button next to Sort shows which end comes first — **↑ Low** or **↓ High** (**↑ A** / **↓ Z** for names) — and flips it. These sorts disappear in Simple mode (switching back returns to Default). Filters still apply while sorted, and clicking a zone in the sidebar returns to Default.
 
 ### Signal
 
@@ -194,7 +194,7 @@ Each card shows:
 - Both actions ask for confirmation. Devices are offline for about 30 s.
 - **Start / Stop Polling** refreshes every 10 s, and **Refresh All** refreshes once. Polling starts when the dashboard loads, so each projector's Video feed is live on every tab.
 
-Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name, IP, Zone or Status. Views: **Tile / List**.
+Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name, IP, Zone or Status, with the same direction button. Views: **Tile / List**.
 
 ### Settings
 
@@ -472,6 +472,21 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.19.1 — 2026-09-23
+- **Change:** Sort direction button simplified to one word and a vertical arrow — **↑ Low** / **↓ High** (**↑ A** / **↓ Z** for names); the full meaning is in its tooltip
+
+### v1.19.0 — 2026-09-23
+- **Feature:** A sort direction button next to every Sort menu (Projectors, Signal, Scene Library) — shows **↑ Low → High** / **↓ High → Low** (or **A → Z** / **Z → A** for names) and flips the order; disabled on Default
+- **Change:** Projector reading sorts (temperatures, laser hours, illumination) start highest first; other sorts start low → high. Scene Library's "A → Z" sort is now **Name**, with the direction on the button
+
+### v1.18.0 — 2026-09-23
+- **Feature:** Advanced mode sorts — **Ambient temp**, **Mainboard temp**, **Laser hours** and **Illumination**, highest first, re-sorting live as readings change. Only offered in Advanced; switching to Simple while one is active returns to Default
+
+### v1.17.0 — 2026-09-23
+- **Change:** Sorting projectors (IP, State, Zone, Name) shows one flat list, ignoring the zone sections; **Default** returns to the zone sections. Filters still apply while sorted
+- **Change:** Sort by Zone follows the zone order (North, South, Dome, West, East, South Window) instead of alphabetical
+- **Change:** Clicking a zone in the sidebar while sorted switches back to Default so the zone is visible
 
 ### v1.16.0 — 2026-09-23
 - **Feature:** Advanced mode shows each projector's **Ambient** (air intake) temperature — `environment.temperature.ambient_outside.value` on the UDM-4K30, `environment.temperature.inlet.value` on the F80-4K12 (which has no `ambient_outside`) — coloured against that sensor's own limits

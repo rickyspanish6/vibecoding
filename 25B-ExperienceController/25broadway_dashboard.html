@@ -321,6 +321,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   flex-wrap: wrap;
 }
 
+.sort-dir { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); font-family: 'Inter', sans-serif; font-size: 11px; padding: 6px 12px; cursor: pointer; white-space: nowrap; transition: border-color 0.18s, color 0.18s; }
+.sort-dir:hover:not(:disabled) { border-color: var(--border-md); color: var(--text); }
+.sort-dir:disabled { opacity: 0.4; cursor: default; }
+
 .filter-select {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1190,7 +1194,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       <img class="brand-mark" src="images/icons/icon-mark.png" alt="Cipriani × Moment Factory">
       <div>
         <div class="brand-name">25 Broadway</div>
-        <div class="brand-sub">Experience Control · v1.16.0</div>
+        <div class="brand-sub">Experience Control · v1.19.1</div>
       </div>
     </div>
 
@@ -1382,6 +1386,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
         <option value="zone">Zone</option>
         <option value="status">Status</option>
       </select>
+      <button class="sort-dir" id="cipSortDir" onclick="cipSortDir = cipSortDir === 'asc' ? 'desc' : 'asc'; cipApplyFilters()" title="Choose a sort first" disabled>↑ Low</button>
     </div>
 
     <!-- ConvertIP sections — one per zone, built by buildCipCards() -->
@@ -1442,13 +1447,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
       </select>
       <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
       <span class="filter-label">Sort</span>
-      <select class="filter-select" id="sortBy" onchange="applyFilters()">
+      <select class="filter-select" id="sortBy" onchange="onProjSortChange()">
         <option value="default">Default</option>
         <option value="ip">IP</option>
         <option value="state">State</option>
         <option value="zone">Zone</option>
         <option value="name">Name</option>
       </select>
+      <button class="sort-dir" id="projSortDir" onclick="toggleProjSortDir()" title="Choose a sort first" disabled>↑ Low</button>
       <button class="filter-clear" id="filterClear" onclick="clearFilters()">✕ Clear</button>
       <span class="filter-results" id="filterResults"></span>
       <div style="flex:1"></div>
@@ -1596,6 +1602,7 @@ function getAllUniqueTags() {
 
 // ── Sort state ────────────────────────────────────────────────────────────────
 let sortOrder = localStorage.getItem('sceneSortOrder') || 'default';
+let sceneSortDir = 'asc';   // sort direction, this screen only
 
 // ── Tag filter state ──────────────────────────────────────────────────────────
 let activeTagFilters = new Set();
@@ -1895,9 +1902,11 @@ function buildTagFilterBar() {
      <span class="tag-filter-label">Sort</span>
      <select class="filter-select" onchange="setSortOrder(this.value)">
        <option value="default"${sortOrder==='default'?' selected':''}>Default</option>
-       <option value="az"${sortOrder==='az'?' selected':''}>A → Z</option>
+       <option value="az"${sortOrder==='az'?' selected':''}>Name</option>
        <option value="bytag"${sortOrder==='bytag'?' selected':''}>By Tag</option>
      </select>
+     <button class="sort-dir" id="sceneSortDir" onclick="sceneSortDir = sceneSortDir === 'asc' ? 'desc' : 'asc'; setSortOrder(sortOrder, false)"
+       ${sortOrder === 'default' ? 'disabled title="Choose a sort first"' : ''}>${sceneSortDir === 'desc' ? '↓ Z' : '↑ A'}</button>
      <span class="tag-filter-divider"></span>
      <button class="tag-manage-btn" onclick="openTagManager()">More</button>`;
 }
@@ -1905,6 +1914,7 @@ function buildTagFilterBar() {
 // ── Sort ──────────────────────────────────────────────────────────────────────
 function setSortOrder(order, save = true) {
   sortOrder = order;
+  renderSortDir('sceneSortDir', sceneSortDir, true, order !== 'default');
   if (save) persistShared({ sceneSortOrder: order });
   document.querySelectorAll('.sort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === order));
   const flat = document.getElementById('flat-tag-view');
@@ -1924,7 +1934,7 @@ function setSortOrder(order, save = true) {
         [...g.children].sort((a, b) => {
           const na = (a.querySelector('.scene-name,span')?.textContent || '').trim();
           const nb = (b.querySelector('.scene-name,span')?.textContent || '').trim();
-          return na.localeCompare(nb);
+          return na.localeCompare(nb) * (sceneSortDir === 'desc' ? -1 : 1);
         }).forEach(c => g.appendChild(c));
       });
       applyTagFilter();
@@ -1937,7 +1947,9 @@ function renderFlatTagView() {
   if (!container) return;
   container.innerHTML = '';
   const activeFilters = activeTagFilters.size > 0;
-  getAllUniqueTags().forEach(tag => {
+  const tags = getAllUniqueTags();
+  if (sceneSortDir === 'desc') tags.reverse();
+  tags.forEach(tag => {
     if (activeFilters && !activeTagFilters.has(tag)) return;
     const matching = allScenes().filter(s => getTagsFor(s.key).includes(tag));
     if (!matching.length) return;
@@ -2314,7 +2326,15 @@ function buildProjCards() {
       </div>
       <div class="proj-grid" id="proj-grid-${zoneSlug(z)}"></div>
     </div>`;
-  }).join('');
+  }).join('') + `
+    <div class="proj-section proj-flat" id="proj-flat" style="display:none">
+      <div class="section-hd">
+        <div class="section-title" id="projFlatTitle">All projectors</div>
+        <div class="section-rule"></div>
+        <div class="section-ct" id="projFlatCount"></div>
+      </div>
+      <div class="proj-grid" id="proj-grid-flat"></div>
+    </div>`;
   document.getElementById('proj-nav-links').innerHTML = PROJ_ZONES.map((z, i) =>
     `<a class="nav-item${i === 0 ? ' active' : ''}" href="#" onclick="navToProj(event,'proj-${zoneSlug(z)}')">${icon}${z} (${PROJECTORS.filter(p => p.zone === z).length})</a>`
   ).join('');
@@ -2469,10 +2489,47 @@ function confirmDialog({ title, message, confirm = 'Confirm' }) {
   });
 }
 
+// Sorts that use values only shown in Advanced mode — highest first
+const ADV_SORTS = [
+  ['amb',   'Ambient temp'],
+  ['temp',  'Mainboard temp'],
+  ['hours', 'Laser hours'],
+  ['illum', 'Illumination'],
+];
+
+// Projector sort direction. Picking a sort sets its natural direction (readings: highest
+// first; everything else: low → high); the direction button flips it.
+let projSortDir = 'asc';
+function onProjSortChange() {
+  projSortDir = ADV_SORTS.some(([v]) => v === document.getElementById('sortBy').value) ? 'desc' : 'asc';
+  applyFilters();
+}
+function toggleProjSortDir() {
+  projSortDir = projSortDir === 'asc' ? 'desc' : 'asc';
+  applyFilters();
+}
+
+function setAdvancedSorts(show) {
+  const sel = document.getElementById('sortBy');
+  const wasAdvSort = ADV_SORTS.some(([v]) => v === sel.value);   // read before the options go away
+  sel.querySelectorAll('option[data-adv]').forEach(o => o.remove());
+  if (show) {
+    ADV_SORTS.forEach(([v, label]) => {
+      const o = new Option(label, v);
+      o.dataset.adv = '1';
+      sel.add(o);
+    });
+  } else if (wasAdvSort) {
+    sel.value = 'default';            // the sorted-by values aren't shown in Simple mode
+    applyFilters();
+  }
+}
+
 // Simple / Advanced — applies to every projector at once. Always starts in
 // Simple on page load; switching only changes what is shown, never settings.
 function setProjDetail(mode) {
   document.getElementById('panel-proj').classList.toggle('proj-advanced', mode === 'advanced');
+  setAdvancedSorts(mode === 'advanced');
   document.querySelectorAll('.proj-detail-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.mode === mode);
     b.setAttribute('aria-pressed', b.dataset.mode === mode);
@@ -2768,6 +2825,7 @@ function updateShutterBadge(projId, position) {
 // `raw` is the model's laser counter (see MODEL_PROPS.laserUnit)
 function updateLampHours(projId, raw) {
   projState[projId].lampHours = raw;
+  resortIfSortedBy('hours');
   const el = document.getElementById(`lamp-${projId}`);
   if (!el) return;
   if (raw === null || raw === undefined) {
@@ -2782,6 +2840,7 @@ function updateLampHours(projId, raw) {
 // Illumination level: actual laser output in % (a level, so no status colour)
 function updateIllum(projId, pct) {
   projState[projId].illum = pct;
+  resortIfSortedBy('illum');
   const el = document.getElementById(`illum-${projId}`);
   if (!el) return;
   const n = Number(pct);
@@ -2801,12 +2860,14 @@ function renderTemp(el, celsius, warn, error, label) {
 function updateTemp(projId, celsius) {
   const st = projState[projId];
   st.temp = celsius;
+  resortIfSortedBy('temp');
   renderTemp(document.getElementById(`temp-${projId}`), celsius, st.tempWarn, st.tempError, 'Mainboard temperature');
 }
 
 function updateAmbient(projId, celsius) {
   const st = projState[projId];
   st.amb = celsius;
+  resortIfSortedBy('amb');
   renderTemp(document.getElementById(`amb-${projId}`), celsius, st.ambWarn, st.ambError, 'Ambient (air intake) temperature');
 }
 
@@ -2850,40 +2911,39 @@ function applyFilters() {
     if (show) visible.push(p);
   });
 
-  // Sort — reorder cards within their grid containers
-  if (sortBy !== 'default') {
-    document.querySelectorAll('#proj-sections .proj-grid').forEach(grid => {
-      const cards = [...grid.querySelectorAll('.proj-card')];
-      cards.sort((a, b) => {
-        const pa = PROJECTORS.find(p => `proj-card-${p.id}` === a.id);
-        const pb = PROJECTORS.find(p => `proj-card-${p.id}` === b.id);
-        if (!pa || !pb) return 0;
-        if (sortBy === 'ip') {
-          const toNum = ip => ip.split('.').reduce((acc,v) => acc*256 + parseInt(v), 0);
-          return toNum(pa.ip) - toNum(pb.ip);
-        }
-        if (sortBy === 'zone') {
-          return (pa.zone || '').localeCompare(pb.zone || '') || pa.id - pb.id;
-        }
-        if (sortBy === 'name') {
-          return pa.name.localeCompare(pb.name);
-        }
-        if (sortBy === 'state') {
-          const sa = STATE_ORDER[projState[pa.id]?.power] ?? 8;
-          const sb = STATE_ORDER[projState[pb.id]?.power] ?? 8;
-          return sa - sb || pa.id - pb.id;
-        }
-        return 0;
-      });
-      cards.forEach(c => grid.appendChild(c));
+  // Sorted: one flat list, ignoring zones. Default: back to the zone sections.
+  const flat = document.getElementById('proj-flat');
+  if (hasSort) {
+    const toNum = ip => ip.split('.').reduce((acc, v) => acc * 256 + parseInt(v), 0);
+    const key = {
+      ip:    p => toNum(p.ip),
+      name:  p => p.name,
+      zone:  p => PROJ_ZONES.indexOf(p.zone),
+      state: p => STATE_ORDER[projState[p.id]?.power] ?? 8,
+      amb:   p => numOrNull(projState[p.id].amb),
+      temp:  p => numOrNull(projState[p.id].temp),
+      hours: p => laserHours(p.id),
+      illum: p => numOrNull(projState[p.id].illum),
+    }[sortBy] || prjNumber;
+    const sorted = sortByKey([...PROJECTORS], key, projSortDir, byPrjNumber);
+    const grid = document.getElementById('proj-grid-flat');
+    sorted.forEach(p => grid.appendChild(document.getElementById(`proj-card-${p.id}`)));
+    document.querySelectorAll('#proj-sections .proj-section:not(.proj-flat)').forEach(sec => { sec.style.display = 'none'; });
+    const label = document.getElementById('sortBy').selectedOptions[0]?.textContent || sortBy;
+    document.getElementById('projFlatTitle').textContent = `All projectors · sorted by ${label}`;
+    renderSortDir('projSortDir', projSortDir, sortBy === 'name' || sortBy === 'zone', true);
+    document.getElementById('projFlatCount').textContent = `${visible.length} projector${visible.length === 1 ? '' : 's'}`;
+    flat.style.display = visible.length ? '' : 'none';
+  } else {
+    regroupProjCards();
+    flat.style.display = 'none';
+    renderSortDir('projSortDir', projSortDir, false, false);
+    // Show a zone section only if one of its cards passes the filters
+    document.querySelectorAll('#proj-sections .proj-section:not(.proj-flat)').forEach(sec => {
+      const anyVisible = [...sec.querySelectorAll('.proj-card')].some(c => c.style.display !== 'none');
+      sec.style.display = anyVisible ? '' : 'none';
     });
   }
-
-  // Show/hide section headers
-  document.querySelectorAll('.proj-section').forEach(sec => {
-    const anyVisible = [...sec.querySelectorAll('.proj-card')].some(c => c.style.display !== 'none');
-    sec.style.display = anyVisible ? '' : 'none';
-  });
 
   const total = PROJECTORS.length;
   document.getElementById('filterResults').textContent =
@@ -2902,7 +2962,51 @@ function clearFilters() {
     const card = document.getElementById(`proj-card-${p.id}`);
     if (card) { card.style.display = ''; }
   });
-  // Re-append in original id order
+  regroupProjCards();
+  document.querySelectorAll('#proj-sections .proj-section').forEach(sec => { sec.style.display = sec.id === 'proj-flat' ? 'none' : ''; });
+  projSortDir = 'asc';
+  renderSortDir('projSortDir', projSortDir, false, false);
+}
+
+// Sort direction buttons (Projectors, Signal, Scene Library).
+// Label shows the current direction; pressing flips it. Disabled on "Default".
+function renderSortDir(id, dir, alpha, enabled) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  // One word + one vertical arrow: which end of the list comes first
+  const low = alpha ? 'A' : 'Low', high = alpha ? 'Z' : 'High';
+  b.textContent = dir === 'desc' ? `↓ ${high}` : `↑ ${low}`;
+  b.disabled = !enabled;
+  b.title = !enabled ? 'Choose a sort first'
+          : dir === 'desc' ? `${alpha ? 'Z → A' : 'Highest first'} — press for ${alpha ? 'A → Z' : 'lowest first'}`
+          : `${alpha ? 'A → Z' : 'Lowest first'} — press for ${alpha ? 'Z → A' : 'highest first'}`;
+}
+
+// Sort `list` by getKey (number or string) in `dir`; entries without a value go last;
+// ties keep projector/device number order
+function sortByKey(list, getKey, dir, tiebreak) {
+  const has = [], missing = [];
+  list.forEach(x => { const k = getKey(x); (k === null || k === undefined || (typeof k === 'number' && isNaN(k)) ? missing : has).push([k, x]); });
+  const sign = dir === 'desc' ? -1 : 1;
+  has.sort(([ka, a], [kb, b]) => (typeof ka === 'string' ? ka.localeCompare(kb) : ka - kb) * sign || tiebreak(a, b));
+  return [...has.map(([, x]) => x), ...missing.sort(tiebreak)];
+}
+
+const numOrNull = v => (v === null || v === undefined || isNaN(Number(v))) ? null : Number(v);
+const laserHours = projId => {
+  const raw = projState[projId].lampHours;
+  return raw === null || raw === undefined ? null : Number(raw) * modelProps(projId).laserUnit / 3600;
+};
+
+// Keep a value-based sort up to date when readings change (batched)
+let resortTimer = null;
+function resortIfSortedBy(key) {
+  if (document.getElementById('sortBy')?.value !== key || resortTimer) return;
+  resortTimer = setTimeout(() => { resortTimer = null; applyFilters(); }, 400);
+}
+
+// Put every card back in its zone section, in projector-number order
+function regroupProjCards() {
   PROJ_ZONES.forEach(z => {
     const grid = document.getElementById(`proj-grid-${zoneSlug(z)}`);
     PROJECTORS.filter(p => p.zone === z).sort(byPrjNumber).forEach(p => {
@@ -2910,7 +3014,6 @@ function clearFilters() {
       if (card) grid.appendChild(card);
     });
   });
-  document.querySelectorAll('.proj-section').forEach(sec => sec.style.display = '');
 }
 
 // ── System status bar ────────────────────────────────────────────────────────
@@ -3149,6 +3252,8 @@ function navTo(e, id) {
 
 function navToProj(e, id) {
   e.preventDefault();
+  const sortEl = document.getElementById('sortBy');
+  if (sortEl.value !== 'default') { sortEl.value = 'default'; applyFilters(); } // zones are hidden while sorted
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   document.querySelectorAll('#proj-nav .nav-item').forEach(el => el.classList.remove('active'));
   e.currentTarget.classList.add('active');
@@ -3728,6 +3833,7 @@ const byCipNumber = (a, b) => cipDevNum(a) - cipDevNum(b);
 
 // Per-device state: online | offline | unknown, stream: true|false|null, ptp: true|false|null
 const cipState = {};
+let cipSortDir = 'asc';     // Signal tab sort direction, this screen only
 CIP_DEVICES.forEach(d => { cipState[d.id] = { online: 'unknown', stream: null, ptp: null, ptpSearching: false, tempC: null, tempLimit: null, fbRes: null, inputPresent: null, streamBitrate: null, audioActive: null, networks: [] }; });
 
 // Reverse lookup: projector numeric id → CIP RX device id
@@ -3836,10 +3942,15 @@ function cipApplyFilters() {
   if (status) devices = devices.filter(d => cipState[d.id]?.online === status);
 
   const order = { online: 0, unknown: 1, offline: 2 };
-  if (sort === 'name')   devices.sort((a,b) => a.name.localeCompare(b.name));
-  if (sort === 'ip')     devices.sort((a,b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
-  if (sort === 'zone')   devices.sort((a,b) => (a.zone||'').localeCompare(b.zone||''));
-  if (sort === 'status') devices.sort((a,b) => (order[cipState[a.id]?.online]??1) - (order[cipState[b.id]?.online]??1));
+  const toNum = ip => ip.split('.').reduce((acc, v) => acc * 256 + parseInt(v), 0);
+  const cipKey = {
+    name:   d => d.name,
+    ip:     d => toNum(d.ip),
+    zone:   d => CIP_ZONES.indexOf(d.zone),
+    status: d => order[cipState[d.id]?.online] ?? 1,
+  }[sort];
+  if (cipKey) devices = sortByKey(devices, cipKey, cipSortDir, byCipNumber);
+  renderSortDir('cipSortDir', cipSortDir, sort === 'name' || sort === 'zone', !!cipKey);
 
   // Hide all cards first
   CIP_DEVICES.forEach(d => {
