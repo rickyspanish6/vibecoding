@@ -2,253 +2,218 @@
 
 # 25 Broadway — Experience Controller · v1.9.0
 
-Local web dashboard for AV control at 25 Broadway, NYC.  
-Three tabs: **Scene Library** (plays scenes through **Control Center**, the show-control software), **Projectors** (monitors and controls the 19 **Barco** laser projectors), and **ConvertIP** (monitors the 38 **Matrox** ConvertIP video encoders/decoders).
+A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
-### System at a glance
+**Contents**
 
-| Component | What it is | Who talks to it |
+1. [How the system fits together](#1-how-the-system-fits-together)
+2. [Setup](#2-setup)
+3. [Using the dashboard](#3-using-the-dashboard)
+4. [Site equipment](#4-site-equipment)
+5. [Running and maintaining it](#5-running-and-maintaining-it)
+6. [Technical reference](#6-technical-reference)
+7. [Versioning](#7-versioning)
+8. [Changelog](#changelog)
+
+---
+
+## 1. How the system fits together
+
+```
+ Screens (browser / iPad)
+          │  http://<server>:8080  — the only address a screen ever needs
+          ▼
+ ┌──────────────────────────┐
+ │  Dashboard server        │  Docker container running proxy.js
+ │  • serves the dashboard  │  • stores the settings (settings.json)
+ └──────────────────────────┘
+     │            │                │
+     ▼            ▼                ▼
+ Control Center   Projectors       Matrox ConvertIP
+ (software on a   (19 × Barco)     (38 video encoders/decoders)
+  Synology)       TCP 9090         HTTPS 443, signed in with the Matrox account
+ HTTP 3030
+```
+
+| Component | What it is | Used for |
 |---|---|---|
-| **Dashboard server** | The computer running this app (Docker / `proxy.js`) | Every screen (browser, iPad) |
-| **Control Center** | Show-control **software** (runs on a Synology) that plays the scene timelines | Dashboard server → port 3030 |
-| **Projectors** | Barco projector **hardware**, controlled over the Barco Pulse API | Dashboard server → port 9090 |
-| **Matrox ConvertIP** | Video-over-network **hardware** (encoders/decoders) | Dashboard server → HTTPS, signed in with the Matrox account |
+| **Dashboard server** | The computer running this app, in one Docker container | Serves the dashboard to every screen and relays every command |
+| **Control Center** | Show-control **software**, running on a Synology | Plays the scene timelines when a scene is tapped |
+| **Projectors** | 19 Barco laser projectors (**hardware**) | Power, shutter and health monitoring |
+| **Matrox ConvertIP** | 38 video-over-network devices (**hardware**): 21 encoders (VEN) and 17 decoders (VDE) | Monitoring and reboots; each decoder feeds one projector |
 
-Screens only ever talk to the dashboard server; it relays everything else.
+Screens never talk to the equipment directly. The dashboard server does it for them, so a screen only needs to reach the server.
 
 ---
 
-## Files
+## 2. Setup
 
+### Requirements
+
+- A computer that stays on, with **Docker** installed (Docker Engine on Linux, or Docker Desktop on macOS/Windows).
+- That computer must be able to reach the AV networks:
+
+  | Network | Used by | Port |
+  |---|---|---|
+  | `172.16.0.x` | Control Center | 3030 |
+  | `172.16.202.x` | Projectors | 9090 |
+  | `172.16.201.x` | Matrox ConvertIP | 443 |
+
+### Install
+
+```bash
+git clone https://github.com/rickyspanish6/vibecoding.git
 ```
-25B-ExperienceController/
-├── 25broadway_dashboard.html   # Full dashboard UI — HTML + CSS + JS, no build step
-├── proxy.js                    # Node.js server: serves HTML on :8080, bridges WS → Barco TCP :9090,
-│                               #   proxies HTTPS → Matrox ConvertIP REST API, stores shared settings
-├── settings.json               # Created on first save — shared settings + Matrox login (git-ignored)
-├── Dockerfile                  # Single-container image (node:22-alpine)
-├── docker-compose.yml          # One-command deploy, settings on a named volume
-├── manifest.webmanifest        # Home-screen app name + icons (iPad "Add to Home Screen")
-├── images/                     # Scene thumbnails
-│   └── icons/                  # App icon: source + favicon, apple-touch, 192/512, top-bar mark
-├── package.json
-└── node_modules/ws/            # Only dependency (git-ignored — run npm install)
+```bash
+cd vibecoding/25B-ExperienceController
 ```
-
-The dashboard is intentionally a **single HTML file**. There is no bundler, no framework, no build step. This keeps deployment simple — copy the folder, run one command.
-
----
-
-## Requirements
-
-- **Docker** (recommended) — Docker Engine on Linux, or Docker Desktop on macOS/Windows
-- or **Node.js** (any recent LTS) to run without Docker
-- The **server** (the machine running Docker / `proxy.js`) needs network access to the Barco subnet (`172.16.202.x`) and Control Center (`172.16.0.x`, port 3030)
-- Network access to the Matrox ConvertIP subnet (`172.16.201.x`)
-
----
-
-## Deploy with Docker (recommended)
-
-The whole stack is one container: dashboard, Barco WebSocket → TCP bridge, Matrox proxy and settings store.
-
 ```bash
 docker compose up -d --build
 ```
 
-That's it — the container restarts automatically after reboots/crashes (`restart: unless-stopped`) and reports its health in `docker compose ps`.
+Open **http://localhost:8080** on that computer, or **http://&lt;server-ip&gt;:8080** from any other screen on the network. On an iPad, use Safari's **Share → Add to Home Screen** to get an app icon.
 
-| Task | Command |
-|---|---|
-| Update after `git pull` | `docker compose up -d --build` |
-| View logs | `docker compose logs -f` |
-| Stop | `docker compose down` |
-| Back up settings | `docker compose cp experience-controller:/data/settings.json ./settings.backup.json` |
-| Restore / import settings | `docker compose cp ./settings.json experience-controller:/data/settings.json` then `docker compose restart` |
+### First-time configuration
 
-- **Settings persist** in the `settings` Docker volume (`/data/settings.json` inside the container), so rebuilding or updating the container keeps them. `docker compose down -v` **deletes** them.
-- **Moving from a plain `node proxy.js` install:** start the container, then import your existing `settings.json` with the restore command above.
-- **Network:** the container reaches the AV subnets through the host. The host running Docker needs the same network access listed in Requirements. If Docker's internal subnet ever clashes with a site network, pin it — see the comment at the bottom of `docker-compose.yml`.
-- **Environment variables:** `PORT` (default `8080`) and `DATA_DIR` (default `/data` in Docker, the app folder otherwise). To use a different host port, change the left side of `ports:` in `docker-compose.yml` (e.g. `"80:8080"`).
+Open **Settings** (the status/gear button, top right):
 
-## Run without Docker
+1. **Control Center**: enter the IP address of the Synology running Control Center, then press **Test connection**.
+2. **Matrox ConvertIP**: enter the Matrox username and password, then press **Test connection**.
+3. **Scene buttons**: enter the timeline key and value for each scene (see [Scene Library](#scene-library)).
+4. Press **Save Changes**.
 
-```bash
-npm install        # installs the ws package (one-time)
-npm start          # starts the server (same as: node proxy.js)
-```
-
-`settings.json` is created next to `proxy.js`.
-
-Open **http://localhost:8080** in a browser on the same machine, or **http://&lt;server-ip&gt;:8080** from another device on the network.
-
-On a fresh install, open **Settings**, enter the **Control Center address** and the **Matrox account**, and use each section's **Test connection** button to confirm.
+Settings are saved on the server, so every screen shares them. The one exception is the dashboard server address, which is saved per screen.
 
 ---
 
-## Settings
+## 3. Using the dashboard
 
-**Settings** (the status/gear button, top-right) is organised by what each part of the system does. Every section says what it is and what it connects to, shows that connection's **live status** in its header, and — where there is something to check — has a **Test connection** button that reports **✓ Success** or **✕ Failed** with the reason.
+The top bar has three tabs, **Scene Library**, **Projectors** and **ConvertIP**, plus one status/Settings button.
 
-| Section | Purpose | Settings | Test connection checks | Stored |
-|---|---|---|---|---|
-| **Dashboard server** | The computer running the dashboard; relays every command | Server address (blank = automatic) | This screen can reach the server, and the projector link (WebSocket) opens | This screen only |
-| **Control Center** | Show-control software that plays scenes | Control Center address (IP of the Synology running it) | The server gets an answer from Control Center on port 3030 | Server |
-| **Scene buttons** | Which Control Center timeline each scene plays | Timeline key + value per scene, JSON import | — (play a scene) | Server |
-| **Projectors** | The 19 Barco projectors; addresses are built in | None | The server gets an answer from each projector on port 9090 | — |
-| **Matrox ConvertIP** | The 38 video encoders/decoders | Username, password | The server signs in to a Matrox device with the entered account (tries up to 3 devices) | Server |
+### Connection status
 
-Other preferences — scene tags, sort order (server) and Tile/List view (this screen) — are set where they are used.
+The button at the top right shows the overall state of the system. Tap it to open Settings, where each connection's own status appears in its section header.
 
-- **Matrox password** is write-only: it is never sent back to the browser. Leave the field blank to keep the current one; **Test connection** then uses the saved password. Changing the account drops all Matrox sessions so the next poll signs in with the new one.
-- **`settings.json` is git-ignored** and never served over HTTP. Back it up when moving the dashboard to a new machine — it's the whole configuration.
-- **Migration:** the first time a browser with older `localStorage` settings opens a server that has no scene data yet, its settings are copied to the server automatically.
-- If the page is opened without `proxy.js` running, the dashboard falls back to the last settings cached in that browser.
-
-## Connection status
-
-The top-right button combines the **overall status** and **Settings** (gear). Tap it to open Settings, where each connection's own status is shown in its section header.
-
-| Top bar | Meaning |
+| Status | Meaning |
 |---|---|
-| 🟢 All connected | Server, Control Center, projectors and Matrox all OK |
-| 🟠 Partly connected | Everything reachable, but some projectors or Matrox devices aren't answering |
-| 🔴 Connection problem | Server or Control Center disconnected, no projectors/Matrox answering, or Matrox sign-in failed |
+| 🟢 **All connected** | Server, Control Center, projectors and Matrox are all answering |
+| 🟠 **Partly connected** | Everything is reachable, but some projectors or Matrox devices aren't answering |
+| 🔴 **Connection problem** | The server or Control Center is unreachable, no projectors or Matrox devices answer, or the Matrox sign-in failed |
 
-Hover (desktop) lists what's wrong. On narrow screens (iPad portrait) it shows the dot and gear only.
+On a desktop, hovering the button lists what's wrong. On narrow screens (iPad portrait) it shows only the dot and the gear.
 
-Individual connections (shown in Settings):
+The status is checked every 20 s and whenever the tab comes back into focus. The two optional South Window projectors never count as a problem.
 
-| Connection | Checks |
+### Scene Library
+
+Each button plays a scene through Control Center. The playing scene is highlighted, and it's shown in the top bar and at the bottom of the sidebar.
+
+| Section | Scenes |
 |---|---|
-| **Dashboard server** | This screen → dashboard server |
-| **Control Center** | Dashboard server → Control Center, port 3030 |
-| **Projectors** | Dashboard server → each Barco projector, port 9090 (the 2 optional South Window units never count as a problem) |
-| **Matrox** | Dashboard server → each Matrox device + sign-in with the saved account |
+| Tech Looks | 4 |
+| Demos | 6 |
+| New Looks 2026 | 12 |
+| Alpha Overlay | 9 |
+| Multimedia | 11 |
 
-- Checked every 20 s, when the tab comes back into focus, and after a failed scene.
-- If the dashboard server is unreachable, the other connections show **Unknown** — they can't be verified without it.
-- Checks are cached for 10 s on the server so several open screens don't multiply them; projectors that already have a live connection are counted without opening a new one.
+A scene shows **Not configured** until its timeline is set in **Settings → Scene buttons**.
 
-### Server API
+**Tags** help you find scenes:
 
-| Method | Path | Notes |
+- **Filter**: tap a tag (on a card or in the filter bar) to show only scenes with that tag. You can combine tags; **Clear** resets.
+- **Sort**: Default (by section), A → Z, or **By Tag**.
+- **Edit**: use the tag edit button on a card (it appears when you hover, on desktop) to add or remove that scene's tags.
+- **More**: the tag manager creates, renames or deletes a tag across all scenes.
+
+### Projectors
+
+Projectors are grouped by zone (North, South, Dome, West, East, South Window). The sidebar jumps to each zone.
+
+**Simple / Advanced** (on the filter row) switches every projector at once. The page always opens in **Simple**, and switching never sends anything to the projectors.
+
+**Simple mode** gives each projector two buttons. Each shows the current state, and pressing it does the opposite:
+
+| Button | Shows | Pressing it |
 |---|---|---|
-| GET | `/api/settings` | Returns all shared settings; Matrox returned as `{ username, hasPassword }` |
-| PUT | `/api/settings` | Merges the top-level keys given (`ccIp`, `sceneMap`, `sceneTags`, `knownTags`, `sceneSortOrder`, `matrox`) |
-| GET | `/api/health` | `{ ok, version }` — dashboard server is up (CORS enabled for the Settings test) |
-| POST | `/api/status[?fresh=1]` | Body `{ projectors: [ip…], matrox: [ip…] }` → `{ controlCenter, projectors: {ip: bool}, matrox: { devices: {ip: bool}, login } }`. `fresh=1` skips the 10 s cache |
-| GET | `/api/cc/status[?ip=…]` | Control Center reachability for the saved address, or `?ip=` to test another: `{ ip, port, reachable, latencyMs, error }` |
-| POST | `/api/matrox-test` | Body `{ ip, username, password }` (blank password = saved) → `{ reachable, signedIn, error }`; session is not kept |
-| POST | `/api/cc/trigger` | Forwards a `Task.Execute` JSON-RPC body to the saved Control Center address; `502` if unreachable |
+| **⏻ Power** | `ON` (green) | Asks **"Power off …?"** and only powers off if you confirm. It asks every time, for every projector |
+| | `OFF` | Powers on, with no confirmation |
+| | `Warming up…` / `Cooling down…` / `Booting…` / `Error` / `—` | Disabled: wait, or use Advanced |
+| **Shutter** | `OPEN` (teal) | Closes the shutter |
+| | `CLOSED` (red) | Opens the shutter |
+| | `—` | Disabled: the shutter only works while the projector is on |
+
+**Advanced mode** is the full technical view:
+
+- Power and shutter status badges.
+- Separate **⏻ On**, **⏻ Off** and **Shutter** buttons. These have no confirmation.
+- Details for each projector:
+
+| Detail | Meaning |
+|---|---|
+| Model | `UDM-4K30` or `F80-4K12` |
+| Zone / IP address | Where it is and its network address |
+| Connection | Whether the dashboard's link to the projector is up |
+| Video feed | Whether its Matrox decoder is receiving a stream (shows `—` until the ConvertIP tab has been opened) |
+| Laser hours | Laser runtime |
+| Mainboard temp | Coloured against the projector's own warning and error limits |
+| Serial no. | Serial number |
+
+**Toolbar**
+
+| Button | Action |
+|---|---|
+| Power On All / Power Off All | PRJ01–PRJ17 only (South Window excluded). No confirmation |
+| Toast Only | Powers on A05-PRJ11 and powers off PRJ01–PRJ17 except PRJ11. No confirmation |
+| Open All / Close All Shutters | Every projector that is on or ready |
+| Start / Stop Polling | Refreshes every projector every 5 s |
+| Refresh All | Refreshes every projector once |
+
+The filter row also has a **Zone** / **State** filter, a **Sort** (IP, State, Zone, Name) and **Tile / List** view.
+
+### ConvertIP
+
+Matrox devices are grouped by zone. Each zone holds the **decoders (VDE)** at its projectors, and **Control Room** holds all 21 **encoders (VEN)**.
+
+Each card shows:
+
+| Item | Meaning |
+|---|---|
+| Online / Offline | Whether the device answers |
+| Stream / No Stream | Whether a video stream is active |
+| PTP | Shown when the device is locked to network timing |
+| Temp | Green below 60 %, amber from 60 %, red from 80 % of the device's limit |
+| Resolution | Configured output resolution |
+| HDMI | Signal / No Signal: for an encoder, a source is connected; for a decoder, a display is connected |
+| **+** | Network ports (management / media link state) and stream bitrate |
+
+**Toolbar**
+
+- **Reboot Selected**: tap cards to select them first.
+- **Reboot All**: reboots all 38 devices.
+- Both actions ask for confirmation. Devices are offline for about 30 s.
+- **Start / Stop Polling** refreshes every 10 s, and **Refresh All** refreshes once. Polling starts when the tab is first opened.
+
+Filters: **TX / RX** (encoders / decoders), **Zone** and **Status**. Sort: Name, IP, Zone or Status. Views: **Tile / List**.
+
+### Settings
+
+Settings is organized by what each part of the system does. Each section explains itself and shows its live status. Where there's something to verify, it has a **Test connection** button that reports **✓ Success** or **✕ Failed** with the reason.
+
+| Section | What you set | Test connection checks | Saved |
+|---|---|---|---|
+| **Dashboard server** | Server address (leave blank = automatic) | This screen reaches the server, and the projector link opens | On this screen only |
+| **Control Center** | IP address of the Synology running Control Center | Control Center answers on port 3030 | Server |
+| **Scene buttons** | Timeline key and value per scene, plus a JSON import | (tap a scene to try it) | Server |
+| **Projectors** | Nothing: the addresses are built in | Every projector answers | — |
+| **Matrox ConvertIP** | Username and password | Signs in to a Matrox device with the account entered | Server |
+
+The Matrox password is never shown again once saved. Leave the field blank to keep it.
 
 ---
 
-## Architecture
+## 4. Site equipment
 
-```
-Browser (localhost:8080)
-│
-│  HTTP GET /                     → proxy.js serves 25broadway_dashboard.html
-│
-│  Settings (all tabs)
-│  HTTP GET|PUT /api/settings     → proxy.js reads/writes settings.json (DATA_DIR)
-│
-│  Scene trigger (Scene Library tab)
-│  HTTP POST /api/cc/trigger
-│      │
-│      └─► proxy.js forwards to http://<Control Center address>:3030/sc-datastore/projectData/taskFlow
-│              method: Task.Execute  (Control Center JSON-RPC)
-│
-│  Connection status (top bar, every 20 s)
-│  HTTP GET  /api/health           → dashboard server is reachable from this screen
-│  HTTP POST /api/status           → proxy.js checks Control Center :3030, each projector :9090,
-│                                    each Matrox device :443 + sign-in with the saved account
-│
-│  Projector control (Projectors tab)
-│  WebSocket ws://localhost:8080?host=172.16.202.xx&port=9090
-│      │
-│      └─► proxy.js opens TCP socket → 172.16.202.xx:9090
-│              Barco Pulse API (JSON-RPC 2.0 over raw TCP)
-│              One persistent connection per projector (19 total)
-│
-│  ConvertIP monitor (ConvertIP tab)
-│  HTTP GET /api/matrox/172.16.201.xxx/device/status
-│  HTTP POST /api/matrox/172.16.201.xxx/device/reboot
-│      │
-│      └─► proxy.js proxies to HTTPS → 172.16.201.xxx:443
-│              Matrox ConvertIP REST API (cookie-based auth)
-│              Polled every 10 s, 38 devices (21 TX + 17 RX)
-```
-
-### Connections at page load
-
-All 19 projector connections open as soon as the dashboard loads (staggered 150 ms apart), so projector status is live on every tab — the Scene Library status strip shows it immediately. Each connection reads the projector's state once, then the projector pushes changes (`property.subscribe`); the 5-second polling only starts when the Projectors tab is opened.
-
-### Reconnect behaviour
-
-Each projector WebSocket uses **exponential backoff**: 1 s → 2 s → 4 s → … → 60 s cap. Resets to 1 s on successful connection.
-
-PRJ18 and PRJ19 (South Window) are marked **optional** — they are only installed sometimes. When unplugged they are silently ignored (no error toast, no offline flash) and reconnect is retried every 30 s.
-
----
-
-## Scene Library
-
-Scenes are grouped into five sections:
-
-| Section | Count | Card style |
-|---|---|---|
-| Tech Looks | 4 | Thumbnail card |
-| Demos | 6 | Demo button |
-| New Looks 2026 | 12 | Thumbnail card |
-| Alpha Overlay | 9 | Text list + thumbnail |
-| Multimedia | 11 | Thumbnail card |
-
-### Configuring scenes
-
-Each scene must be mapped to a **Control Center timeline key/value** before it can be triggered.
-
-1. Click **Settings** (top-right)
-2. Enter the Timeline Key and Value for each scene
-3. Click **Save Changes**
-
-Or use **Bulk Import** — paste a JSON object:
-
-```json
-{
-  "artnyc":         { "tlKey": "Timeline 03", "tlValue": 210 },
-  "campfire":       { "tlKey": "Timeline 03", "tlValue": 215 },
-  "demo-corporate": { "tlKey": "Timeline 01", "tlValue": 100 }
-}
-```
-
-Keys match the `key` field in the `SCENES` object in the HTML source. Mappings are saved on the server (see [Settings](#settings)).
-
-### Tags
-
-Every scene carries tags (defaults in the `SCENES` object). Use them to find scenes quickly:
-
-- **Filter** — click any tag pill (on a card or in the filter bar) to show only scenes with that tag; combine several, **Clear** to reset
-- **Sort** — Default (sections), A → Z, or **By Tag** (flat view grouped by tag)
-- **Edit** — hover a card and click the tag edit button to add/remove tags on that scene
-- **More** — tag manager: create, rename or delete a tag across all scenes
-
-Tag edits and sort order are saved on the server.
-
-### Control Center
-
-Control Center is the show-control **software** that plays the scenes (it is not part of the Barco projectors). Its address is set in **Settings → Control Center** (default `172.16.0.20`) and saved on the server; **Test connection** checks an address before saving. The address is intentionally not shown on the main screens — the top-bar **Control Center** indicator shows whether it's connected.
-
-Scene triggers are sent **through the dashboard server**, so the indicator and the triggers always use the same network path — a screen only needs to reach the dashboard server.
-
----
-
-## Projectors
-
-### Inventory
-
-The Projectors tab shows one section per zone, in this order (cards sorted by PRJ number). The sidebar links jump to each zone.
+### Projectors
 
 | Zone | Projector | Model | IP | Notes |
 |---|---|---|---|---|
@@ -262,195 +227,198 @@ The Projectors tab shows one section per zone, in this order (cards sorted by PR
 | | A03-PRJ08 | UDM-4K30 | 172.16.202.18 | |
 | **West** | A01-PRJ09 | UDM-4K30 | 172.16.202.19 | |
 | | A01-PRJ10 | UDM-4K30 | 172.16.202.20 | |
-| | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | "Toast Only" keeps this one on |
+| | A05-PRJ11 | UDM-4K30 | 172.16.202.21 | Kept on by **Toast Only** |
 | | A05-PRJ12 | UDM-4K30 | 172.16.202.22 | |
 | | A05-PRJ13 | UDM-4K30 | 172.16.202.23 | |
 | **East** | A04-PRJ14 | UDM-4K30 | 172.16.202.24 | |
 | | A04-PRJ15 | UDM-4K30 | 172.16.202.25 | |
 | | A08-PRJ16 | UDM-4K30 | 172.16.202.26 | |
 | | A08-PRJ17 | UDM-4K30 | 172.16.202.27 | |
-| **South Window** | S01-PRJ18 | F80-4K12 | 172.16.202.28 | optional |
-| | S01-PRJ19 | F80-4K12 | 172.16.202.29 | optional |
+| **South Window** | S01-PRJ18 | F80-4K12 | 172.16.202.28 | Optional: only installed sometimes |
+| | S01-PRJ19 | F80-4K12 | 172.16.202.29 | Optional: only installed sometimes |
 
-Zones and order are defined by `zone` in the `PROJECTORS` list and `PROJ_ZONES` in the HTML.
+### Matrox ConvertIP
 
-### Simple / Advanced
+All 38 devices are SMPTE ST 2110 over 10/25 GbE SFP. Decoder *n* feeds projector PRJ*n* and sits in the same zone.
 
-One toggle on the filter row switches **every projector at once** — there is no per-projector details menu.
-
-| Mode | Each projector shows |
-|---|---|
-| **Simple** (default) | Name · **[⏻ Power: ON/OFF]** · **[Shutter: OPEN/CLOSED]** — two state toggles, nothing else |
-| **Advanced** | Power and shutter status badges · discrete **⏻ On**, **⏻ Off** and **Shutter** buttons · Model · Zone · IP address · Connection · Video feed · Laser hours · Mainboard temp · Serial no. |
-
-**Simple mode toggles** always show the projector's current feedback state; pressing one sends the opposite command (using the same commands as Advanced):
-
-| Toggle | Shows | Press |
-|---|---|---|
-| **Power** | `ON` (green) | Asks **"Power off …?"** — only powers off after **Power off** is confirmed (Cancel / Esc / tapping outside does nothing). Asked every time, for every projector |
-| | `OFF` (standby / eco / ready) | Powers on — no confirmation |
-| | `Booting…` / `Warming up…` / `Cooling down…` / `Error` / `—` | Disabled — wait, or use Advanced |
-| **Shutter** | `OPEN` (teal) | Closes the shutter |
-| | `CLOSED` (red) | Opens the shutter |
-| | `—` | Disabled — the shutter only works while the projector is on |
-
-After a shutter press the toggle shows `Working…` until the projector confirms the new position.
-
-**Advanced mode** is the full technical interface and is unchanged by Simple mode: the discrete On / Off commands, the Shutter command, the status badges and all details work exactly as before.
-
-- Every page load starts in **Simple**, so the next operator isn't left in Advanced.
-- Switching only changes what is shown — it never sends anything to the projectors.
-- Works in both **Tile** and **List** view (in List view the details appear as a row under each projector).
-- **Connection** — whether the dashboard's link to that projector is up (`Connected` / `Not connected — retrying`).
-- **Video feed** — from the matching Matrox receiver (`Receiving · VDE09` / `No stream · VDE09`); shows `—` until the ConvertIP tab has polled the receivers.
-- **Mainboard temp** is coloured against the projector's own warning/error limits. Values persist from the last poll even when the projector is off.
-
-### Per-card controls
-
-- **⏻ green** — Power On (`system.poweron`)
-- **⏻ red** — Power Off (`system.poweroff`)
-- **Shutter** — Toggle shutter Open/Closed (`optics.shutter.target`)
-
-### Bulk actions (toolbar)
-
-| Button | Action |
-|---|---|
-| Power On All | Powers on PRJ01–PRJ17 only (South Window excluded) |
-| Power Off All | Powers off PRJ01–PRJ17 only (South Window excluded) |
-| Open All Shutters | Opens shutters on all projectors currently On or Ready |
-| Close All Shutters | Closes shutters on all projectors currently On or Ready |
-| Refresh All | One-shot poll of all projectors (staggered 200 ms apart) |
-| Start / Stop Polling | Toggles 5-second auto-poll |
-
-### Filters & sort
-
-Filter by **Zone** (North / South / Dome / West / East / South Window) and **State** (On / Ready / Standby / Error).  
-Sort by IP, State, Zone, or Name. Active filters are highlighted gold. The display options — **Simple / Advanced** and **Tile / List** — are at the right end of the same row.
-
----
-
----
-
-## ConvertIP
-
-### Inventory
-
-38 Matrox ConvertIP devices, SMPTE ST 2110 over 10/25 GbE SFP:
-
-- **VEN — video encoders (TX):** 21 units, `CTL-VEN01`–`CTL-VEN21`, `172.16.201.141`–`.161`, all in the Control Room
-- **VDE — video decoders (RX):** 17 units, `172.16.201.171`–`.187`, one per projector — decoder *n* feeds PRJ*n* and sits in the same zone
-
-The ConvertIP tab shows one section per zone, in this order (cards sorted by device number); the sidebar links jump to each:
-
-| Section | Devices |
+| Zone | Decoders (VDE, RX) — `172.16.201.171`–`.187` |
 |---|---|
 | **North** | A07-VDE01 · S01-VDE02 · A06-VDE03 |
 | **South** | A02-VDE04 · N01-VDE05 · A03-VDE06 |
 | **Dome** | A06-VDE07 · A03-VDE08 |
 | **West** | A01-VDE09 · A01-VDE10 · A05-VDE11 · A05-VDE12 · A05-VDE13 |
 | **East** | A04-VDE14 · A04-VDE15 · A08-VDE16 · A08-VDE17 |
+
+| Zone | Encoders (VEN, TX) — `172.16.201.141`–`.161` |
+|---|---|
 | **Control Room** | CTL-VEN01 – CTL-VEN21 |
 
-The **TX / RX** filter still narrows to encoders or decoders. Zones and order are defined by `zone` in `CIP_DEVICES` and `CIP_ZONES` in the HTML.
-
-### Per-card display
-
-| Field | Source | Notes |
-|---|---|---|
-| Online / Offline | HTTP reachability | Green / red border |
-| Stream | `videoStreams[].state` | Teal badge when any stream active |
-| PTP | `ptpState` | Gold badge when Follower or Master |
-| Temp | `temperature` / `temperatureLimit` | Green < 60 % · Amber 60–80 % · Red > 80 % of limit |
-| Resolution | `frameBuffer.resolution` | Configured output resolution |
-| Input | `videos[0].isPresent` | Live signal presence on HDMI/SDI input |
-| Bitrate | `videoStreams[0].bitrateKbits` | Active stream bitrate in Gbps / Mbps |
-
-### Per-card actions
-
-- **↺ Reboot** — confirms then `POST /device/reboot`; card immediately shows offline until next poll recovers it
-
-### Authentication
-
-Cookie-based (`session_token`). The login is set in **Settings → ConvertIP — Matrox Login** and stored in `settings.json`. `proxy.js` maintains one session per device IP and auto-re-logs in when the device returns 401, 403, or `"Not logged in"` in a 200 response.
-
-### Polling
-
-All 38 devices polled every **10 seconds**, staggered 150 ms apart to avoid flooding the network. A manual **Refresh** button is available in the toolbar.
+To change equipment or zones, edit the `PROJECTORS` / `PROJ_ZONES` and `CIP_DEVICES` / `CIP_ZONES` lists in `25broadway_dashboard.html`.
 
 ---
 
-## Barco Pulse API reference
+## 5. Running and maintaining it
 
-All projector communication uses **JSON-RPC 2.0 over TCP port 9090** (Barco Pulse API, ref. TDE9629).
+### Everyday commands
 
-### Properties used
+Run these from the `25B-ExperienceController` folder:
 
-| Property | Type | Notes |
-|---|---|---|
-| `system.state` | enum | `on` · `ready` · `standby` · `eco` · `boot` · `conditioning` · `deconditioning` · `error` |
-| `optics.shutter.position` | enum | `Open` · `Closed` |
-| `optics.shutter.target` | enum | Write `Open` or `Closed` to toggle |
-| `system.serialnumber` | string | Read-only, fetched once per connection |
-
-Model-specific properties (the two models name these differently — verified with `introspect` on each; mapped in `MODEL_PROPS` in the HTML):
-
-| Metric | UDM-4K30 (PRJ 1–17) | F80-4K12 (PRJ 18–19) |
-|---|---|---|
-| Laser runtime | `statistics.laserruntime.value` — **seconds** | `statistics.operating.laseron.value` — **minutes** (`getunit` → `minutes`) |
-| Mainboard temperature (°C) | `environment.temperature.mainboard.cpu.value` | `environment.temperature.mainboard.value` |
-| Temperature limits | `….mainboard.cpu.threshold.highwarning` / `.higherror` (90 / 100 °C) | `….mainboard.threshold.highwarning` / `.higherror` (80 / 83 °C) |
-
-`environment.temperature.mainboard` (without `.value`) does not exist on either model, and the F80 has no `statistics.laserruntime`. Temperature limits are read once per projector.
-
-### Methods used
-
-| Method | Notes |
+| Task | Command |
 |---|---|
-| `property.get` | Read a single property |
-| `property.set` | Write a property (shutter target) |
-| `property.subscribe` | Subscribe to push notifications on value change |
-| `system.poweron` | Power on |
-| `system.poweroff` | Power off |
+| Start, or update after `git pull` | `docker compose up -d --build` |
+| See whether it's running and healthy | `docker compose ps` |
+| View logs | `docker compose logs -f` |
+| Stop | `docker compose down` |
+| Back up settings | `docker compose cp experience-controller:/data/settings.json ./settings.backup.json` |
+| Restore settings | `docker compose cp ./settings.backup.json experience-controller:/data/settings.json` then `docker compose restart` |
 
-### Push notifications
+- The container restarts automatically after a crash or a reboot.
+- After an update, **reload every screen** that has the dashboard open, so it picks up the new version.
 
-After subscribing, the projector sends unsolicited `property.changed` notifications:
+### Settings file
 
-```json
-{
-  "method": "property.changed",
-  "params": {
-    "property": [{ "system.state": "on" }]
-  }
-}
+All shared settings live in a single file, `settings.json`: the Control Center address, scene timelines, tags, sort order and the Matrox account.
+
+- **With Docker**, it's stored in the `settings` Docker volume (`/data/settings.json`), so it survives rebuilds and updates. **`docker compose down -v` deletes it.**
+- It's excluded from git and is never served over the web. Back it up before moving the dashboard to another machine.
+
+### Options
+
+| Setting | Where | Default |
+|---|---|---|
+| Web port | Left side of `ports:` in `docker-compose.yml` (e.g. `"80:8080"`) | 8080 |
+| `PORT` | Environment variable: the port inside the container | 8080 |
+| `DATA_DIR` | Environment variable: the folder holding `settings.json` | `/data` (Docker), the app folder otherwise |
+
+If Docker's internal network ever overlaps a site network, pin it to a free range. There's a ready-made example at the bottom of `docker-compose.yml`.
+
+### Running without Docker
+
+You need Node.js (any recent LTS):
+
+```bash
+npm install
+```
+```bash
+npm start
 ```
 
-Projectors send the full dotted property name. The dashboard also accepts the flat last-segment form (`state`, `position`, `serialnumber`) as a fallback — but not for laser runtime or temperature, which both end in `.value` and would be ambiguous.
-
-Subscriptions last for the whole connection, so each `property.subscribe` is sent **once per connection** (tracked per projector, reset on reconnect) rather than on every refresh.
+`settings.json` is then created next to `proxy.js`.
 
 ---
 
-## Proxy internals
+## 6. Technical reference
 
-`proxy.js` handles partial TCP frames via two strategies:
+### Files
 
-1. **Newline-delimited** — splits on `\n` immediately
-2. **JSON boundary detection** — walks `{}` depth to extract complete objects when no newline arrives (10 ms debounce)
+```
+25B-ExperienceController/
+├── 25broadway_dashboard.html   Dashboard UI: HTML + CSS + JS in one file, no build step
+├── proxy.js                    Server: web, WebSocket→TCP bridge, Matrox proxy, settings, status checks
+├── Dockerfile                  Image (node:22-alpine, runs as non-root, health check)
+├── docker-compose.yml          Service, port, restart policy, settings volume
+├── manifest.webmanifest        Home-screen name and icons
+├── images/                     Scene thumbnails
+│   └── icons/                  App icon: source + favicon, apple-touch, 192/512, top-bar mark
+├── package.json                Version (source of truth), `npm start`, dependency: ws
+└── settings.json               Created on first save (git-ignored)
+```
 
-This makes it robust against TCP segmentation of large Barco responses.
+### Server API (`proxy.js`)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/` | The dashboard |
+| GET | `/api/health` | `{ ok, version }`. CORS enabled, for the Settings server test |
+| GET | `/api/settings` | Shared settings; Matrox is returned as `{ username, hasPassword }` only |
+| PUT | `/api/settings` | Merges the top-level keys given: `ccIp`, `sceneMap`, `sceneTags`, `knownTags`, `sceneSortOrder`, `matrox` |
+| POST | `/api/status[?fresh=1]` | Body `{ projectors: [ip…], matrox: [ip…] }` → `{ controlCenter, projectors: {ip: bool}, matrox: { devices: {ip: bool}, login } }`. Results are cached 10 s; `fresh=1` bypasses the cache |
+| GET | `/api/cc/status[?ip=…]` | Control Center reachability, `{ ip, port, reachable, latencyMs, error }`. `?ip=` tests an unsaved address |
+| POST | `/api/cc/trigger` | Forwards a `Task.Execute` body to Control Center. Returns `502` if unreachable |
+| POST | `/api/matrox-test` | Body `{ ip, username, password }` (blank password = the saved one) → `{ reachable, signedIn, error }`. No session is kept |
+| GET/POST | `/api/matrox/<ip>/<path>` | Pass-through to the device's REST API, signed in with the saved account |
+| WebSocket | `/?host=<ip>&port=9090` | Bridge to a projector's TCP control port |
+
+`settings.json` and dotfiles are never served.
+
+### Control Center
+
+- A scene trigger is a JSON-RPC `Task.Execute` request with `taskInternalName: "playTimeline"`, `taskCatalogName: "25b"` and the scene's `{ Key: tlKey, Value: tlValue }`.
+- It's posted to `http://<Control Center>:3030/sc-datastore/projectData/taskFlow`.
+- Status is a TCP connection test on port 3030.
+
+### Projectors: Barco Pulse API
+
+JSON-RPC 2.0 over TCP 9090 (Barco ref. TDE9629). The browser opens one WebSocket per projector at page load, and `proxy.js` bridges each one to the projector's TCP port.
+
+**Connection lifecycle**
+
+- Connections open at page load, staggered 150 ms apart.
+- On connect, the dashboard reads the state and subscribes to changes (`property.subscribe`, **once per connection**). After that the projector pushes `property.changed` updates.
+- Polling (every 5 s) only starts once the Projectors tab is opened. Laser hours and temperature are refreshed at most every 2 minutes; serial number and temperature limits are read once.
+- Reconnect uses exponential backoff: 1 s → 2 s → … → 60 s.
+- The optional PRJ18/19 retry every 30 s and never raise errors.
+
+**Methods:** `property.get`, `property.set` (shutter), `property.subscribe`, `system.poweron`, `system.poweroff`.
+
+**Properties**
+
+| Property | Notes |
+|---|---|
+| `system.state` | `on` · `ready` · `standby` · `eco` · `boot` · `conditioning` · `deconditioning` · `error`. Simple mode treats `standby` / `eco` / `ready` as **Off** |
+| `optics.shutter.position` / `.target` | `Open` / `Closed` (read / write) |
+| `system.serialnumber` | Read once per connection |
+
+Some properties differ by model. The dashboard maps them in `MODEL_PROPS`; each was verified with `introspect` on the real projectors:
+
+| Metric | UDM-4K30 (PRJ01–17) | F80-4K12 (PRJ18–19) |
+|---|---|---|
+| Laser runtime | `statistics.laserruntime.value` (seconds) | `statistics.operating.laseron.value` (minutes) |
+| Mainboard temperature | `environment.temperature.mainboard.cpu.value` | `environment.temperature.mainboard.value` |
+| Temperature limits | `…mainboard.cpu.threshold.highwarning` / `.higherror` (90 / 100 °C) | `…mainboard.threshold.highwarning` / `.higherror` (80 / 83 °C) |
+
+**Push notifications** use full property names: `{"method":"property.changed","params":{"property":[{"system.state":"on"}]}}`. As a fallback, the flat names `state`, `position` and `serialnumber` are also accepted. `value` is not accepted, because laser runtime and temperature both end in `.value` and it would be ambiguous.
+
+**TCP framing:** `proxy.js` splits projector responses on newlines. When no newline arrives, it extracts complete JSON objects by brace depth after 10 ms of silence. This handles large responses split across TCP packets.
+
+### Matrox ConvertIP
+
+- REST API over HTTPS 443, with cookie authentication (`session_token`).
+- `proxy.js` keeps one session per device and signs in again automatically on 401, 403, or a 200 response containing `"Not logged in"`. Changing the account in Settings drops all sessions.
+- Devices are polled every 10 s, staggered 150 ms apart, using `GET /device/status`.
+- A reboot is `POST /device/reboot` with `Content-Type: application/json` and a `{}` body; the device returns 400 without them.
+- Each decoder is linked to its projector by number (VDE*n* ↔ PRJ*n*), which drives the projector's **Video feed** detail.
+
+### Connection status checks
+
+| Connection | Check |
+|---|---|
+| Dashboard server | This screen → `GET /api/health` |
+| Control Center | Server → TCP connect to port 3030 |
+| Projectors | Server → TCP connect to each projector on port 9090. Projectors with a live bridge connection are counted without a new one |
+| Matrox | Server → TCP connect to each device on port 443, plus a sign-in check on the first reachable device (cached 30 s) |
+
+If the dashboard server is unreachable, the other three show **Unknown**.
 
 ---
 
-## Versioning
+## 7. Versioning
 
-This project follows [Semantic Versioning 2.0.0](https://semver.org) — `MAJOR.MINOR.PATCH`:
+This project follows [Semantic Versioning 2.0.0](https://semver.org), `MAJOR.MINOR.PATCH`. Each number is a separate counter, so after 1.9.0 the next feature release is **1.10.0**.
 
-- **MAJOR** — incompatible changes to the HTTP API (`/api/*`) or the `settings.json` format (existing settings/clients would stop working)
-- **MINOR** — new functionality that stays backward compatible
-- **PATCH** — backward-compatible bug fixes only
+| Part | Bumped for |
+|---|---|
+| **MAJOR** | Incompatible changes to the server API (`/api/*`) or the `settings.json` format, i.e. existing settings or tools would stop working |
+| **MINOR** | New functionality that stays backward compatible |
+| **PATCH** | Backward-compatible bug fixes only |
 
-The version lives in `package.json` (source of truth), the dashboard header (`brand-sub`), the README title and the changelog below — bump all four together.
+The version appears in four places, bumped together:
+- `package.json` (the source of truth)
+- the dashboard header
+- the title of this README
+- the changelog
+
+---
 
 ## Changelog
 
