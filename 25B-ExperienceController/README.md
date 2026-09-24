@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# 25 Broadway — Experience Controller · v1.20.1
+# 25 Broadway — Experience Controller · v1.21.0
 
 A web dashboard for running the AV system at 25 Broadway, NYC. From any browser or iPad on the network, operators can play scenes, power and shutter the projectors, and monitor the video-over-network devices.
 
@@ -71,7 +71,7 @@ cd vibecoding/25B-ExperienceController
 docker compose up -d --build
 ```
 
-Open **http://localhost:8080** on that computer, or **http://&lt;server-ip&gt;:8080** from any other screen on the network. On an iPad, use Safari's **Share → Add to Home Screen** to get an app icon.
+Open **http://localhost:8080** on that computer, or **http://&lt;server-ip&gt;:8080** from any other screen on the network. On an iPad or iPhone, use Safari's **Share → Add to Home Screen** to get an app icon.
 
 ### First-time configuration
 
@@ -89,6 +89,12 @@ Settings are saved on the server, so every screen shares them. The one exception
 ## 3. Using the dashboard
 
 The top bar has three tabs, **Scene Library**, **Projectors** and **Signal** (the Matrox ConvertIP devices), plus one status/Settings button.
+
+**On iPhone** the same dashboard adapts automatically (nothing to install or switch):
+- The top bar has two rows: logo and the status/Settings button, then the three tabs full width.
+- Scenes and projectors show two per row; in Projectors **Advanced** mode each projector gets a full-width card so every detail fits.
+- Filter rows and toolbars scroll sideways; Settings and the Projector report open full screen (report tables scroll sideways).
+- These phone rules only apply to screens narrower than 540 px, so the iPad and desktop layouts are unchanged.
 
 ### Connection status
 
@@ -494,6 +500,9 @@ The version appears in four places, bumped together:
 ---
 
 ## Changelog
+
+### v1.21.0 — 2026-09-23
+- **Feature:** iPhone layout — two-row top bar (status/Settings always visible, full-width tabs), content never wider than the screen, side-scrolling tag and filter rows, wrapping status strips, two-per-row scenes and demos, full-width projector cards in Advanced mode, full-screen Settings and Projector report. Phone-only (≤ 540 px): iPad and desktop layouts are unchanged
 
 ### v1.20.1 — 2026-09-23
 - **Change:** Projector report PDFs — the aging PDF is titled **Laser Hours**; **End of Life** is spelled out instead of EOL; the Health PDF shows each projector's **model** and no longer shows power / shutter
