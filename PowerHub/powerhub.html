@@ -612,15 +612,18 @@ function renderPdu() {
   const stale = p.online === false;
   const onCount = p.outlets.filter(o => o.on).length;
   const total = p.currents.reduce((a, b) => a + b, 0);
-  const currentsText = p.currents.length > 1
-    ? `${total.toFixed(2)}<small> A</small> <small>(${p.currents.map(x => x.toFixed(2)).join(' + ')})</small>`
-    : p.currents.length ? `${total.toFixed(2)}<small> A</small>` : '—';
+  const currentsText = p.currents.length ? `${total.toFixed(2)}<small> A</small>` : '—';
+  // The netBooter only measures amps: watts ≈ amps × mains voltage (read from the UPS, else 120 V nominal)
+  const volts = status.ups.online && status.ups.data?.inputVoltage > 80 ? status.ups.data.inputVoltage : 120;
+  const wattsText = p.currents.length ? `${Math.round(total * volts)}<small> W</small>` : '—';
+  const wattsHint = `Estimated: current × ${volts} V${volts === 120 ? ' (nominal)' : ' (mains voltage measured by the UPS)'}`;
 
   $('pduCard').innerHTML = head +
     (stale ? `<div class="alert bad">${ICONS.warn}Lost contact — outlet states below may be out of date</div>` : '') + `
     <div class="pdu-summary">
       <div class="metric"><div class="l">Outlets on</div><div class="v">${onCount}<small> / ${p.outlets.length}</small></div></div>
       <div class="metric"><div class="l">Current draw</div><div class="v">${currentsText}</div></div>
+      <div class="metric" title="${wattsHint}"><div class="l">Power ≈</div><div class="v">${wattsText}</div></div>
       ${p.tempC != null ? `<div class="metric"><div class="l">Temperature</div><div class="v">${fmt(p.tempC, '°C')}</div></div>` : ''}
     </div>
     <div class="btn-row" style="margin-bottom:14px">

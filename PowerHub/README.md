@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v1.1.0
+# PowerHub · v1.2.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -83,7 +83,7 @@ The UPS write community and the netBooter password are stored on the server and 
 
 - **Top right**: one overall status: *All good*, *Check UPS* (e.g. battery needs replacing), *On battery* or *Needs attention*. A red banner appears across the top during a power failure.
 - **UPS card**: battery %, runtime, load, input/output voltage, temperature. Self-test, reboot/off/on and runtime calibration are under **Power controls & details**, together with model, serial and firmware.
-- **netBooter card**: current draw (per bank on DU models), temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
+- **netBooter card**: total current draw and its approximate wattage, temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
 - **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (PowerHub doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
 - Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on but not off or power-cycled; **All off** skips them.
 
@@ -152,6 +152,10 @@ The console is a plain relay to the netBooter's telnet port. PowerHub strips tel
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 1.2.0 — 2026-09-25
+- netBooter card: current draw shows the total only (no per-sensor breakdown).
+- netBooter card: approximate power in watts next to the current draw, computed as amps × the mains voltage measured by the UPS (120 V if the UPS isn't available).
 
 ### 1.1.0 — 2026-09-24
 - Console: the netBooter's telnet command line in a terminal window (xterm.js), with quick-command buttons, local-echo and Backspace options, one session at a time and a 10-minute idle timeout.
