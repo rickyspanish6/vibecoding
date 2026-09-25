@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v2.0.0
+# PowerHub · v3.0.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -9,7 +9,7 @@ A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card
 - switch each of the 16 netBooter outlets on or off, power-cycle them, or switch them all at once
 - name the outlets and **lock** the critical ones (modem, router, network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard — they can still be power-cycled
 - open the netBooter's own command line (telnet) in a **Console** window, right in the dashboard
-- sign in with a password (you stay signed in for 30 days on each device)
+- give each person their own **username and password** (everyone has the same rights; the event log shows who did what), and stay signed in for 30 days on each device
 - keep an event log of power failures, restorations, low battery, and every command with the address it came from
 
 ```
@@ -68,7 +68,7 @@ Without Docker: `npm install`, then `npm start`.
 
 ### Configure PowerHub
 
-The first time you open PowerHub it asks you to **create a password** (at least 8 characters). Do this straight away after installing: until a password exists, whoever opens the page first gets to choose it.
+The first time you open PowerHub it asks you to **create the first user** (username, default `admin`, and a password of at least 8 characters). Do this straight away after installing: until a user exists, whoever opens the page first gets to create it. Add everyone else in **Settings › Users**.
 
 Then open **Settings** (gear icon, top right):
 
@@ -78,7 +78,7 @@ Then open **Settings** (gear icon, top right):
 | **netBooter** | Address, HTTP/HTTPS, username and password → **Test connection**; telnet port for the Console (default 23) |
 | **Outlets** | A name for each outlet, and **Locked** for anything that must stay on (it can still be power-cycled) |
 | **General** | How often the devices are read (default every 5 s) |
-| **Security** | Change the PowerHub password (signs out every other device), or sign out all other devices |
+| **Users** | Change your own password or sign out your other devices; add users, set another user's password, or remove a user |
 
 The UPS write community and the netBooter password are stored on the server and are never sent back to a browser.
 
@@ -89,6 +89,7 @@ The UPS write community and the netBooter password are stored on the server and 
 - **Top right**: one overall status: *All good*, *Check UPS* (e.g. battery needs replacing), *On battery* or *Needs attention*. A red banner appears across the top during a power failure.
 - **UPS card**: battery %, runtime, load, input/output voltage, temperature. Self-test, reboot/off/on and runtime calibration are under **Power controls & details**, together with model, serial and firmware.
 - **netBooter card**: total current draw and its approximate wattage, temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
+- **Top right**: who you're signed in as, and the sign-out button.
 - **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (PowerHub doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
 - Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on and power-cycled, but not turned off; **All off** skips them.
 
@@ -141,12 +142,16 @@ Everything except `/api/health` and `/api/auth/*` needs a signed-in session (the
 | Method | Path | Body |
 |---|---|---|
 | GET | `/api/health` | — (no sign-in needed; used by the Docker health check) |
-| GET | `/api/auth/status` | — → `{ passwordSet, authenticated }` |
-| POST | `/api/auth/setup` | `{ password }` — only while no password exists |
-| POST | `/api/auth/login` | `{ password }` |
+| GET | `/api/auth/status` | — → `{ usersExist, authenticated, user }` |
+| POST | `/api/auth/setup` | `{ username, password }` — creates the first user, only while there are none |
+| POST | `/api/auth/login` | `{ username, password }` |
 | POST | `/api/auth/logout` | — |
-| POST | `/api/auth/change` | `{ current, password }` — signs out every other device |
-| POST | `/api/auth/logout-others` | — |
+| POST | `/api/auth/change` | `{ current, password }` — your own password; signs out your other devices |
+| POST | `/api/auth/logout-others` | — signs out your other devices |
+| GET | `/api/users` | — → `[{ username, created, lastSeen, devices, you }]` |
+| POST | `/api/users` | `{ username, password }` — add a user |
+| POST | `/api/users/<name>/password` | `{ password }` — set another user's password (signs them out) |
+| DELETE | `/api/users/<name>` | — remove a user (not yourself) |
 | GET | `/api/status` | — |
 | GET / POST | `/api/settings` | settings object |
 | POST | `/api/test` | `{ device: 'ups'\|'pdu', config }` |
@@ -160,21 +165,22 @@ The console is a plain relay to the netBooter's telnet port. PowerHub strips tel
 
 ### Security
 
-- The password is stored as a salted scrypt hash in `settings.json`; it is never stored or sent back in clear.
-- Signing in sets an HttpOnly, SameSite=Strict cookie valid for 30 days after the last visit. Signing out, changing the password or **Sign out all other devices** ends sessions immediately.
+- Every user has the same rights, including adding and removing users. Usernames aren't case-sensitive.
+- Passwords are stored as salted scrypt hashes in `settings.json`; they are never stored or sent back in clear. A wrong username and a wrong password give the same answer and take the same time.
+- Signing in sets an HttpOnly, SameSite=Strict cookie valid for 30 days after the last visit. Signing out, changing a password, removing a user or **Sign out my other devices** ends sessions immediately.
 - Each wrong password waits 1 s; after 10 wrong passwords within 10 minutes, signing in is paused for 10 minutes (for everyone, since behind Docker all browsers share one address).
 - PowerHub serves plain HTTP, so the password crosses your network unencrypted — keep it on a trusted network, or put it behind a reverse proxy with HTTPS.
 
-**Forgot the password?** On the server:
+**Forgot a password?** Another user can set a new one in **Settings › Users**. If nobody can sign in, on the server:
 
 ```bash
-docker exec powerhub node server.js --reset-password
+docker exec powerhub node server.js --reset-password admin
 ```
 ```bash
 docker restart powerhub
 ```
 
-Then open PowerHub and create a new one. Device settings are kept.
+The first command prints a new random password for that user (default `admin`) and signs them out everywhere; other users and device settings are untouched. Sign in with it, then change it in **Settings › Users**.
 
 ---
 
@@ -183,6 +189,12 @@ Then open PowerHub and create a new one. Device settings are kept.
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 3.0.0 — 2026-09-25
+- **Users**: each person signs in with their own username and password; all users have the same rights. Settings › Users (replaces Security) to change your password, sign out your other devices, and add users, set their passwords or remove them. The top bar shows who is signed in, and the event log records actions *by* user.
+- The existing PowerHub password becomes the **admin** account automatically, and devices already signed in stay signed in as admin.
+- `--reset-password [username]` now prints a new password for one user instead of removing all passwords.
+- **Breaking (API):** `/api/auth/setup` and `/api/auth/login` take `{ username, password }`; `/api/auth/status` returns `{ usersExist, authenticated, user }` instead of `passwordSet`; new `/api/users` endpoints.
 
 ### 2.0.0 — 2026-09-25
 - **Password protection**: PowerHub asks to create a password on first visit, then requires signing in (30-day sessions per device). Sign-out button in the top bar; Settings › Security to change the password or sign out other devices; `--reset-password` for a forgotten password.

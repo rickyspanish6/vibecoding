@@ -225,6 +225,16 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 .auth-error { color: var(--red); font-size: 13px; min-height: 20px; margin: -4px 0 8px; }
 body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden; }
 .section-title { font-size: 13px; font-weight: 600; margin: 4px 0 12px; }
+.whoami { font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
+.users { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.user-row { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; background: var(--bg-2); border-radius: 10px; padding: 10px 12px; }
+.user-row .name { font-weight: 600; font-size: 13.5px; }
+.user-row .name .you { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-dim); border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+.user-row .meta { font-size: 12px; color: var(--text-2); }
+.user-row .actions { display: flex; gap: 6px; }
+.user-row .setpw { grid-column: 1 / -1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.user-row .setpw input { flex: 1 1 180px; background: var(--bg-card); border: 1px solid var(--border-md); border-radius: 8px; padding: 7px 10px; outline: none; }
+.user-row .setpw input:focus { border-color: var(--accent); }
 .divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 
 /* ── Console ── */
@@ -249,6 +259,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
 @media (max-width: 520px) {
   .topbar { padding-left: 14px; padding-right: 14px; }
   .brand-sub { display: none; }
+  .whoami { display: none; }
   #overallText { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
   .card { padding: 14px; }
   .outlets { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -273,6 +284,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
   </div>
   <div class="spacer"></div>
   <div class="pill" title="Overall status"><span class="dot" id="overallDot"></span><span id="overallText">Connecting…</span></div>
+  <span class="whoami" id="whoami"></span>
   <button class="icon-btn" id="signOutBtn" title="Sign out" aria-label="Sign out">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
   </button>
@@ -325,7 +337,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
         <button class="tab" data-pane="panePdu">netBooter</button>
         <button class="tab" data-pane="paneOutlets">Outlets</button>
         <button class="tab" data-pane="paneGeneral">General</button>
-        <button class="tab" data-pane="paneSecurity">Security</button>
+        <button class="tab" data-pane="paneUsers">Users</button>
       </div>
 
       <div class="pane active" id="paneUps">
@@ -380,22 +392,31 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
         <p class="note">How often the server reads the UPS and the netBooter.</p>
       </div>
 
-      <div class="pane" id="paneSecurity">
-        <div class="section-title">Change PowerHub password</div>
+      <div class="pane" id="paneUsers">
+        <div class="section-title">Your account · <span id="meName"></span></div>
         <form id="pwForm" autocomplete="on" onsubmit="return false">
-          <input type="text" name="username" value="powerhub" autocomplete="username" hidden>
+          <input type="text" id="pwUser" name="username" autocomplete="username" hidden>
           <div class="field" style="max-width:320px"><label for="pwCurrent">Current password</label><input id="pwCurrent" type="password" autocomplete="current-password"></div>
           <div class="row2" style="max-width:660px">
             <div class="field"><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" minlength="8"><span class="hint">At least 8 characters</span></div>
             <div class="field"><label for="pwConfirm">Repeat new password</label><input id="pwConfirm" type="password" autocomplete="new-password"></div>
           </div>
-          <div class="test-row"><button class="btn" id="pwChange" type="button">Change password</button><span class="test-result" id="pwResult"></span></div>
+          <div class="test-row"><button class="btn" id="pwChange" type="button">Change my password</button><span class="test-result" id="pwResult"></span></div>
         </form>
-        <p class="note" style="margin-top:10px">Changing the password signs out every other device.</p>
+        <p class="note" style="margin:10px 0 12px">Each browser stays signed in for 30 days after its last visit. Changing your password signs out your other devices.</p>
+        <div class="test-row"><button class="btn danger" id="signOutOthers" type="button">Sign out my other devices</button><span class="test-result" id="othersResult"></span></div>
         <hr class="divider">
-        <div class="section-title">Signed-in devices</div>
-        <p class="note" style="margin-bottom:12px">Each browser stays signed in for 30 days after its last visit.</p>
-        <div class="test-row"><button class="btn danger" id="signOutOthers" type="button">Sign out all other devices</button><span class="test-result" id="othersResult"></span></div>
+        <div class="section-title">Users</div>
+        <p class="note" style="margin-bottom:12px">Everyone has the same rights, including managing users. The event log shows who did what.</p>
+        <div class="users" id="userList"></div>
+        <div class="section-title" style="margin-top:18px">Add a user</div>
+        <form id="addUserForm" autocomplete="off" onsubmit="return false">
+          <div class="row2" style="max-width:660px">
+            <div class="field"><label for="newUser">Username</label><input id="newUser" type="text" maxlength="32" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off"><span class="hint">Letters, numbers, . _ -</span></div>
+            <div class="field"><label for="newUserPw">Password</label><input id="newUserPw" type="password" autocomplete="new-password"><span class="hint">At least 8 characters — give it to them privately</span></div>
+          </div>
+          <div class="test-row"><button class="btn" id="addUser" type="button">Add user</button><span class="test-result" id="addUserResult"></span></div>
+        </form>
       </div>
     </div>
     <div class="modal-foot">
@@ -439,7 +460,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
       <h1>PowerHub</h1>
       <p id="authLead">Enter the password to continue</p>
     </div>
-    <input type="text" name="username" value="powerhub" autocomplete="username" hidden>
+    <div class="field"><label for="authUser">Username</label><input id="authUser" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="32" required></div>
     <div class="field"><label for="authPassword" id="authPasswordLabel">Password</label><input id="authPassword" type="password" autocomplete="current-password" required></div>
     <div class="field" id="authConfirmField" hidden><label for="authConfirm">Repeat password</label><input id="authConfirm" type="password" autocomplete="new-password"></div>
     <div class="auth-error" id="authError"></div>
@@ -477,7 +498,7 @@ async function api(method, url, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && !url.startsWith('/api/auth/')) {
-    showAuth(data.passwordSet === false ? 'setup' : 'login');
+    showAuth(data.usersExist === false ? 'setup' : 'login');
     throw new Error('Sign in required');
   }
   if (!res.ok && data.ok === undefined) throw new Error(data.message || `HTTP ${res.status}`);
@@ -846,7 +867,9 @@ async function openSettings(pane) {
   $('pduPassHint').textContent = s.pdu.passwordSet ? 'Leave empty to keep the saved one' : '';
   $('pollSeconds').value = s.pollSeconds;
   $('upsTestResult').textContent = $('pduTestResult').textContent = '';
-  $('pwResult').textContent = $('othersResult').textContent = '';
+  $('pwResult').textContent = $('othersResult').textContent = $('addUserResult').textContent = '';
+  $('newUser').value = $('newUserPw').value = '';
+  loadUsers();
   $('pwCurrent').value = $('pwNew').value = $('pwConfirm').value = '';
 
   const count = Math.max(status?.pdu.outlets.length || 0, s.pdu.outlets.length, 16);
@@ -1030,19 +1053,26 @@ function showAuth(mode) {
   $('confirmOverlay').classList.remove('open');
   authMode = mode;
   const setup = mode === 'setup';
-  $('authLead').textContent = setup ? 'Create a password to protect PowerHub' : 'Enter the password to continue';
+  $('authLead').textContent = setup ? 'Create the first user to protect PowerHub' : 'Sign in to continue';
   $('authPasswordLabel').textContent = setup ? 'New password (at least 8 characters)' : 'Password';
   $('authPassword').autocomplete = setup ? 'new-password' : 'current-password';
   $('authConfirmField').hidden = !setup;
-  $('authSubmit').textContent = setup ? 'Create password' : 'Sign in';
+  $('authSubmit').textContent = setup ? 'Create user' : 'Sign in';
+  if (setup && !$('authUser').value) $('authUser').value = 'admin';
   $('authError').textContent = '';
   $('authPassword').value = $('authConfirm').value = '';
   document.body.classList.add('locked');
   $('authScreen').classList.add('open');
-  setTimeout(() => $('authPassword').focus(), 50);
+  setTimeout(() => ($('authUser').value ? $('authPassword') : $('authUser')).focus(), 50);
 }
 
-function enterApp() {
+let me = null;
+function enterApp(user) {
+  me = user;
+  $('whoami').textContent = user || '';
+  $('signOutBtn').title = user ? `Sign out (${user})` : 'Sign out';
+  $('meName').textContent = user || '';
+  $('pwUser').value = user || '';
   signedIn = true;
   document.body.classList.remove('locked');
   $('authScreen').classList.remove('open');
@@ -1051,7 +1081,8 @@ function enterApp() {
 
 $('authForm').addEventListener('submit', async e => {
   e.preventDefault();
-  const password = $('authPassword').value;
+  const username = $('authUser').value.trim(), password = $('authPassword').value;
+  if (!username) { $('authError').textContent = 'Enter a username'; return; }
   if (authMode === 'setup') {
     if (password.length < 8) { $('authError').textContent = 'Use at least 8 characters'; return; }
     if (password !== $('authConfirm').value) { $('authError').textContent = "The two passwords don't match"; return; }
@@ -1059,8 +1090,8 @@ $('authForm').addEventListener('submit', async e => {
   $('authSubmit').disabled = true;
   $('authError').textContent = '';
   try {
-    const r = await api('POST', authMode === 'setup' ? '/api/auth/setup' : '/api/auth/login', { password });
-    if (r.ok) enterApp();
+    const r = await api('POST', authMode === 'setup' ? '/api/auth/setup' : '/api/auth/login', { username, password });
+    if (r.ok) enterApp(r.user);
     else $('authError').textContent = r.message || 'Could not sign in';
   } catch (err) {
     $('authError').textContent = 'Could not reach PowerHub';
@@ -1090,7 +1121,7 @@ $('pwChange').onclick = async () => {
 };
 
 $('signOutOthers').onclick = async () => {
-  if (!(await confirmDialog('Sign out other devices?', 'Every other browser and phone will have to enter the password again.', 'Sign out others', true))) return;
+  if (!(await confirmDialog('Sign out your other devices?', `Every other browser and phone signed in as <b>${esc(me)}</b> will have to sign in again.`, 'Sign out others', true))) return;
   try {
     const r = await api('POST', '/api/auth/logout-others');
     $('othersResult').className = 'test-result ok';
@@ -1098,11 +1129,78 @@ $('signOutOthers').onclick = async () => {
   } catch (e) { toast(e.message, true); }
 };
 
+// ── Users ──
+function fmtAgo(t) {
+  if (!t) return 'not signed in';
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 2) return 'active now';
+  if (m < 60) return `active ${m} min ago`;
+  if (m < 48 * 60) return `active ${Math.round(m / 60)} h ago`;
+  return `active ${Math.round(m / 1440)} days ago`;
+}
+
+async function loadUsers() {
+  let users;
+  try { users = await api('GET', '/api/users'); } catch (e) { return; }
+  $('userList').innerHTML = users.map(u => `
+    <div class="user-row" data-user="${esc(u.username)}">
+      <div>
+        <div class="name">${esc(u.username)}${u.you ? '<span class="you">you</span>' : ''}</div>
+        <div class="meta">${fmtAgo(u.lastSeen)}${u.devices ? ` · ${u.devices} device${u.devices === 1 ? '' : 's'}` : ''}</div>
+      </div>
+      ${u.you ? '<div></div>' : `<div class="actions">
+        <button class="btn small" data-setpw>Set password</button>
+        <button class="btn small danger" data-remove>Remove</button>
+      </div>`}
+    </div>`).join('');
+  $('userList').querySelectorAll('.user-row').forEach(row => {
+    const name = row.dataset.user;
+    const setBtn = row.querySelector('[data-setpw]'), rmBtn = row.querySelector('[data-remove]');
+    if (setBtn) setBtn.onclick = () => {
+      if (row.querySelector('.setpw')) return row.querySelector('.setpw').remove();
+      const box = document.createElement('div');
+      box.className = 'setpw';
+      box.innerHTML = `<input type="password" placeholder="New password for ${esc(name)}" autocomplete="new-password">
+        <button class="btn small primary">Save</button><span class="test-result"></span>`;
+      row.appendChild(box);
+      const input = box.querySelector('input'), out = box.querySelector('.test-result');
+      input.focus();
+      const save = async () => {
+        if (input.value.length < 8) { out.className = 'test-result bad'; out.textContent = '✕ At least 8 characters'; return; }
+        const r = await api('POST', `/api/users/${encodeURIComponent(name)}/password`, { password: input.value }).catch(e => ({ ok: false, message: e.message }));
+        out.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
+        out.textContent = r.ok ? '✓ Saved — they were signed out' : '✕ ' + r.message;
+        if (r.ok) { input.value = ''; setTimeout(loadUsers, 1500); }
+      };
+      box.querySelector('button').onclick = save;
+      input.onkeydown = e => { if (e.key === 'Enter') save(); };
+    };
+    if (rmBtn) rmBtn.onclick = async () => {
+      if (!(await confirmDialog('Remove user?', `<b>${esc(name)}</b> will be signed out everywhere and won't be able to sign in again.`, 'Remove', true))) return;
+      const r = await api('DELETE', `/api/users/${encodeURIComponent(name)}`).catch(e => ({ ok: false, message: e.message }));
+      if (!r.ok) toast(r.message || 'Could not remove the user', true);
+      loadUsers();
+    };
+  });
+}
+
+$('addUser').onclick = async () => {
+  const out = $('addUserResult');
+  const username = $('newUser').value.trim(), password = $('newUserPw').value;
+  out.className = 'test-result bad';
+  if (!/^[A-Za-z0-9._-]{1,32}$/.test(username)) return out.textContent = '✕ Letters, numbers, . _ - only';
+  if (password.length < 8) return out.textContent = '✕ Password: at least 8 characters';
+  const r = await api('POST', '/api/users', { username, password }).catch(e => ({ ok: false, message: e.message }));
+  out.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
+  out.textContent = r.ok ? `✓ ${username} added` : '✕ ' + r.message;
+  if (r.ok) { $('newUser').value = $('newUserPw').value = ''; loadUsers(); }
+};
+
 (async function start() {
   try {
     const a = await api('GET', '/api/auth/status');
-    if (a.authenticated) enterApp();
-    else showAuth(a.passwordSet ? 'login' : 'setup');
+    if (a.authenticated) enterApp(a.user);
+    else showAuth(a.usersExist ? 'login' : 'setup');
   } catch (e) {
     showAuth('login');
     $('authError').textContent = 'Could not reach PowerHub';

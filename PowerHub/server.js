@@ -4,7 +4,7 @@
 //   • CyberPower UPS through its RMCARD205 network card (SNMP v1/v2c, CyberPower MIB)
 //   • Synaccess netBooter NP-1601DU PDU (HTTP/HTTPS cmd.cgi "$A" commands)
 //   • a telnet console to the netBooter's own command line (WebSocket ↔ TCP 23)
-// Everything except the sign-in screen needs the PowerHub password (created on first visit).
+// Everything except the sign-in screen needs a PowerHub user (the first one is created on first visit).
 // The server polls both devices, keeps an event log (events.json) and stores the
 // settings (settings.json). Browsers only ever talk to this server.
 //
@@ -18,8 +18,8 @@
 // Open:
 //   http://localhost:8090
 //
-// Forgot the password?  docker exec powerhub node server.js --reset-password
-//                        (then restart the container and create a new one)
+// Forgot a password?  docker exec powerhub node server.js --reset-password [username]
+//                      (prints a new password for that user, default admin; then restart PowerHub)
 //
 // Env: PORT (default 8090), DATA_DIR (folder for settings.json / events.json, default: this folder),
 //      MOCK=1 (simulated UPS and PDU — for trying the dashboard without hardware)
@@ -103,6 +103,7 @@ function saveSettings() {
 function publicSettings() {
   const out = JSON.parse(JSON.stringify(settings));
   delete out.auth;
+  delete out.users;
   for (const [dev, keys] of Object.entries(SECRET_KEYS)) {
     for (const k of keys) { out[dev][k + 'Set'] = !!out[dev][k]; delete out[dev][k]; }
   }
@@ -137,33 +138,55 @@ function mergeDevice(dev, current, incoming) {
   return next;
 }
 
-// ── Password & sessions ──────────────────────────────────────────────────────
-// One shared password, stored as a salted scrypt hash in settings.json (settings.auth).
-// Signing in gives a random session token in an HttpOnly cookie, valid 30 days from
-// last use. Only a SHA-256 of each token is kept (sessions.json), so the file can't be
-// used to sign in.
-const COOKIE      = 'powerhub_session';
-const SESSION_TTL = 30 * 24 * 3600 * 1000;
+// ── Users & sessions ─────────────────────────────────────────────────────────
+// Each person has a username and password; all users have the same rights. Passwords
+// are stored as salted scrypt hashes in settings.json (settings.users). Signing in gives
+// a random session token in an HttpOnly cookie, valid 30 days from last use. Only a
+// SHA-256 of each token is kept (sessions.json), so the file can't be used to sign in.
+const COOKIE       = 'powerhub_session';
+const SESSION_TTL  = 30 * 24 * 3600 * 1000;
 const MIN_PASSWORD = 8;
+const USERNAME_RE  = /^[A-Za-z0-9._-]{1,32}$/;
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   return { salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') };
 }
 
-function checkPassword(password) {
-  const a = settings.auth;
-  if (!a || !a.hash || typeof password !== 'string') return false;
-  const got = Buffer.from(hashPassword(password, a.salt).hash, 'hex');
-  const want = Buffer.from(a.hash, 'hex');
-  return got.length === want.length && crypto.timingSafeEqual(got, want);
+if (!Array.isArray(settings.users)) settings.users = [];
+// Up to 2.x there was one shared password: it becomes the "admin" account
+if (settings.auth && settings.auth.hash && !settings.users.length) {
+  settings.users.push({ username: 'admin', salt: settings.auth.salt, hash: settings.auth.hash, created: Date.now() });
+  delete settings.auth;
+  saveSettings();
+  console.log('[Auth] The PowerHub password is now the "admin" account');
 }
 
-const passwordSet = () => !!(settings.auth && settings.auth.hash);
+const findUser = name => settings.users.find(u => u.username.toLowerCase() === String(name || '').toLowerCase());
+const usersExist = () => settings.users.length > 0;
+
+// A dummy hash to compare against for unknown usernames, so both cases take the same time
+const DUMMY = hashPassword(crypto.randomBytes(16).toString('hex'));
+
+function checkPassword(username, password) {
+  const u = findUser(username);
+  const rec = u || DUMMY;
+  if (typeof password !== 'string') return null;
+  const got  = Buffer.from(hashPassword(password, rec.salt).hash, 'hex');
+  const want = Buffer.from(rec.hash, 'hex');
+  return u && got.length === want.length && crypto.timingSafeEqual(got, want) ? u : null;
+}
+
+function validPassword(password) {
+  return typeof password === 'string' && password.length >= MIN_PASSWORD;
+}
+
 const tokenId = token => crypto.createHash('sha256').update(token).digest('hex');
 
 let sessions = {};
 try { sessions = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); } catch (e) { sessions = {}; }
 let sessionsDirty = false;
+// Sessions from the single-password days belong to "admin"
+for (const s of Object.values(sessions)) if (!s.user) { s.user = 'admin'; sessionsDirty = true; }
 
 function saveSessions() {
   sessionsDirty = false;
@@ -183,23 +206,32 @@ function readCookie(req) {
   return m ? m[1] : null;
 }
 
-// Returns the session id of a valid session (and refreshes its last use), or null
+// Returns { id, user } for a valid session (refreshing its last use), or null
 function sessionOf(req) {
-  if (!passwordSet()) return null;
+  if (!usersExist()) return null;
   const token = readCookie(req);
   if (!token) return null;
   const id = tokenId(token);
   const s = sessions[id];
   if (!s || Date.now() - s.lastSeen > SESSION_TTL) return null;
+  const u = findUser(s.user);
+  if (!u) return null;                      // the user was removed
   if (Date.now() - s.lastSeen > 60000) { s.lastSeen = Date.now(); sessionsDirty = true; }
-  return id;
+  return { id, user: u.username };
 }
 
-function newSession(res, who) {
+function newSession(res, username, ip) {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessions[tokenId(token)] = { created: Date.now(), lastSeen: Date.now(), from: who };
+  sessions[tokenId(token)] = { user: username, created: Date.now(), lastSeen: Date.now(), from: ip };
   saveSessions();
   setSessionCookie(res, token, SESSION_TTL / 1000);
+}
+
+// Ends every session of a user, except the one with id `keep`
+function endSessions(username, keep) {
+  for (const [id, s] of Object.entries(sessions))
+    if (id !== keep && s.user.toLowerCase() === username.toLowerCase()) delete sessions[id];
+  saveSessions();
 }
 
 function setSessionCookie(res, token, maxAge) {
@@ -208,7 +240,7 @@ function setSessionCookie(res, token, maxAge) {
 
 // Wrong passwords: each one waits 1 s, and after 10 within 10 minutes sign-in is
 // paused for 10 minutes. Global rather than per address: behind Docker every
-// browser shows up with the same address.
+// browser can show up with the same address.
 const loginGuard = { fails: [], lockedUntil: 0 };
 function loginLocked() { return Date.now() < loginGuard.lockedUntil; }
 function loginFailed() {
@@ -221,13 +253,22 @@ function loginFailed() {
   }
 }
 
-// --reset-password: removes the password and every session, then exits
+// --reset-password [username]: gives that user (default: admin, or the only user) a new
+// random password, printed once, and signs them out everywhere. Other users are untouched.
 if (process.argv.includes('--reset-password')) {
-  delete settings.auth;
+  const arg = process.argv[process.argv.indexOf('--reset-password') + 1];
+  const u = arg ? findUser(arg) : (findUser('admin') || (settings.users.length === 1 ? settings.users[0] : null));
+  if (!u) {
+    console.log(settings.users.length
+      ? `No such user. Users: ${settings.users.map(x => x.username).join(', ')}`
+      : 'There are no users yet — open PowerHub to create the first one.');
+    process.exit(1);
+  }
+  const password = crypto.randomBytes(9).toString('base64url');
+  Object.assign(u, hashPassword(password));
   saveSettings();
-  sessions = {};
-  saveSessions();
-  console.log('PowerHub password removed. Restart PowerHub, then open it to create a new one.');
+  endSessions(u.username);
+  console.log(`New password for "${u.username}": ${password}\nNow restart PowerHub (docker restart powerhub), sign in with it, and change it in Settings › Users.`);
   process.exit(0);
 }
 
@@ -656,7 +697,8 @@ function statusPayload() {
 }
 
 async function handleApi(req, res, url) {
-  const who = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const ip = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  let who = ip;        // becomes the username once signed in; used in the event log
 
   if (url === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION });
 
@@ -667,69 +709,119 @@ async function handleApi(req, res, url) {
     if (!same) return sendJson(res, 403, { ok: false, message: 'Forbidden' });
   }
 
-  const sid = sessionOf(req);
+  const sess = sessionOf(req);
 
   if (url === '/api/auth/status' && req.method === 'GET')
-    return sendJson(res, 200, { passwordSet: passwordSet(), authenticated: !!sid, version: VERSION });
+    return sendJson(res, 200, { usersExist: usersExist(), authenticated: !!sess, user: sess ? sess.user : null, version: VERSION });
 
+  // First visit: create the first account
   if (url === '/api/auth/setup' && req.method === 'POST') {
-    if (passwordSet()) return sendJson(res, 409, { ok: false, message: 'A password is already set' });
-    const { password } = await readBody(req);
-    if (typeof password !== 'string' || password.length < MIN_PASSWORD)
-      return sendJson(res, 400, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
-    settings.auth = hashPassword(password);
+    if (usersExist()) return sendJson(res, 409, { ok: false, message: 'PowerHub already has users' });
+    const { username, password } = await readBody(req);
+    if (!USERNAME_RE.test(username || '')) return sendJson(res, 400, { ok: false, message: 'Usernames use letters, numbers, . _ - (up to 32)' });
+    if (!validPassword(password)) return sendJson(res, 400, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+    settings.users.push({ username, ...hashPassword(password), created: Date.now() });
     saveSettings();
-    newSession(res, who);
-    logEvent('info', 'PowerHub', `Password created (from ${who})`);
-    return sendJson(res, 200, { ok: true });
+    newSession(res, username, ip);
+    logEvent('info', 'PowerHub', `First user “${username}” created (from ${ip})`);
+    return sendJson(res, 200, { ok: true, user: username });
   }
 
   if (url === '/api/auth/login' && req.method === 'POST') {
-    if (!passwordSet()) return sendJson(res, 409, { ok: false, message: 'No password set yet' });
+    if (!usersExist()) return sendJson(res, 409, { ok: false, message: 'No users yet' });
     if (loginLocked()) return sendJson(res, 429, { ok: false, message: 'Too many wrong passwords. Try again in a few minutes.' });
-    const { password } = await readBody(req);
-    if (!checkPassword(password)) {
+    const { username, password } = await readBody(req);
+    const u = checkPassword(username, password);
+    if (!u) {
       loginFailed();
       await new Promise(r => setTimeout(r, 1000));
-      return sendJson(res, 401, { ok: false, message: 'Wrong password' });
+      return sendJson(res, 401, { ok: false, message: 'Wrong username or password' });
     }
-    newSession(res, who);
-    logEvent('info', 'PowerHub', `Signed in (from ${who})`);
-    return sendJson(res, 200, { ok: true });
+    newSession(res, u.username, ip);
+    logEvent('info', 'PowerHub', `${u.username} signed in (from ${ip})`);
+    return sendJson(res, 200, { ok: true, user: u.username });
   }
 
   if (url === '/api/auth/logout' && req.method === 'POST') {
-    if (sid) { delete sessions[sid]; saveSessions(); }
+    if (sess) { delete sessions[sess.id]; saveSessions(); }
     setSessionCookie(res, '', 0);
     return sendJson(res, 200, { ok: true });
   }
 
   // Everything below needs a signed-in session
-  if (!sid) return sendJson(res, 401, { ok: false, message: 'Sign in required', passwordSet: passwordSet() });
+  if (!sess) return sendJson(res, 401, { ok: false, message: 'Sign in required', usersExist: usersExist() });
+  who = sess.user;
 
+  // Your own password
   if (url === '/api/auth/change' && req.method === 'POST') {
     const { current, password } = await readBody(req);
-    if (!checkPassword(current)) {
+    if (!checkPassword(who, current)) {
       loginFailed();
       await new Promise(r => setTimeout(r, 1000));
       return sendJson(res, 200, { ok: false, message: 'The current password is wrong' });
     }
-    if (typeof password !== 'string' || password.length < MIN_PASSWORD)
-      return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
-    settings.auth = hashPassword(password);
+    if (!validPassword(password)) return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+    Object.assign(findUser(who), hashPassword(password));
     saveSettings();
-    sessions = {};                    // every other device has to sign in again
-    newSession(res, who);
-    logEvent('info', 'PowerHub', `Password changed — other devices signed out (from ${who})`);
+    endSessions(who, sess.id);
+    logEvent('info', 'PowerHub', `${who} changed their password — their other devices were signed out`);
     return sendJson(res, 200, { ok: true });
   }
 
   if (url === '/api/auth/logout-others' && req.method === 'POST') {
-    const n = Object.keys(sessions).length - 1;
-    sessions = { [sid]: sessions[sid] };
-    saveSessions();
-    logEvent('info', 'PowerHub', `Signed out ${n} other device${n === 1 ? '' : 's'} (from ${who})`);
+    const before = Object.keys(sessions).length;
+    endSessions(who, sess.id);
+    const n = before - Object.keys(sessions).length;
+    logEvent('info', 'PowerHub', `${who} signed out ${n} other device${n === 1 ? '' : 's'}`);
     return sendJson(res, 200, { ok: true, count: n });
+  }
+
+  // ── Users (every user can manage users) ──
+  if (url === '/api/users' && req.method === 'GET') {
+    return sendJson(res, 200, settings.users.map(u => {
+      const mine = Object.values(sessions).filter(s => s.user.toLowerCase() === u.username.toLowerCase());
+      return {
+        username: u.username, created: u.created || null,
+        lastSeen: mine.length ? Math.max(...mine.map(s => s.lastSeen)) : null,
+        devices: mine.length, you: u.username === who,
+      };
+    }));
+  }
+
+  if (url === '/api/users' && req.method === 'POST') {
+    const { username, password } = await readBody(req);
+    if (!USERNAME_RE.test(username || '')) return sendJson(res, 200, { ok: false, message: 'Usernames use letters, numbers, . _ - (up to 32)' });
+    if (findUser(username)) return sendJson(res, 200, { ok: false, message: `“${username}” already exists` });
+    if (!validPassword(password)) return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+    settings.users.push({ username, ...hashPassword(password), created: Date.now() });
+    saveSettings();
+    logEvent('info', 'PowerHub', `User “${username}” added by ${who}`);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  const um = url.match(/^\/api\/users\/([^/]+)(\/password)?$/);
+  if (um) {
+    const target = findUser(um[1]);
+    if (!target) return sendJson(res, 404, { ok: false, message: 'No such user' });
+
+    if (um[2] && req.method === 'POST') {
+      const { password } = await readBody(req);
+      if (!validPassword(password)) return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+      Object.assign(target, hashPassword(password));
+      saveSettings();
+      endSessions(target.username, sess.id);
+      logEvent('info', 'PowerHub', `Password of “${target.username}” set by ${who} — their devices were signed out`);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (!um[2] && req.method === 'DELETE') {
+      if (target.username === who) return sendJson(res, 200, { ok: false, message: "You can't remove yourself" });
+      settings.users = settings.users.filter(u => u !== target);
+      saveSettings();
+      endSessions(target.username);
+      logEvent('info', 'PowerHub', `User “${target.username}” removed by ${who}`);
+      return sendJson(res, 200, { ok: true });
+    }
   }
 
   if (url === '/api/status' && req.method === 'GET') return sendJson(res, 200, statusPayload());
@@ -745,7 +837,7 @@ async function handleApi(req, res, url) {
       pdu: mergeDevice('pdu', settings.pdu, body.pdu),
     };
     saveSettings();
-    logEvent('info', 'PowerHub', `Settings saved (from ${who})`);
+    logEvent('info', 'PowerHub', `Settings saved (by ${who})`);
     pollSoon();
     return sendJson(res, 200, publicSettings());
   }
@@ -780,7 +872,7 @@ async function handleApi(req, res, url) {
       } else {
         await upsAction(settings.ups, action);
       }
-      logEvent('action', settings.ups.name, `${UPS_ACTIONS[action].label} (from ${who})`);
+      logEvent('action', settings.ups.name, `${UPS_ACTIONS[action].label} (by ${who})`);
       pollSoon();
       return sendJson(res, 200, { ok: true });
     } catch (e) {
@@ -814,7 +906,7 @@ async function handleApi(req, res, url) {
         checkPduReply(await pduCommand(settings.pdu, cmd, 20000));
       }
       if (action === 'reboot') state.pendingReboots[n] = Date.now();
-      logEvent('action', settings.pdu.name, `${outletLabel(n)} ${action === 'reboot' ? 'power-cycled' : 'turned ' + action.toUpperCase()} (from ${who})`);
+      logEvent('action', settings.pdu.name, `${outletLabel(n)} ${action === 'reboot' ? 'power-cycled' : 'turned ' + action.toUpperCase()} (by ${who})`);
       if (action !== 'reboot' && state.pdu.outletStates.length >= n) state.pdu.outletStates[n - 1] = action === 'on';
       pollSoon();
       return sendJson(res, 200, { ok: true });
@@ -844,7 +936,7 @@ async function handleApi(req, res, url) {
         checkPduReply(await pduCommand(settings.pdu, `$A7 ${want === 'on' ? 1 : 0}`, 30000));
       }
       logEvent('action', settings.pdu.name,
-        `All outlets turned ${want.toUpperCase()}${want === 'off' && lockedOn.length ? ' (locked outlets left on)' : ''} (from ${who})`);
+        `All outlets turned ${want.toUpperCase()}${want === 'off' && lockedOn.length ? ' (locked outlets left on)' : ''} (by ${who})`);
       // Record the expected states now, so the next poll doesn't log each outlet again
       state.pdu.outletStates = state.pdu.outletStates.map((on, i) =>
         want === 'off' && lockedOn.includes(i + 1) ? on : want === 'on');
@@ -859,7 +951,7 @@ async function handleApi(req, res, url) {
   if (url === '/api/events' && req.method === 'DELETE') {
     events = [];
     eventsDirty = true;
-    logEvent('info', 'PowerHub', `Event log cleared (from ${who})`);
+    logEvent('info', 'PowerHub', `Event log cleared (by ${who})`);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -936,7 +1028,7 @@ function consoleSend(ws, obj) {
 }
 
 wss.on('connection', (ws, req) => {
-  const who = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const who = req.powerhubUser;
   const cfg = settings.pdu;
   const label = settings.pdu.name;
   if (MOCK || !cfg.host) {
@@ -967,7 +1059,7 @@ wss.on('connection', (ws, req) => {
     opened = true;
     bumpIdle();
     consoleSend(ws, { type: 'status', state: 'open', message: `Connected to ${label}` });
-    logEvent('info', label, `Console opened (from ${who})`);
+    logEvent('info', label, `Console opened (by ${who})`);
   });
   sock.on('data', chunk => {
     const data = filter(chunk);
@@ -993,7 +1085,7 @@ wss.on('connection', (ws, req) => {
     clearTimeout(idle);
     sock.destroy();
     if (activeConsole === ws) activeConsole = null;
-    if (opened) logEvent('info', label, 'Console closed');
+    if (opened) logEvent('info', label, `Console closed (by ${who})`);
   });
 });
 
@@ -1002,10 +1094,12 @@ server.on('upgrade', (req, socket, head) => {
   // Same-origin only, so another web page can't open the console through someone's browser
   let sameOrigin = false;
   try { sameOrigin = new URL(req.headers.origin).host === req.headers.host; } catch (e) {}
-  if (url !== '/api/console' || !sameOrigin || !sessionOf(req)) {
+  const sess = sessionOf(req);
+  if (url !== '/api/console' || !sameOrigin || !sess) {
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     return socket.destroy();
   }
+  req.powerhubUser = sess.user;
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
 
