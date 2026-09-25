@@ -3,6 +3,7 @@
 // Serves the PowerHub dashboard and talks to the power equipment for it:
 //   • CyberPower UPS through its RMCARD205 network card (SNMP v1/v2c, CyberPower MIB)
 //   • Synaccess netBooter NP-1601DU PDU (HTTP/HTTPS cmd.cgi "$A" commands)
+//   • a telnet console to the netBooter's own command line (WebSocket ↔ TCP 23)
 // The server polls both devices, keeps an event log (events.json) and stores the
 // settings (settings.json). Browsers only ever talk to this server.
 //
@@ -21,14 +22,16 @@
 
 const http  = require('http');
 const https = require('https');
+const net   = require('net');
 const fs    = require('fs');
 const path  = require('path');
 
-let snmp;
+let snmp, WebSocketServer;
 try {
   snmp = require('net-snmp');
+  WebSocketServer = require('ws').WebSocketServer;
 } catch (e) {
-  console.error('\n  ERROR: "net-snmp" package not found.');
+  console.error(`\n  ERROR: package not found (${e.message.split('\n')[0]}).`);
   console.error('  Run:  npm install\n');
   process.exit(1);
 }
@@ -61,6 +64,7 @@ const SETTINGS_DEFAULTS = {
     host:     '',
     protocol: 'http',            // 'http' or 'https' (HTTPS is only on DU models)
     port:     0,                 // 0 = protocol default
+    telnetPort: 23,              // for the Console
     username: 'admin',
     password: 'admin',
     outlets:  [],                // [{ name, locked }] by outlet number - 1
@@ -117,6 +121,7 @@ function mergeDevice(dev, current, incoming) {
   }
   if (dev === 'pdu') {
     next.protocol = next.protocol === 'https' ? 'https' : 'http';
+    next.telnetPort = Math.max(1, Math.min(65535, parseInt(next.telnetPort, 10) || 23));
     next.outlets  = (Array.isArray(next.outlets) ? next.outlets : []).slice(0, 32).map(o => ({
       name:   String((o && o.name) || '').slice(0, 40),
       locked: !!(o && o.locked),
@@ -330,6 +335,18 @@ function pduCommand(cfg, cmd, timeoutMs) {
   return p;
 }
 
+// Reading status changes nothing, so a dropped connection is retried once straight away.
+// Commands are never retried: a repeated power-cycle would cycle the outlet twice.
+async function pduStatus(cfg) {
+  try {
+    return await pduCommand(cfg, '$A5', 4000);
+  } catch (e) {
+    if (!['ECONNRESET', 'EPIPE'].includes(e.code) && !/socket hang up/i.test(e.message)) throw e;
+    await new Promise(r => setTimeout(r, 300));
+    return pduCommand(cfg, '$A5', 4000);
+  }
+}
+
 function checkPduReply(body) {
   if (/\$AF/.test(body)) throw new Error('The netBooter refused the command');
   if (!/\$A0/.test(body)) throw new Error(`Unexpected reply: ${body.slice(0, 60)}`);
@@ -394,9 +411,15 @@ const state = {
 
 const configured = dev => MOCK || (settings[dev].enabled && !!settings[dev].host);
 
+// A device only counts as offline after two failed polls in a row, so one dropped
+// request (the netBooter's web server does that now and then) isn't reported as an outage
+const failures = { ups: 0, pdu: 0 };
+
 function setOnline(dev, ok, err) {
   const s = state[dev];
   const name = settings[dev].name;
+  failures[dev] = ok ? 0 : failures[dev] + 1;
+  if (!ok && failures[dev] < 2 && s.online) return;
   if (ok && s.online === false) logEvent('info', name, 'Connection restored');
   if (!ok && s.online !== false) logEvent('alarm', name, `Not responding — ${err}`);
   s.online = ok;
@@ -436,7 +459,7 @@ async function pollUps() {
 async function pollPdu() {
   if (!configured('pdu')) { state.pdu = { online: null, error: null, updatedAt: null, outletStates: [], currents: [], tempC: null }; return; }
   try {
-    const s = MOCK ? mockPdu() : parsePduStatus(await pduCommand(settings.pdu, '$A5', 4000));
+    const s = MOCK ? mockPdu() : parsePduStatus(await pduStatus(settings.pdu));
     const prev = state.pdu.outletStates;
     if (prev.length === s.outletStates.length) {
       s.outletStates.forEach((on, i) => {
@@ -488,6 +511,12 @@ const STATIC = {
   '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json'],
 };
 const MIME = { '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
+// Terminal emulator for the Console, served from node_modules so it works without internet
+const VENDOR = {
+  '/vendor/xterm.js':     ['@xterm/xterm/lib/xterm.js', 'text/javascript'],
+  '/vendor/xterm.css':    ['@xterm/xterm/css/xterm.css', 'text/css'],
+  '/vendor/addon-fit.js': ['@xterm/addon-fit/lib/addon-fit.js', 'text/javascript'],
+};
 
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -554,7 +583,7 @@ async function handleApi(req, res, url) {
         const d = normalizeUps(await readUpsRaw(cfg));
         return sendJson(res, 200, { ok: true, message: [d.model, d.upsName].filter(Boolean).join(' · ') || 'Connected' });
       }
-      const s = parsePduStatus(await pduCommand(cfg, '$A5', 4000));
+      const s = parsePduStatus(await pduStatus(cfg));
       return sendJson(res, 200, { ok: true, message: `${s.outletStates.length} outlets` });
     } catch (e) {
       return sendJson(res, 200, { ok: false, message: dev === 'ups' ? snmpErrorText(e) : netErrorText(e) });
@@ -668,6 +697,11 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' });
       return fs.createReadStream(path.join(DIR, file)).pipe(res);
     }
+    if (VENDOR[url]) {
+      const [file, type] = VENDOR[url];
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'max-age=86400' });
+      return fs.createReadStream(require.resolve(file)).pipe(res);
+    }
     if (/^\/images\/icons\/[\w.-]+$/.test(url) && MIME[path.extname(url)]) {
       const file = path.join(DIR, url);
       if (fs.existsSync(file)) {
@@ -680,6 +714,120 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     sendJson(res, 500, { ok: false, message: e.message });
   }
+});
+
+// ── netBooter telnet console (WebSocket /api/console ↔ TCP telnet) ───────────
+// A plain relay: the person at the console logs in to the netBooter themselves —
+// PowerHub never sends the saved password here, and never logs what is typed.
+// Only one console at a time (the netBooter allows a single telnet session);
+// opening a new one closes the previous one. Idle sessions close after 10 minutes.
+const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
+const TELOPT_ECHO = 1, TELOPT_SGA = 3;
+const CONSOLE_IDLE_MS = 10 * 60 * 1000;
+const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+let activeConsole = null;
+
+// Strips telnet commands from the device's output and answers option requests:
+// we let the device echo and suppress go-ahead, and refuse everything else.
+function telnetFilter(sock) {
+  let state = 0, cmd = 0;
+  return chunk => {
+    const out = [];
+    for (const b of chunk) {
+      if (state === 0) { if (b === IAC) state = 1; else out.push(b); }
+      else if (state === 1) {
+        if (b === IAC) { out.push(IAC); state = 0; }
+        else if (b === SB) state = 3;
+        else if (b >= WILL && b <= DONT) { cmd = b; state = 2; }
+        else state = 0;
+      } else if (state === 2) {
+        const ok = b === TELOPT_ECHO || b === TELOPT_SGA;
+        if (cmd === WILL) sock.write(Buffer.from([IAC, ok ? DO : DONT, b]));
+        else if (cmd === DO) sock.write(Buffer.from([IAC, b === TELOPT_SGA ? WILL : WONT, b]));
+        state = 0;
+      } else if (state === 3) { if (b === IAC) state = 4; }
+      else if (state === 4) state = b === SE ? 0 : 3;
+    }
+    return Buffer.from(out);
+  };
+}
+
+function consoleSend(ws, obj) {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+}
+
+wss.on('connection', (ws, req) => {
+  const who = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+  const cfg = settings.pdu;
+  const label = settings.pdu.name;
+  if (MOCK || !cfg.host) {
+    consoleSend(ws, { type: 'status', state: 'closed', message: MOCK ? 'The console is not available in demo mode.' : 'Set up the netBooter address in Settings first.' });
+    return ws.close();
+  }
+  if (activeConsole) {
+    consoleSend(activeConsole, { type: 'status', state: 'closed', message: 'Console opened on another screen — this session was closed.' });
+    activeConsole.close();
+  }
+  activeConsole = ws;
+
+  const sock = net.connect({ host: cfg.host, port: cfg.telnetPort || 23 });
+  const filter = telnetFilter(sock);
+  let idle, opened = false;
+  const bumpIdle = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => {
+      consoleSend(ws, { type: 'status', state: 'closed', message: 'Closed after 10 minutes without activity.' });
+      ws.close();
+    }, CONSOLE_IDLE_MS);
+  };
+  const connectTimer = setTimeout(() => sock.destroy(new Error('No response — timed out')), 8000);
+
+  consoleSend(ws, { type: 'status', state: 'connecting', message: `Connecting to ${label}…` });
+  sock.on('connect', () => {
+    clearTimeout(connectTimer);
+    opened = true;
+    bumpIdle();
+    consoleSend(ws, { type: 'status', state: 'open', message: `Connected to ${label}` });
+    logEvent('info', label, `Console opened (from ${who})`);
+  });
+  sock.on('data', chunk => {
+    const data = filter(chunk);
+    if (data.length) consoleSend(ws, { type: 'data', data: data.toString('latin1') });
+  });
+  sock.on('error', e => consoleSend(ws, { type: 'status', state: 'closed', message: `Could not connect: ${netErrorText(e)}` }));
+  sock.on('close', () => {
+    clearTimeout(connectTimer);
+    clearTimeout(idle);
+    consoleSend(ws, { type: 'status', state: 'closed', message: 'Connection closed by the netBooter.' });
+    ws.close();
+  });
+
+  ws.on('message', raw => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch (e) { return; }
+    if (msg.type === 'data' && typeof msg.data === 'string' && opened) {
+      bumpIdle();
+      sock.write(Buffer.from(msg.data, 'latin1'));
+    }
+  });
+  ws.on('close', () => {
+    clearTimeout(idle);
+    sock.destroy();
+    if (activeConsole === ws) activeConsole = null;
+    if (opened) logEvent('info', label, 'Console closed');
+  });
+});
+
+server.on('upgrade', (req, socket, head) => {
+  const url = (req.url || '').split('?')[0];
+  // Same-origin only, so another web page can't open the console through someone's browser
+  let sameOrigin = false;
+  try { sameOrigin = new URL(req.headers.origin).host === req.headers.host; } catch (e) {}
+  if (url !== '/api/console' || !sameOrigin) {
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    return socket.destroy();
+  }
+  wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
 
 server.listen(HTTP_PORT, () => {

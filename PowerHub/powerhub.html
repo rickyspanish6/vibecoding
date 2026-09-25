@@ -212,6 +212,19 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 .toast.bad { border-color: rgba(240,96,90,0.5); color: var(--red); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 
+/* ── Console ── */
+.modal.console { max-width: 980px; height: min(86vh, 720px); }
+.console-head .state { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); font-weight: 500; }
+.console-body { flex: 1; min-height: 0; padding: 10px 12px; background: #0a0b0d; }
+#term { width: 100%; height: 100%; }
+#term .xterm-viewport { background: transparent !important; }
+.console-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.console-foot .quick { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.console-foot .btn { font-family: var(--mono); font-size: 12px; }
+.console-foot .opts { display: flex; gap: 14px; }
+.console-foot .opts label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.console-foot .opts input { accent-color: var(--accent); }
+
 /* ── Responsive ── */
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; padding: 14px 14px 24px; gap: 14px; }
@@ -228,6 +241,8 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
   .ring { width: 100px; height: 100px; }
   .row2 { grid-template-columns: 1fr; gap: 0; }
   .modal { border-radius: 16px; }
+  .modal.console { height: calc(100vh - 32px); }
+  .console-foot .opts { width: 100%; }
 }
 </style>
 </head>
@@ -325,6 +340,10 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
           <div class="field"><label for="pduPort">Port</label><input id="pduPort" type="number" min="0" max="65535"><span class="hint">0 = default (80 / 443)</span></div>
         </div>
         <div class="row2">
+          <div class="field"><label for="pduTelnetPort">Telnet port (Console)</label><input id="pduTelnetPort" type="number" min="1" max="65535"></div>
+          <div></div>
+        </div>
+        <div class="row2">
           <div class="field"><label for="pduUser">Username</label><input id="pduUser" type="text" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
           <div class="field"><label for="pduPass">Password</label><input id="pduPass" type="password" autocomplete="new-password"><span class="hint" id="pduPassHint"></span></div>
         </div>
@@ -349,6 +368,32 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
   </div>
 </div>
 
+<!-- netBooter telnet console -->
+<div class="overlay" id="consoleOverlay">
+  <div class="modal console" role="dialog" aria-modal="true" aria-labelledby="consoleTitle">
+    <div class="modal-head console-head">
+      <h2 id="consoleTitle">Console</h2>
+      <span class="state"><span class="dot" id="consoleDot"></span><span id="consoleState">Not connected</span></span>
+      <button class="btn small" id="consoleReconnect">Reconnect</button>
+      <button class="icon-btn" id="consoleClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="console-body"><div id="term"></div></div>
+    <div class="console-foot">
+      <div class="quick">
+        <button class="btn small" data-cmd="pshow" title="Show outlet status">pshow</button>
+        <button class="btn small" data-cmd="sysshow" title="Show system information">sysshow</button>
+        <button class="btn small" data-cmd="ver" title="Show firmware version">ver</button>
+        <button class="btn small" data-cmd="help" title="List commands">help</button>
+        <button class="btn small" data-cmd="logout" title="Log out of the netBooter">logout</button>
+      </div>
+      <div class="opts">
+        <label title="Show what you type, for devices that don't echo it back"><input type="checkbox" id="optEcho"> Local echo</label>
+        <label title="Send Ctrl-H instead of DEL for Backspace"><input type="checkbox" id="optBs"> Backspace = ^H</label>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -362,7 +407,7 @@ const ICONS = {
   cycle:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
   power:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><path d="M12 2v10"/></svg>',
   test:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
-  bell:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/></svg>',
   warn:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
 };
 
@@ -502,14 +547,11 @@ function renderUps() {
       </div>
     </div>
     <div class="metrics">${upsMetrics(d)}</div>
-    <div class="btn-row">
-      <button class="btn" id="upsSelfTest" ${testBusy || stale ? 'disabled' : ''}>${ICONS.test}${d.testResult === 'inProgress' ? 'Testing…' : 'Self-test'}</button>
-      <button class="btn" id="upsBeep" ${stale ? 'disabled' : ''}>${ICONS.bell}Locate (beep)</button>
-    </div>
     <details class="more" id="upsMore" ${upsMoreOpen ? 'open' : ''}>
       <summary>Power controls & details</summary>
       <div class="inner">
         <div class="btn-row">
+          <button class="btn" id="upsSelfTest" ${testBusy || stale ? 'disabled' : ''}>${ICONS.test}${d.testResult === 'inProgress' ? 'Testing…' : 'Self-test'}</button>
           ${off ? `<button class="btn good" id="upsOn" ${stale ? 'disabled' : ''}>${ICONS.power}Turn output on</button>`
                 : `<button class="btn danger" id="upsReboot" ${stale ? 'disabled' : ''}>${ICONS.cycle}Reboot UPS</button>
                    <button class="btn danger" id="upsOff" ${stale ? 'disabled' : ''}>${ICONS.power}Turn output off</button>`}
@@ -528,7 +570,6 @@ function renderUps() {
 
   $('upsMore').addEventListener('toggle', e => { upsMoreOpen = e.target.open; });
   $('upsSelfTest').onclick = () => upsCommand('selfTest', 'Run a battery self-test?', 'The UPS briefly switches to battery to check it. Connected equipment stays powered.', 'Start test');
-  $('upsBeep').onclick = () => upsCommand('beep');
   $('upsCalib').onclick = () => upsCommand('calibrate', 'Run a runtime calibration?', 'The UPS runs on battery <b>until it is nearly empty</b> to measure runtime, then recharges. Only do this with a stable load and no expected outages.', 'Start calibration', true);
   if ($('upsReboot')) $('upsReboot').onclick = () => upsCommand('reboot', 'Reboot the UPS?', `Everything plugged into <b>${esc(u.name)}</b> will lose power, then come back on.`, 'Reboot UPS', true);
   if ($('upsOff')) $('upsOff').onclick = () => upsCommand('turnOff', 'Turn the UPS output off?', `Everything plugged into <b>${esc(u.name)}</b> will lose power and <b>stay off</b> until the output is turned back on.`, 'Turn off', true);
@@ -555,6 +596,7 @@ function renderPdu() {
     <div class="card-head">
       <div><div class="card-kind">Power strip</div><div class="card-title">${esc(p.name)}</div></div>
       <div class="spacer"></div>
+      ${p.configured && !status.mock ? `<button class="btn small" onclick="openConsole()" title="The netBooter's own command line (telnet)">${ICONS.terminal}Console</button>` : ''}
       <span class="badge ${c.cls}"><span class="dot ${c.cls}"></span>${esc(c.text)}</span>
     </div>`;
 
@@ -658,7 +700,7 @@ async function upsCommand(action, title, text, okLabel, danger) {
   busy.add('ups:' + action); render();
   try {
     const r = await api('POST', '/api/ups/action', { action });
-    if (r.ok) toast(action === 'beep' ? 'The UPS will beep and flash' : 'Command sent to the UPS');
+    if (r.ok) toast('Command sent to the UPS');
     else toast(r.message || 'The UPS refused the command', true);
   } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
   busy.delete('ups:' + action);
@@ -667,7 +709,6 @@ async function upsCommand(action, title, text, okLabel, danger) {
 
 async function outletCommand(o, action) {
   const label = o.name ? `<b>${esc(o.name)}</b> (outlet ${o.n})` : `<b>outlet ${o.n}</b>`;
-  if (action === 'off' && !(await confirmDialog('Turn off outlet?', `This cuts power to ${label}.`, 'Turn off', true))) return;
   if (action === 'reboot' && !(await confirmDialog('Power-cycle outlet?', `${label} will turn off, then back on after the netBooter's reboot delay.`, 'Power-cycle', true))) return;
   busy.add('outlet:' + o.n); render();
   try {
@@ -737,6 +778,7 @@ async function openSettings(pane) {
   $('pduHost').value = s.pdu.host;
   $('pduProtocol').value = s.pdu.protocol;
   $('pduPort').value = s.pdu.port;
+  $('pduTelnetPort').value = s.pdu.telnetPort || 23;
   $('pduUser').value = s.pdu.username;
   $('pduPass').value = '';
   $('pduPass').placeholder = s.pdu.passwordSet ? '•••••••• (unchanged)' : 'Password';
@@ -775,7 +817,7 @@ function formPdu() {
   }));
   return {
     enabled: $('pduEnabled').checked, name: $('pduName').value.trim() || 'netBooter', host: $('pduHost').value.trim(),
-    protocol: $('pduProtocol').value, port: $('pduPort').value,
+    protocol: $('pduProtocol').value, port: $('pduPort').value, telnetPort: $('pduTelnetPort').value,
     username: $('pduUser').value, password: $('pduPass').value, outlets,
   };
 }
@@ -811,8 +853,108 @@ $('settingsSave').onclick = async () => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if ($('confirmOverlay').classList.contains('open')) $('confirmCancel').click();
+  else if ($('consoleOverlay').classList.contains('open')) return;   // Escape belongs to the terminal
   else if ($('settingsOverlay').classList.contains('open')) closeSettings();
 });
+
+// ── netBooter console (xterm.js ↔ WebSocket ↔ telnet, relayed by the server) ──
+let term = null, fitAddon = null, consoleWs = null;
+const consoleOpts = { echo: false, bs: false };
+try { Object.assign(consoleOpts, JSON.parse(localStorage.getItem('powerhub.console') || '{}')); } catch (e) {}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = src; el.onload = resolve; el.onerror = () => reject(new Error('Could not load ' + src));
+    document.head.appendChild(el);
+  });
+}
+
+async function ensureTerminal() {
+  if (term) return;
+  const css = document.createElement('link');
+  css.rel = 'stylesheet'; css.href = 'vendor/xterm.css';
+  document.head.appendChild(css);
+  await loadScript('vendor/xterm.js');
+  await loadScript('vendor/addon-fit.js');
+  term = new Terminal({
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 13, cursorBlink: true, convertEol: false,
+    scrollback: 5000,
+    theme: { background: '#0a0b0d', foreground: '#e6e8eb', cursor: '#f5c542', selectionBackground: 'rgba(245,197,66,0.3)' },
+  });
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open($('term'));
+  term.onData(data => {
+    if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+    let out = data.replace(/\r/g, '\r\n');          // telnet: Enter is CR LF
+    if (consoleOpts.bs) out = out.replace(/\x7f/g, '\b');
+    consoleWs.send(JSON.stringify({ type: 'data', data: out }));
+    if (consoleOpts.echo) term.write(data.replace(/\r/g, '\r\n').replace(/\x7f|\b/g, '\b \b'));
+  });
+  window.addEventListener('resize', () => { if ($('consoleOverlay').classList.contains('open')) fitAddon.fit(); });
+}
+
+function setConsoleState(state, message) {
+  $('consoleDot').className = 'dot ' + ({ open: 'ok', connecting: 'warn', closed: '' }[state] || '');
+  $('consoleState').textContent = message || state;
+  $('consoleReconnect').style.display = state === 'closed' ? '' : 'none';
+}
+
+function connectConsole() {
+  if (consoleWs) consoleWs.close();
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/console`);
+  consoleWs = ws;
+  let lastMessage = '';
+  setConsoleState('connecting', 'Connecting…');
+  ws.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'data') term.write(msg.data);
+    if (msg.type === 'status') {
+      lastMessage = msg.message;
+      setConsoleState(msg.state, msg.state === 'open' ? 'Connected' : msg.message);
+      if (msg.state === 'closed') term.write(`\r\n\x1b[33m— ${msg.message} —\x1b[0m\r\n`);
+    }
+  };
+  ws.onclose = () => {
+    if (consoleWs !== ws) return;
+    consoleWs = null;
+    setConsoleState('closed', lastMessage || 'Disconnected');
+  };
+}
+
+async function openConsole() {
+  $('consoleTitle').textContent = `Console · ${status?.pdu.name || 'netBooter'}`;
+  $('optEcho').checked = consoleOpts.echo;
+  $('optBs').checked = consoleOpts.bs;
+  $('consoleOverlay').classList.add('open');
+  try { await ensureTerminal(); }
+  catch (e) { setConsoleState('closed', e.message); return; }
+  fitAddon.fit();
+  term.focus();
+  if (!consoleWs) { term.reset(); connectConsole(); }
+}
+
+function closeConsole() {
+  $('consoleOverlay').classList.remove('open');
+  if (consoleWs) { const ws = consoleWs; consoleWs = null; ws.close(); }
+}
+
+$('consoleClose').onclick = closeConsole;
+$('consoleReconnect').onclick = () => { term.reset(); connectConsole(); term.focus(); };
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => {
+  if (!consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+  consoleWs.send(JSON.stringify({ type: 'data', data: b.dataset.cmd + '\r\n' }));
+  if (consoleOpts.echo) term.write(b.dataset.cmd + '\r\n');
+  term.focus();
+});
+for (const [id, key] of [['optEcho', 'echo'], ['optBs', 'bs']]) {
+  $(id).onchange = () => {
+    consoleOpts[key] = $(id).checked;
+    try { localStorage.setItem('powerhub.console', JSON.stringify(consoleOpts)); } catch (e) {}
+    term && term.focus();
+  };
+}
 
 refresh();
 </script>
