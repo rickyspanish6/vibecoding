@@ -622,7 +622,8 @@ async function handleApi(req, res, url) {
       return sendJson(res, 400, { ok: false, message: 'Bad request' });
     if (!configured('pdu')) return sendJson(res, 400, { ok: false, message: 'netBooter is not set up' });
     const o = settings.pdu.outlets[n - 1];
-    if (o && o.locked && action !== 'on')
+    // Locked outlets can be power-cycled (they come back on by themselves) but not turned off
+    if (o && o.locked && action === 'off')
       return sendJson(res, 200, { ok: false, message: `${outletLabel(n)} is locked. Unlock it in Settings first.` });
     try {
       if (MOCK) {

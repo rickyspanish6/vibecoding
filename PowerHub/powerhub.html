@@ -352,7 +352,7 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
       </div>
 
       <div class="pane" id="paneOutlets">
-        <p class="note" style="margin-bottom:14px">Name each outlet after what it powers. <b>Locked</b> outlets can't be turned off or power-cycled from the dashboard (use it for the network switch, the server running PowerHub, …).</p>
+        <p class="note" style="margin-bottom:14px">Name each outlet after what it powers. <b>Locked</b> outlets can't be turned off from the dashboard, but can still be power-cycled (they come back on by themselves) (use it for the network switch, the server running PowerHub, …).</p>
         <div id="outletEditList"></div>
       </div>
 
@@ -641,11 +641,11 @@ function renderPdu() {
           <div class="outlet-top">
             <span class="outlet-num">${o.n}</span>
             <span class="outlet-name ${o.name ? '' : 'unnamed'}" title="${esc(o.name)}">${esc(o.name || 'Outlet ' + o.n)}</span>
-            ${o.locked ? `<span class="outlet-lock" title="Locked — can't be turned off from here">${ICONS.lock}</span>` : ''}
+            ${o.locked ? `<span class="outlet-lock" title="Locked — can be power-cycled, but not turned off from here">${ICONS.lock}</span>` : ''}
           </div>
           <div class="outlet-bottom">
             <span class="outlet-state">${stateText}</span>
-            <button class="btn small" data-reboot="${o.n}" title="Power-cycle" aria-label="Power-cycle outlet ${o.n}" ${stale || b || !o.on || o.locked || o.rebooting ? 'disabled' : ''}>${ICONS.cycle}</button>
+            <button class="btn small" data-reboot="${o.n}" title="Power-cycle" aria-label="Power-cycle outlet ${o.n}" ${stale || b || !o.on || o.rebooting ? 'disabled' : ''}>${ICONS.cycle}</button>
             <button class="switch ${o.on ? 'on' : ''} ${b ? 'busy' : ''}" data-toggle="${o.n}" role="switch" aria-checked="${o.on}" aria-label="Outlet ${o.n} power" ${stale || b || lockedBlocksOff || o.rebooting ? 'disabled' : ''}></button>
           </div>
         </div>`;

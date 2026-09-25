@@ -1,13 +1,13 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v1.2.0
+# PowerHub · v1.3.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
 - see whether the building has power, the UPS battery level, the remaining runtime and the load
 - run a UPS self-test, and reboot or turn the UPS output off and on
 - switch each of the 16 netBooter outlets on or off, power-cycle them, or switch them all at once
-- name the outlets and **lock** the critical ones (network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard
+- name the outlets and **lock** the critical ones (modem, router, network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard — they can still be power-cycled
 - open the netBooter's own command line (telnet) in a **Console** window, right in the dashboard
 - keep an event log of power failures, restorations, low battery, and every command with the address it came from
 
@@ -72,7 +72,7 @@ Open **Settings** (gear icon, top right):
 |---|---|
 | **UPS** | Card address, SNMP version (v1 unless you've enabled v2c), read and write communities → **Test connection** |
 | **netBooter** | Address, HTTP/HTTPS, username and password → **Test connection**; telnet port for the Console (default 23) |
-| **Outlets** | A name for each outlet, and **Locked** for anything that must stay on |
+| **Outlets** | A name for each outlet, and **Locked** for anything that must stay on (it can still be power-cycled) |
 | **General** | How often the devices are read (default every 5 s) |
 
 The UPS write community and the netBooter password are stored on the server and are never sent back to a browser.
@@ -85,7 +85,7 @@ The UPS write community and the netBooter password are stored on the server and 
 - **UPS card**: battery %, runtime, load, input/output voltage, temperature. Self-test, reboot/off/on and runtime calibration are under **Power controls & details**, together with model, serial and firmware.
 - **netBooter card**: total current draw and its approximate wattage, temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
 - **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (PowerHub doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
-- Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on but not off or power-cycled; **All off** skips them.
+- Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on and power-cycled, but not turned off; **All off** skips them.
 
 ---
 
@@ -152,6 +152,9 @@ The console is a plain relay to the netBooter's telnet port. PowerHub strips tel
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 1.3.0 — 2026-09-25
+- Locked outlets can now be power-cycled; they still can't be turned off, and **All off** still skips them.
 
 ### 1.2.0 — 2026-09-25
 - netBooter card: current draw shows the total only (no per-sensor breakdown).
