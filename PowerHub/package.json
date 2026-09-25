@@ -1,0 +1,14 @@
+{
+  "name": "powerhub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PowerHub — dashboard for a CyberPower UPS (RMCARD205) and a Synaccess netBooter NP-1601DU",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "mock": "MOCK=1 node server.js"
+  },
+  "dependencies": {
+    "net-snmp": "^3.20.0"
+  }
+}

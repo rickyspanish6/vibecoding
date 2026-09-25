@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "powerhub", "runtimeExecutable": "npm", "runtimeArgs": ["start"], "port": 8090 },
+    { "name": "powerhub-mock", "runtimeExecutable": "npm", "runtimeArgs": ["run", "mock"], "port": 8090 }
+  ]
+}

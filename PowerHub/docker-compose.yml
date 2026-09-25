@@ -1,0 +1,15 @@
+services:
+  powerhub:
+    build: .
+    image: powerhub:latest
+    container_name: powerhub
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - data:/data
+    # environment:
+    #   - MOCK=1          # simulated UPS + netBooter, for trying the dashboard
+
+volumes:
+  data:

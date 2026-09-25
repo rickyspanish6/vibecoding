@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>PowerHub</title>
+<link rel="icon" type="image/svg+xml" href="images/icons/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="images/icons/favicon-32.png">
+<link rel="apple-touch-icon" href="images/icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PowerHub">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0d0f12">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0f12;
+  --bg-card:   #14171c;
+  --bg-2:      #1a1e24;
+  --bg-hover:  #20252c;
+  --border:    rgba(255,255,255,0.06);
+  --border-md: rgba(255,255,255,0.11);
+  --text:      #eceef1;
+  --text-2:    #8d949e;
+  --text-3:    #575e68;
+  --accent:    #f5c542;
+  --accent-dim:rgba(245,197,66,0.12);
+  --green:     #4fd18b;
+  --green-dim: rgba(79,209,139,0.12);
+  --red:       #f0605a;
+  --red-dim:   rgba(240,96,90,0.13);
+  --amber:     #f59e3b;
+  --amber-dim: rgba(245,158,59,0.13);
+  --blue:      #6ea8fe;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --mono:      'JetBrains Mono', ui-monospace, monospace;
+}
+
+html, body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; padding-bottom: env(safe-area-inset-bottom); }
+button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+input, select { font: inherit; color: var(--text); }
+
+/* ── Top bar ── */
+.topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 12px; padding: calc(12px + env(safe-area-inset-top)) 20px 12px; background: rgba(13,15,18,0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand img { width: 30px; height: 30px; border-radius: 8px; }
+.brand-name { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+.brand-sub { font-size: 11px; color: var(--text-3); font-family: var(--mono); }
+.topbar .spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 999px; background: var(--bg-2); border: 1px solid var(--border); font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-3); flex: none; }
+.dot.ok { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.dot.warn { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+.dot.bad { background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.icon-btn { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--bg-2); border: 1px solid var(--border); transition: background .15s; }
+.icon-btn:hover { background: var(--bg-hover); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.banner { margin: 16px 20px 0; padding: 10px 14px; border-radius: var(--radius); background: var(--accent-dim); color: var(--accent); font-size: 13px; border: 1px solid rgba(245,197,66,0.25); }
+.banner.alarm { background: var(--red-dim); color: var(--red); border-color: rgba(240,96,90,0.35); font-weight: 600; }
+
+/* ── Layout ── */
+main { display: grid; grid-template-columns: minmax(340px, 420px) 1fr; gap: 18px; padding: 18px 20px 28px; max-width: 1500px; margin: 0 auto; }
+.col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; min-width: 0; }
+.card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.card-title { font-size: 15px; font-weight: 600; }
+.card-kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); font-weight: 600; }
+.card-head .spacer { flex: 1; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-2); color: var(--text-2); }
+.badge.ok { background: var(--green-dim); color: var(--green); }
+.badge.warn { background: var(--amber-dim); color: var(--amber); }
+.badge.bad { background: var(--red-dim); color: var(--red); }
+
+.empty { padding: 26px 10px; text-align: center; color: var(--text-2); }
+.empty p { margin-bottom: 14px; }
+
+/* ── UPS ── */
+.battery { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; }
+.ring { position: relative; width: 116px; height: 116px; flex: none; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .track { stroke: var(--bg-2); }
+.ring .val { transition: stroke-dashoffset .6s ease, stroke .3s; }
+.ring-label { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.ring-label b { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
+.ring-label span { font-size: 11px; color: var(--text-2); }
+.battery-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.big-stat .v { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.big-stat .l { font-size: 12px; color: var(--text-2); }
+
+.bar { height: 6px; border-radius: 3px; background: var(--bg-2); overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; border-radius: 3px; background: var(--green); transition: width .6s ease, background .3s; }
+
+.metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+.metric { background: var(--bg-2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.metric .l { font-size: 11.5px; color: var(--text-2); }
+.metric .v { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metric .v small { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.metric.wide { grid-column: 1 / -1; }
+
+.alert { display: flex; gap: 8px; align-items: center; padding: 9px 12px; border-radius: 10px; margin-bottom: 12px; font-size: 13px; font-weight: 500; }
+.alert.warn { background: var(--amber-dim); color: var(--amber); }
+.alert.bad { background: var(--red-dim); color: var(--red); }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--border-md); font-size: 13px; font-weight: 500; transition: background .15s, border-color .15s, opacity .15s; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--bg-hover); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn.primary { background: var(--accent); color: #1a1405; border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: #ffd35c; }
+.btn.danger { color: var(--red); border-color: rgba(240,96,90,0.35); }
+.btn.danger:hover:not(:disabled) { background: var(--red-dim); }
+.btn.good { color: var(--green); border-color: rgba(79,209,139,0.35); }
+.btn.good:hover:not(:disabled) { background: var(--green-dim); }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+.btn svg { width: 15px; height: 15px; }
+
+details.more { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+details.more summary { cursor: pointer; color: var(--text-2); font-size: 13px; list-style: none; display: flex; align-items: center; gap: 6px; user-select: none; }
+details.more summary::-webkit-details-marker { display: none; }
+details.more summary::before { content: '›'; display: inline-block; transition: transform .15s; font-size: 16px; line-height: 1; }
+details.more[open] summary::before { transform: rotate(90deg); }
+details.more .inner { padding-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.note { font-size: 12px; color: var(--text-3); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12.5px; }
+.kv dt { color: var(--text-2); }
+.kv dd { font-family: var(--mono); font-size: 12px; word-break: break-all; }
+
+/* ── PDU ── */
+.pdu-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.pdu-summary .metric { flex: 1 1 110px; }
+.outlets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.outlet { position: relative; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; transition: border-color .2s, background .2s; }
+.outlet.on { border-color: rgba(79,209,139,0.28); }
+.outlet.rebooting { border-color: rgba(245,158,59,0.45); }
+.outlet-top { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.outlet-num { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-family: var(--mono); font-size: 12.5px; background: var(--bg-card); color: var(--text-2); flex: none; }
+.outlet.on .outlet-num { background: var(--green-dim); color: var(--green); }
+.outlet-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.outlet-name.unnamed { color: var(--text-3); font-weight: 500; }
+.outlet-lock { color: var(--text-3); flex: none; display: grid; }
+.outlet-lock svg { width: 14px; height: 14px; }
+.outlet-bottom { display: flex; align-items: center; gap: 8px; }
+.outlet-state { font-size: 12px; color: var(--text-2); flex: 1; }
+.outlet.on .outlet-state { color: var(--green); }
+.outlet.rebooting .outlet-state { color: var(--amber); }
+
+.switch { position: relative; width: 44px; height: 26px; border-radius: 13px; background: var(--bg-hover); border: 1px solid var(--border-md); transition: background .2s, border-color .2s; flex: none; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #c9ced6; transition: transform .2s ease, background .2s; }
+.switch.on { background: var(--green); border-color: var(--green); }
+.switch.on::after { transform: translateX(18px); background: #fff; }
+.switch:disabled { opacity: 0.45; cursor: default; }
+.switch.busy::after { animation: pulse .8s infinite; }
+
+/* ── Events ── */
+.events { list-style: none; max-height: 420px; overflow-y: auto; margin: 0 -6px; }
+.events li { display: grid; grid-template-columns: 10px auto 1fr; gap: 10px; align-items: baseline; padding: 7px 6px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.events li:last-child { border-bottom: none; }
+.events .t { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.events .m b { font-weight: 600; color: var(--text-2); margin-right: 4px; }
+.events .lv { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); align-self: center; }
+.events .lv.alarm { background: var(--red); }
+.events .lv.warn { background: var(--amber); }
+.events .lv.action { background: var(--blue); }
+.events .lv.info { background: var(--green); }
+
+/* ── Modals ── */
+.overlay { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; padding: 16px; }
+.overlay.open { display: flex; }
+.modal { background: var(--bg-card); border: 1px solid var(--border-md); border-radius: 18px; width: 100%; max-width: 420px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+.modal.wide { max-width: 680px; }
+.modal-head { display: flex; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border); gap: 10px; }
+.modal-head h2 { font-size: 16px; font-weight: 600; flex: 1; }
+.modal-body { padding: 18px; overflow-y: auto; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.confirm-text { color: var(--text-2); }
+.confirm-text b { color: var(--text); }
+
+.tabs { display: flex; gap: 4px; background: var(--bg-2); padding: 4px; border-radius: 10px; margin-bottom: 18px; overflow-x: auto; }
+.tab { flex: 1; padding: 7px 12px; border-radius: 7px; font-size: 13px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.tab.active { background: var(--bg-hover); color: var(--text); }
+.pane { display: none; }
+.pane.active { display: block; }
+.field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 13px; }
+.field label { font-size: 12px; color: var(--text-2); font-weight: 500; }
+.field input, .field select { background: var(--bg-2); border: 1px solid var(--border-md); border-radius: 9px; padding: 9px 11px; outline: none; width: 100%; }
+.field input:focus, .field select:focus { border-color: var(--accent); }
+.field .hint { font-size: 11.5px; color: var(--text-3); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 14px; cursor: pointer; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.test-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.test-result { font-size: 13px; }
+.test-result.ok { color: var(--green); }
+.test-result.bad { color: var(--red); }
+.outlet-edit { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; margin-bottom: 8px; }
+.outlet-edit .n { font-family: var(--mono); color: var(--text-2); text-align: right; font-size: 12.5px; }
+.outlet-edit input[type=text] { background: var(--bg-2); border: 1px solid var(--border-md); border-radius: 8px; padding: 7px 10px; outline: none; width: 100%; }
+.outlet-edit input[type=text]:focus { border-color: var(--accent); }
+.outlet-edit label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); cursor: pointer; }
+.outlet-edit input[type=checkbox] { accent-color: var(--accent); }
+
+.toasts { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: calc(100% - 32px); max-width: 440px; }
+.toast { background: var(--bg-hover); border: 1px solid var(--border-md); padding: 10px 16px; border-radius: 12px; font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); animation: toastIn .25s ease; text-align: center; }
+.toast.bad { border-color: rgba(240,96,90,0.5); color: var(--red); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; padding: 14px 14px 24px; gap: 14px; }
+  .col { gap: 14px; }
+  .banner { margin: 14px 14px 0; }
+}
+@media (max-width: 520px) {
+  .topbar { padding-left: 14px; padding-right: 14px; }
+  .brand-sub { display: none; }
+  #overallText { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+  .card { padding: 14px; }
+  .outlets { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .outlet { padding: 10px; }
+  .ring { width: 100px; height: 100px; }
+  .row2 { grid-template-columns: 1fr; gap: 0; }
+  .modal { border-radius: 16px; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="images/icons/icon-192.png" alt="">
+    <div>
+      <div class="brand-name">PowerHub</div>
+      <div class="brand-sub" id="versionLabel"></div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="pill" title="Overall status"><span class="dot" id="overallDot"></span><span id="overallText">Connecting…</span></div>
+  <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</header>
+
+<div id="banners"></div>
+
+<main>
+  <div class="col">
+    <section class="card" id="upsCard"></section>
+    <section class="card">
+      <div class="card-head">
+        <div><div class="card-kind">Activity</div><div class="card-title">Event log</div></div>
+        <div class="spacer"></div>
+        <button class="btn small" id="clearEventsBtn">Clear</button>
+      </div>
+      <ul class="events" id="eventList"></ul>
+    </section>
+  </div>
+  <div class="col">
+    <section class="card" id="pduCard"></section>
+  </div>
+</main>
+
+<!-- Confirm dialog -->
+<div class="overlay" id="confirmOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-head"><h2 id="confirmTitle"></h2></div>
+    <div class="modal-body"><p class="confirm-text" id="confirmText"></p></div>
+    <div class="modal-foot">
+      <button class="btn" id="confirmCancel">Cancel</button>
+      <button class="btn primary" id="confirmOk">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="overlay" id="settingsOverlay">
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-head">
+      <h2 id="settingsTitle">Settings</h2>
+      <button class="icon-btn" id="settingsClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="tabs">
+        <button class="tab active" data-pane="paneUps">UPS</button>
+        <button class="tab" data-pane="panePdu">netBooter</button>
+        <button class="tab" data-pane="paneOutlets">Outlets</button>
+        <button class="tab" data-pane="paneGeneral">General</button>
+      </div>
+
+      <div class="pane active" id="paneUps">
+        <label class="check"><input type="checkbox" id="upsEnabled"> Monitor this UPS</label>
+        <div class="row2">
+          <div class="field"><label for="upsName">Display name</label><input id="upsName" type="text" maxlength="40"></div>
+          <div class="field"><label for="upsHost">RMCARD205 address</label><input id="upsHost" type="text" placeholder="e.g. 192.168.1.50" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="upsVersion">SNMP version</label>
+            <select id="upsVersion"><option value="1">v1</option><option value="2c">v2c</option></select></div>
+          <div class="field"><label for="upsPort">SNMP port</label><input id="upsPort" type="number" min="1" max="65535"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="upsRead">Read community</label><input id="upsRead" type="text" autocapitalize="off" spellcheck="false"></div>
+          <div class="field"><label for="upsWrite">Write community</label><input id="upsWrite" type="password" autocomplete="new-password"><span class="hint" id="upsWriteHint"></span></div>
+        </div>
+        <p class="note" style="margin-bottom:12px">On the card's web page, under <b>Network Service › SNMPv1 Service</b>, enable SNMPv1 and allow this server's address in the access list (read for monitoring, write for commands).</p>
+        <div class="test-row"><button class="btn" id="upsTest">Test connection</button><span class="test-result" id="upsTestResult"></span></div>
+      </div>
+
+      <div class="pane" id="panePdu">
+        <label class="check"><input type="checkbox" id="pduEnabled"> Control this netBooter</label>
+        <div class="row2">
+          <div class="field"><label for="pduName">Display name</label><input id="pduName" type="text" maxlength="40"></div>
+          <div class="field"><label for="pduHost">netBooter address</label><input id="pduHost" type="text" placeholder="e.g. 192.168.1.100" autocapitalize="off" autocorrect="off" spellcheck="false"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="pduProtocol">Protocol</label>
+            <select id="pduProtocol"><option value="http">HTTP</option><option value="https">HTTPS</option></select></div>
+          <div class="field"><label for="pduPort">Port</label><input id="pduPort" type="number" min="0" max="65535"><span class="hint">0 = default (80 / 443)</span></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label for="pduUser">Username</label><input id="pduUser" type="text" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="pduPass">Password</label><input id="pduPass" type="password" autocomplete="new-password"><span class="hint" id="pduPassHint"></span></div>
+        </div>
+        <p class="note" style="margin-bottom:12px">The reboot (power-cycle) delay is set on the netBooter's own web page.</p>
+        <div class="test-row"><button class="btn" id="pduTest">Test connection</button><span class="test-result" id="pduTestResult"></span></div>
+      </div>
+
+      <div class="pane" id="paneOutlets">
+        <p class="note" style="margin-bottom:14px">Name each outlet after what it powers. <b>Locked</b> outlets can't be turned off or power-cycled from the dashboard (use it for the network switch, the server running PowerHub, …).</p>
+        <div id="outletEditList"></div>
+      </div>
+
+      <div class="pane" id="paneGeneral">
+        <div class="field" style="max-width:220px"><label for="pollSeconds">Refresh every (seconds)</label><input id="pollSeconds" type="number" min="2" max="60"></div>
+        <p class="note">How often the server reads the UPS and the netBooter.</p>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="settingsCancel">Cancel</button>
+      <button class="btn primary" id="settingsSave">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+'use strict';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+const ICONS = {
+  lock:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  cycle:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+  power:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><path d="M12 2v10"/></svg>',
+  test:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  bell:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+  warn:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+};
+
+let status = null;
+let settingsCache = null;
+const busy = new Set();          // keys of commands in flight, e.g. "outlet:3"
+
+// ── API ──
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && data.ok === undefined) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function toast(msg, bad) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (bad ? ' bad' : '');
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), bad ? 6000 : 3000);
+}
+
+function confirmDialog(title, html, okLabel, danger) {
+  return new Promise(resolve => {
+    $('confirmTitle').textContent = title;
+    $('confirmText').innerHTML = html;
+    $('confirmOk').textContent = okLabel || 'Confirm';
+    $('confirmOk').className = 'btn ' + (danger ? 'danger' : 'primary');
+    $('confirmOverlay').classList.add('open');
+    const done = v => {
+      $('confirmOverlay').classList.remove('open');
+      $('confirmOk').onclick = $('confirmCancel').onclick = null;
+      resolve(v);
+    };
+    $('confirmOk').onclick = () => done(true);
+    $('confirmCancel').onclick = () => done(false);
+    $('confirmOverlay').onclick = e => { if (e.target === $('confirmOverlay')) done(false); };
+  });
+}
+
+// ── Formatting ──
+function fmtDuration(sec) {
+  if (sec == null) return '—';
+  if (sec < 60) return `${sec} s`;
+  const m = Math.round(sec / 60);
+  if (m < 60) return `${m} min`;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`;
+}
+const fmt = (v, unit, d = 0) => (v == null ? '—' : `${Number(v).toFixed(d)}<small> ${unit}</small>`);
+function fmtTime(t) {
+  const d = new Date(t);
+  const today = new Date().toDateString() === d.toDateString();
+  return today ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+               : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── UPS state → plain words ──
+function upsCondition(u) {
+  if (!u.configured) return { cls: '', text: 'Not set up' };
+  if (u.online === false) return { cls: 'bad', text: 'Not responding' };
+  if (!u.data) return { cls: '', text: 'Connecting…' };
+  const d = u.data;
+  if (d.outputStatus === 'onBattery') return { cls: 'bad', text: d.batteryStatus === 'low' ? 'On battery — LOW' : 'On battery' };
+  if (d.outputStatus === 'off') return { cls: 'bad', text: 'Output off' };
+  if (d.outputStatus === 'overload') return { cls: 'bad', text: 'Overload' };
+  if (d.outputStatus === 'rebooting') return { cls: 'warn', text: 'Rebooting' };
+  if (d.outputStatus === 'sleeping') return { cls: 'warn', text: 'Sleeping' };
+  if (d.outputStatus === 'bypass') return { cls: 'warn', text: 'On bypass' };
+  if (d.testResult === 'inProgress') return { cls: 'warn', text: 'Self-test running' };
+  if (d.replaceBattery) return { cls: 'warn', text: 'Replace battery' };
+  if (d.outputStatus === 'boost' || d.outputStatus === 'buck') return { cls: 'ok', text: d.outputStatus === 'boost' ? 'Online · boosting low voltage' : 'Online · reducing high voltage' };
+  return { cls: 'ok', text: 'On utility power' };
+}
+
+function pduCondition(p) {
+  if (!p.configured) return { cls: '', text: 'Not set up' };
+  if (p.online === false) return { cls: 'bad', text: 'Not responding' };
+  if (p.online == null) return { cls: '', text: 'Connecting…' };
+  return { cls: 'ok', text: 'Connected' };
+}
+
+// ── Rendering ──
+function renderUps() {
+  const u = status.ups;
+  const c = upsCondition(u);
+  const head = `
+    <div class="card-head">
+      <div><div class="card-kind">UPS</div><div class="card-title">${esc(u.name)}</div></div>
+      <div class="spacer"></div>
+      <span class="badge ${c.cls}"><span class="dot ${c.cls}"></span>${esc(c.text)}</span>
+    </div>`;
+
+  if (!u.configured) {
+    $('upsCard').innerHTML = head + `<div class="empty"><p>Add the UPS network card address in Settings to start monitoring.</p><button class="btn primary" onclick="openSettings('paneUps')">Set up UPS</button></div>`;
+    return;
+  }
+  if (!u.data) {
+    $('upsCard').innerHTML = head + `<div class="empty"><p>${u.online === false ? 'The UPS isn\'t answering. Check that it is on the network, or check the details in Settings.' : 'Reading the UPS…'}</p>${u.online === false ? `<button class="btn" onclick="openSettings('paneUps')">Open Settings</button>` : ''}</div>`;
+    return;
+  }
+
+  const d = u.data;
+  const cap = d.batteryCapacity ?? 0;
+  const ringColor = cap <= 20 ? 'var(--red)' : cap <= 50 ? 'var(--amber)' : 'var(--green)';
+  const circ = 2 * Math.PI * 50;
+  const loadColor = d.load >= 90 ? 'var(--red)' : d.load >= 70 ? 'var(--amber)' : 'var(--green)';
+  const onBatt = d.outputStatus === 'onBattery';
+  const stale = u.online === false;
+
+  let alerts = '';
+  if (stale) alerts += `<div class="alert bad">${ICONS.warn}Lost contact — values below are from ${fmtTime(u.updatedAt)}</div>`;
+  if (onBatt) alerts += `<div class="alert bad">${ICONS.warn}Power failure${d.lineFailCause ? ` (${esc(d.lineFailCause)})` : ''} — on battery for ${fmtDuration(d.onBatterySec)}</div>`;
+  if (d.replaceBattery) alerts += `<div class="alert warn">${ICONS.warn}The UPS reports that its battery needs replacing</div>`;
+  if (d.testResult === 'failed') alerts += `<div class="alert warn">${ICONS.warn}Last self-test failed</div>`;
+
+  const testBusy = busy.has('ups:selfTest') || d.testResult === 'inProgress';
+  const off = d.outputStatus === 'off';
+
+  $('upsCard').innerHTML = head + alerts + `
+    <div class="battery">
+      <div class="ring">
+        <svg viewBox="0 0 116 116"><circle class="track" cx="58" cy="58" r="50" fill="none" stroke-width="10"/>
+          <circle class="val" cx="58" cy="58" r="50" fill="none" stroke-width="10" stroke-linecap="round" stroke="${ringColor}" stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - cap / 100)}"/></svg>
+        <div class="ring-label"><b>${d.batteryCapacity ?? '—'}%</b><span>battery</span></div>
+      </div>
+      <div class="battery-info">
+        <div class="big-stat"><div class="v">${fmtDuration(d.runtimeSec)}</div><div class="l">${onBatt ? 'remaining on battery' : 'runtime if power fails'}</div></div>
+        <div class="big-stat" style="min-width:140px">
+          <div class="l">Load ${d.load ?? '—'}%${d.outputPower != null ? ` · ${d.outputPower} W` : ''}</div>
+          <div class="bar"><i style="width:${Math.min(100, d.load || 0)}%;background:${loadColor}"></i></div>
+        </div>
+      </div>
+    </div>
+    <div class="metrics">${upsMetrics(d)}</div>
+    <div class="btn-row">
+      <button class="btn" id="upsSelfTest" ${testBusy || stale ? 'disabled' : ''}>${ICONS.test}${d.testResult === 'inProgress' ? 'Testing…' : 'Self-test'}</button>
+      <button class="btn" id="upsBeep" ${stale ? 'disabled' : ''}>${ICONS.bell}Locate (beep)</button>
+    </div>
+    <details class="more" id="upsMore" ${upsMoreOpen ? 'open' : ''}>
+      <summary>Power controls & details</summary>
+      <div class="inner">
+        <div class="btn-row">
+          ${off ? `<button class="btn good" id="upsOn" ${stale ? 'disabled' : ''}>${ICONS.power}Turn output on</button>`
+                : `<button class="btn danger" id="upsReboot" ${stale ? 'disabled' : ''}>${ICONS.cycle}Reboot UPS</button>
+                   <button class="btn danger" id="upsOff" ${stale ? 'disabled' : ''}>${ICONS.power}Turn output off</button>`}
+          <button class="btn" id="upsCalib" ${stale ? 'disabled' : ''}>Runtime calibration</button>
+        </div>
+        <p class="note">Rebooting or turning off the UPS cuts power to everything plugged into it — including the netBooter.</p>
+        <dl class="kv">
+          ${[['Model', d.model], ['UPS name', d.upsName], ['Rating', d.ratingVA ? `${d.ratingVA} VA${d.ratingW ? ` / ${d.ratingW} W` : ''}` : null],
+             ['Serial', d.serial], ['UPS firmware', d.firmware], ['Card firmware', d.cardFirmware],
+             ['Last self-test', [d.lastTestDate, d.testResult && d.testResult !== 'inProgress' ? d.testResult : null].filter(Boolean).join(' · ')],
+             ['Battery replaced', d.batteryReplaced], ['Output frequency', d.outputFrequency ? `${d.outputFrequency} Hz` : null]]
+            .filter(r => r[1]).map(r => `<dt>${r[0]}</dt><dd>${esc(r[1])}</dd>`).join('')}
+        </dl>
+      </div>
+    </details>`;
+
+  $('upsMore').addEventListener('toggle', e => { upsMoreOpen = e.target.open; });
+  $('upsSelfTest').onclick = () => upsCommand('selfTest', 'Run a battery self-test?', 'The UPS briefly switches to battery to check it. Connected equipment stays powered.', 'Start test');
+  $('upsBeep').onclick = () => upsCommand('beep');
+  $('upsCalib').onclick = () => upsCommand('calibrate', 'Run a runtime calibration?', 'The UPS runs on battery <b>until it is nearly empty</b> to measure runtime, then recharges. Only do this with a stable load and no expected outages.', 'Start calibration', true);
+  if ($('upsReboot')) $('upsReboot').onclick = () => upsCommand('reboot', 'Reboot the UPS?', `Everything plugged into <b>${esc(u.name)}</b> will lose power, then come back on.`, 'Reboot UPS', true);
+  if ($('upsOff')) $('upsOff').onclick = () => upsCommand('turnOff', 'Turn the UPS output off?', `Everything plugged into <b>${esc(u.name)}</b> will lose power and <b>stay off</b> until the output is turned back on.`, 'Turn off', true);
+  if ($('upsOn')) $('upsOn').onclick = () => upsCommand('turnOn');
+}
+let upsMoreOpen = false;
+
+// Tiles for the values this UPS model actually reports (not every model has battery voltage/temperature)
+function upsMetrics(d) {
+  const tiles = [
+    ['Input', `${fmt(d.inputVoltage, 'V')} ${d.inputFrequency ? `<small>· ${d.inputFrequency} Hz</small>` : ''}`],
+    ['Output', `${fmt(d.outputVoltage, 'V')} ${d.outputCurrent != null ? `<small>· ${d.outputCurrent} A</small>` : ''}`],
+  ];
+  if (d.batteryVoltage != null) tiles.push(['Battery', fmt(d.batteryVoltage, 'V', 1)]);
+  if (d.batteryTemp != null) tiles.push(['Temperature', fmt(d.batteryTemp, '°C')]);
+  return tiles.map(([l, v], i) =>
+    `<div class="metric${i === tiles.length - 1 && tiles.length % 2 ? ' wide' : ''}"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
+}
+
+function renderPdu() {
+  const p = status.pdu;
+  const c = pduCondition(p);
+  const head = `
+    <div class="card-head">
+      <div><div class="card-kind">Power strip</div><div class="card-title">${esc(p.name)}</div></div>
+      <div class="spacer"></div>
+      <span class="badge ${c.cls}"><span class="dot ${c.cls}"></span>${esc(c.text)}</span>
+    </div>`;
+
+  if (!p.configured) {
+    $('pduCard').innerHTML = head + `<div class="empty"><p>Add the netBooter address and login in Settings to control its outlets.</p><button class="btn primary" onclick="openSettings('panePdu')">Set up netBooter</button></div>`;
+    return;
+  }
+  if (!p.outlets.length) {
+    $('pduCard').innerHTML = head + `<div class="empty"><p>${p.online === false ? `The netBooter isn't answering${p.error ? ` (${esc(p.error)})` : ''}.` : 'Reading the netBooter…'}</p>${p.online === false ? `<button class="btn" onclick="openSettings('panePdu')">Open Settings</button>` : ''}</div>`;
+    return;
+  }
+
+  const stale = p.online === false;
+  const onCount = p.outlets.filter(o => o.on).length;
+  const total = p.currents.reduce((a, b) => a + b, 0);
+  const currentsText = p.currents.length > 1
+    ? `${total.toFixed(2)}<small> A</small> <small>(${p.currents.map(x => x.toFixed(2)).join(' + ')})</small>`
+    : p.currents.length ? `${total.toFixed(2)}<small> A</small>` : '—';
+
+  $('pduCard').innerHTML = head +
+    (stale ? `<div class="alert bad">${ICONS.warn}Lost contact — outlet states below may be out of date</div>` : '') + `
+    <div class="pdu-summary">
+      <div class="metric"><div class="l">Outlets on</div><div class="v">${onCount}<small> / ${p.outlets.length}</small></div></div>
+      <div class="metric"><div class="l">Current draw</div><div class="v">${currentsText}</div></div>
+      ${p.tempC != null ? `<div class="metric"><div class="l">Temperature</div><div class="v">${fmt(p.tempC, '°C')}</div></div>` : ''}
+    </div>
+    <div class="btn-row" style="margin-bottom:14px">
+      <button class="btn good" id="allOn" ${stale || busy.has('all') ? 'disabled' : ''}>${ICONS.power}All on</button>
+      <button class="btn danger" id="allOff" ${stale || busy.has('all') ? 'disabled' : ''}>${ICONS.power}All off</button>
+    </div>
+    <div class="outlets">
+      ${p.outlets.map(o => {
+        const b = busy.has('outlet:' + o.n) || busy.has('all');
+        const cls = o.rebooting ? 'rebooting' : o.on ? 'on' : '';
+        const stateText = o.rebooting ? 'Power-cycling…' : o.on ? 'On' : 'Off';
+        const lockedBlocksOff = o.locked && o.on;
+        return `
+        <div class="outlet ${cls}">
+          <div class="outlet-top">
+            <span class="outlet-num">${o.n}</span>
+            <span class="outlet-name ${o.name ? '' : 'unnamed'}" title="${esc(o.name)}">${esc(o.name || 'Outlet ' + o.n)}</span>
+            ${o.locked ? `<span class="outlet-lock" title="Locked — can't be turned off from here">${ICONS.lock}</span>` : ''}
+          </div>
+          <div class="outlet-bottom">
+            <span class="outlet-state">${stateText}</span>
+            <button class="btn small" data-reboot="${o.n}" title="Power-cycle" aria-label="Power-cycle outlet ${o.n}" ${stale || b || !o.on || o.locked || o.rebooting ? 'disabled' : ''}>${ICONS.cycle}</button>
+            <button class="switch ${o.on ? 'on' : ''} ${b ? 'busy' : ''}" data-toggle="${o.n}" role="switch" aria-checked="${o.on}" aria-label="Outlet ${o.n} power" ${stale || b || lockedBlocksOff || o.rebooting ? 'disabled' : ''}></button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  $('allOn').onclick = () => pduAll('on');
+  $('allOff').onclick = () => pduAll('off');
+  $('pduCard').querySelectorAll('[data-toggle]').forEach(el => el.onclick = () => {
+    const o = status.pdu.outlets[el.dataset.toggle - 1];
+    outletCommand(o, o.on ? 'off' : 'on');
+  });
+  $('pduCard').querySelectorAll('[data-reboot]').forEach(el => el.onclick = () => outletCommand(status.pdu.outlets[el.dataset.reboot - 1], 'reboot'));
+}
+
+function renderEvents() {
+  const list = status.events || [];
+  $('eventList').innerHTML = list.length
+    ? list.map(e => `<li><span class="lv ${esc(e.level)}"></span><span class="t">${fmtTime(e.t)}</span><span class="m"><b>${esc(e.source)}</b>${esc(e.message)}</span></li>`).join('')
+    : '<li style="display:block;color:var(--text-3)">No events yet</li>';
+}
+
+function renderOverall() {
+  const u = upsCondition(status.ups), p = pduCondition(status.pdu);
+  const parts = [u, p].filter((x, i) => [status.ups, status.pdu][i].configured);
+  let cls = 'ok', text = 'All good';
+  if (!parts.length) { cls = ''; text = 'Not set up'; }
+  else if (parts.some(x => x.cls === 'bad')) {
+    cls = 'bad';
+    text = status.ups.data?.outputStatus === 'onBattery' && status.ups.online !== false ? 'On battery' : 'Needs attention';
+  } else if (parts.some(x => x.cls === 'warn')) { cls = 'warn'; text = 'Check UPS'; }
+  else if (parts.some(x => !x.cls)) { cls = ''; text = 'Connecting…'; }
+  $('overallDot').className = 'dot ' + cls;
+  $('overallText').textContent = text;
+
+  let banners = '';
+  if (status.mock) banners += `<div class="banner">Demo mode — the UPS and netBooter are simulated. Commands don't reach real equipment.</div>`;
+  if (status.ups.data?.outputStatus === 'onBattery' && status.ups.online !== false)
+    banners += `<div class="banner alarm">Power failure — running on UPS battery · ${status.ups.data.batteryCapacity ?? '?'}% · about ${fmtDuration(status.ups.data.runtimeSec)} left</div>`;
+  $('banners').innerHTML = banners;
+}
+
+function render() {
+  if (!status) return;
+  $('versionLabel').textContent = 'v' + status.version;
+  renderOverall();
+  renderUps();
+  renderPdu();
+  renderEvents();
+}
+
+// ── Commands ──
+async function upsCommand(action, title, text, okLabel, danger) {
+  if (title && !(await confirmDialog(title, text, okLabel, danger))) return;
+  busy.add('ups:' + action); render();
+  try {
+    const r = await api('POST', '/api/ups/action', { action });
+    if (r.ok) toast(action === 'beep' ? 'The UPS will beep and flash' : 'Command sent to the UPS');
+    else toast(r.message || 'The UPS refused the command', true);
+  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  busy.delete('ups:' + action);
+  refresh();
+}
+
+async function outletCommand(o, action) {
+  const label = o.name ? `<b>${esc(o.name)}</b> (outlet ${o.n})` : `<b>outlet ${o.n}</b>`;
+  if (action === 'off' && !(await confirmDialog('Turn off outlet?', `This cuts power to ${label}.`, 'Turn off', true))) return;
+  if (action === 'reboot' && !(await confirmDialog('Power-cycle outlet?', `${label} will turn off, then back on after the netBooter's reboot delay.`, 'Power-cycle', true))) return;
+  busy.add('outlet:' + o.n); render();
+  try {
+    const r = await api('POST', '/api/pdu/outlet', { outlet: o.n, action });
+    if (!r.ok) toast(r.message || 'Command failed', true);
+    else if (action === 'reboot') toast(`Power-cycling ${o.name || 'outlet ' + o.n}`);
+  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  busy.delete('outlet:' + o.n);
+  refresh();
+}
+
+async function pduAll(want) {
+  const locked = status.pdu.outlets.filter(o => o.locked).length;
+  const ok = want === 'on'
+    ? await confirmDialog('Turn all outlets on?', 'Every outlet on the netBooter will be switched on.', 'All on')
+    : await confirmDialog('Turn all outlets off?', `This cuts power to <b>every outlet</b>${locked ? ` except the ${locked} locked one${locked > 1 ? 's' : ''}` : ''}.`, 'All off', true);
+  if (!ok) return;
+  busy.add('all'); render();
+  try {
+    const r = await api('POST', '/api/pdu/all', { state: want });
+    if (!r.ok) toast(r.message || 'Command failed', true);
+  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  busy.delete('all');
+  refresh();
+}
+
+$('clearEventsBtn').onclick = async () => {
+  if (!(await confirmDialog('Clear the event log?', 'All saved events will be deleted.', 'Clear', true))) return;
+  await api('DELETE', '/api/events').catch(e => toast(e.message, true));
+  refresh();
+};
+
+// ── Polling ──
+let refreshTimer = null, failCount = 0;
+async function refresh() {
+  clearTimeout(refreshTimer);
+  try {
+    status = await api('GET', '/api/status');
+    failCount = 0;
+    render();
+  } catch (e) {
+    if (++failCount >= 2) {
+      $('overallDot').className = 'dot bad';
+      $('overallText').textContent = 'PowerHub offline';
+    }
+  }
+  refreshTimer = setTimeout(refresh, document.hidden ? 10000 : 2000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+
+// ── Settings ──
+async function openSettings(pane) {
+  try { settingsCache = await api('GET', '/api/settings'); }
+  catch (e) { return toast('Could not load settings: ' + e.message, true); }
+  const s = settingsCache;
+  $('upsEnabled').checked = s.ups.enabled;
+  $('upsName').value = s.ups.name;
+  $('upsHost').value = s.ups.host;
+  $('upsVersion').value = s.ups.snmpVersion;
+  $('upsPort').value = s.ups.port;
+  $('upsRead').value = s.ups.readCommunity;
+  $('upsWrite').value = '';
+  $('upsWrite').placeholder = s.ups.writeCommunitySet ? '•••••••• (unchanged)' : 'e.g. private';
+  $('upsWriteHint').textContent = s.ups.writeCommunitySet ? 'Leave empty to keep the saved one' : 'Needed for self-test and power commands';
+  $('pduEnabled').checked = s.pdu.enabled;
+  $('pduName').value = s.pdu.name;
+  $('pduHost').value = s.pdu.host;
+  $('pduProtocol').value = s.pdu.protocol;
+  $('pduPort').value = s.pdu.port;
+  $('pduUser').value = s.pdu.username;
+  $('pduPass').value = '';
+  $('pduPass').placeholder = s.pdu.passwordSet ? '•••••••• (unchanged)' : 'Password';
+  $('pduPassHint').textContent = s.pdu.passwordSet ? 'Leave empty to keep the saved one' : '';
+  $('pollSeconds').value = s.pollSeconds;
+  $('upsTestResult').textContent = $('pduTestResult').textContent = '';
+
+  const count = Math.max(status?.pdu.outlets.length || 0, s.pdu.outlets.length, 16);
+  $('outletEditList').innerHTML = Array.from({ length: count }, (_, i) => {
+    const o = s.pdu.outlets[i] || {};
+    return `<div class="outlet-edit"><span class="n">${i + 1}</span>
+      <input type="text" data-oname="${i}" maxlength="40" placeholder="Outlet ${i + 1}" value="${esc(o.name || '')}">
+      <label><input type="checkbox" data-olock="${i}" ${o.locked ? 'checked' : ''}> Locked</label></div>`;
+  }).join('');
+
+  showPane(pane || 'paneUps');
+  $('settingsOverlay').classList.add('open');
+}
+
+function showPane(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.pane === id));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === id));
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => showPane(t.dataset.pane));
+
+function formUps() {
+  return {
+    enabled: $('upsEnabled').checked, name: $('upsName').value.trim() || 'UPS', host: $('upsHost').value.trim(),
+    snmpVersion: $('upsVersion').value, port: $('upsPort').value,
+    readCommunity: $('upsRead').value, writeCommunity: $('upsWrite').value,
+  };
+}
+function formPdu() {
+  const outlets = [...document.querySelectorAll('[data-oname]')].map((el, i) => ({
+    name: el.value.trim(), locked: document.querySelector(`[data-olock="${i}"]`).checked,
+  }));
+  return {
+    enabled: $('pduEnabled').checked, name: $('pduName').value.trim() || 'netBooter', host: $('pduHost').value.trim(),
+    protocol: $('pduProtocol').value, port: $('pduPort').value,
+    username: $('pduUser').value, password: $('pduPass').value, outlets,
+  };
+}
+
+async function testConnection(device) {
+  const out = $(device + 'TestResult');
+  out.className = 'test-result';
+  out.textContent = 'Testing…';
+  try {
+    const r = await api('POST', '/api/test', { device, config: device === 'ups' ? formUps() : formPdu() });
+    out.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
+    out.textContent = r.ok ? `✓ Success — ${r.message}` : `✕ ${r.message}`;
+  } catch (e) {
+    out.className = 'test-result bad';
+    out.textContent = '✕ ' + e.message;
+  }
+}
+$('upsTest').onclick = () => testConnection('ups');
+$('pduTest').onclick = () => testConnection('pdu');
+
+function closeSettings() { $('settingsOverlay').classList.remove('open'); }
+$('settingsBtn').onclick = () => openSettings();
+$('settingsClose').onclick = $('settingsCancel').onclick = closeSettings;
+$('settingsSave').onclick = async () => {
+  try {
+    await api('POST', '/api/settings', { pollSeconds: $('pollSeconds').value, ups: formUps(), pdu: formPdu() });
+    closeSettings();
+    toast('Settings saved');
+    refresh();
+  } catch (e) { toast('Could not save: ' + e.message, true); }
+};
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if ($('confirmOverlay').classList.contains('open')) $('confirmCancel').click();
+  else if ($('settingsOverlay').classList.contains('open')) closeSettings();
+});
+
+refresh();
+</script>
+</body>
+</html>
