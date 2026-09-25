@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v3.1.0
+# PowerHub · v3.1.1
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -193,6 +193,9 @@ The first command prints a new random password for that user (default `admin`) a
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 3.1.1 — 2026-09-25
+- The event log fills the space under the UPS card, so it ends level with the netBooter card; older events scroll inside it.
 
 ### 3.1.0 — 2026-09-25
 - **Power usage graph**: UPS output and netBooter watts over 1 hour / 24 hours / 7 days / 30 days / 1 year, with average, peak and energy (kWh), a hover/keyboard crosshair with both values, and a table view. Recorded every poll, stored as 1-minute averages (7 days) and hourly averages (~13 months) in `history.json`.

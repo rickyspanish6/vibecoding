@@ -164,6 +164,9 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 .events { list-style: none; max-height: 420px; overflow-y: auto; margin: 0 -6px; }
 .events li { display: grid; grid-template-columns: 10px auto 1fr; gap: 10px; align-items: baseline; padding: 7px 6px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .events li:last-child { border-bottom: none; }
+/* The event log fills the space under the UPS card, so both columns end on the same line */
+.events-card { flex: 1; display: flex; flex-direction: column; min-height: 180px; }
+.events-card .events { flex: 1 1 0; min-height: 0; max-height: none; }
 .events .t { font-family: var(--mono); font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
 .events .m b { font-weight: 600; color: var(--text-2); margin-right: 4px; }
 .events .lv { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); align-self: center; }
@@ -295,6 +298,8 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
 /* ── Responsive ── */
 @media (max-width: 900px) {
   main { grid-template-columns: 1fr; padding: 14px 14px 24px; gap: 14px; }
+  .events-card { flex: none; min-height: 0; }
+  .events-card .events { flex: none; max-height: 420px; }
   .col { gap: 14px; }
   .banner { margin: 14px 14px 0; }
 }
@@ -343,7 +348,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
 <main>
   <div class="col">
     <section class="card" id="upsCard"></section>
-    <section class="card">
+    <section class="card events-card">
       <div class="card-head">
         <div><div class="card-kind">Activity</div><div class="card-title">Event log</div></div>
         <div class="spacer"></div>
