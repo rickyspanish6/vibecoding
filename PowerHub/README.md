@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v3.0.1
+# PowerHub · v3.1.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -10,6 +10,7 @@ A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card
 - name the outlets and **lock** the critical ones (modem, router, network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard — they can still be power-cycled
 - open the netBooter's own command line (telnet) in a **Console** window, right in the dashboard
 - give each person their own **username and password** (everyone has the same rights; the event log shows who did what), and stay signed in for 30 days on each device
+- track **power usage over time** on a graph (last hour to last year), with average, peak and energy used (kWh)
 - keep an event log of power failures, restorations, low battery, and every command with the address it came from
 
 ```
@@ -89,6 +90,7 @@ The UPS write community and the netBooter password are stored on the server and 
 - **Top right**: one overall status: *All good*, *Check UPS* (e.g. battery needs replacing), *On battery* or *Needs attention*. A red banner appears across the top during a power failure.
 - **UPS card**: battery %, runtime, load, input/output voltage, temperature. Self-test, reboot/off/on and runtime calibration are under **Power controls & details**, together with model, serial and firmware.
 - **netBooter card**: total current draw and its approximate wattage, temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
+- **Power usage** (bottom): UPS output watts and netBooter watts over the last hour, 24 hours, 7 days, 30 days or year, with the average, peak and energy (kWh) for the period. Hover (or focus the graph and use ←/→) to read exact values; **Show table** lists every point. Gaps in the lines are periods without readings (e.g. PowerHub was off). The netBooter only measures current, so its watts are amps × the mains voltage from the UPS. If the netBooter is plugged into the UPS, its load is part of the UPS output too — don't add the two.
 - **Top right**: who you're signed in as, and the sign-out button.
 - **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (PowerHub doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
 - Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on and power-cycled, but not turned off; **All off** skips them.
@@ -106,6 +108,7 @@ The UPS write community and the netBooter password are stored on the server and 
 | `settings.json` | Saved settings (created on first save; in the Docker volume at `/data`) |
 | `events.json` | Last 500 events (same place) |
 | `sessions.json` | Signed-in devices (only a hash of each session token; same place) |
+| `history.json` | Power history: 1-minute averages for 7 days, hourly averages for ~13 months (under 1 MB; same place). Saved every 5 minutes and when PowerHub stops |
 
 Environment: `PORT` (default 8090), `DATA_DIR` (default: app folder; `/data` in Docker), `MOCK=1`.
 
@@ -153,6 +156,7 @@ Everything except `/api/health` and `/api/auth/*` needs a signed-in session (the
 | POST | `/api/users/<name>/password` | `{ password }` — set another user's password (signs them out) |
 | DELETE | `/api/users/<name>` | — remove a user (not yourself) |
 | GET | `/api/status` | — |
+| GET | `/api/history?range=1h\|24h\|7d\|30d\|1y` | — → `{ from, to, step, since, points: [[time, upsW, netBooterW]], stats: { ups, pdu: { avg, peak, kwh } } }` |
 | GET / POST | `/api/settings` | settings object |
 | POST | `/api/test` | `{ device: 'ups'\|'pdu', config }` |
 | POST | `/api/ups/action` | `{ action: 'selfTest'\|'calibrate'\|'cancelCalib'\|'beep'\|'reboot'\|'turnOff'\|'turnOn' }` |
@@ -189,6 +193,10 @@ The first command prints a new random password for that user (default `admin`) a
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 3.1.0 — 2026-09-25
+- **Power usage graph**: UPS output and netBooter watts over 1 hour / 24 hours / 7 days / 30 days / 1 year, with average, peak and energy (kWh), a hover/keyboard crosshair with both values, and a table view. Recorded every poll, stored as 1-minute averages (7 days) and hourly averages (~13 months) in `history.json`.
+- PowerHub now saves its history, sessions and event log when the container stops.
 
 ### 3.0.1 — 2026-09-25
 - Settings keeps the same size on every tab: the tab bar stays put and only the content below it scrolls, with a visible scrollbar.

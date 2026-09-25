@@ -48,6 +48,7 @@ const DATA_DIR      = process.env.DATA_DIR || DIR;
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const EVENTS_FILE   = path.join(DATA_DIR, 'events.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const HISTORY_FILE  = path.join(DATA_DIR, 'history.json');
 const MOCK          = process.env.MOCK === '1';
 const MAX_EVENTS    = 500;
 
@@ -637,9 +638,129 @@ function outletLabel(n) {
   return o && o.name ? `Outlet ${n} “${o.name}”` : `Outlet ${n}`;
 }
 
+// ── Power history (history.json) ─────────────────────────────────────────────
+// Every poll adds a sample of UPS output watts and netBooter watts (amps × mains
+// voltage). Samples are averaged per minute (kept 7 days) and per hour (kept ~13
+// months). Each point is [start time, UPS W, netBooter W]; null = no reading.
+const MINUTE = 60000, HOUR = 3600000, DAY = 86400000;
+const KEEP_MINUTES = 7 * DAY, KEEP_HOURS = 400 * DAY;
+
+let history = { minute: [], hour: [] };
+try {
+  const h = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+  if (Array.isArray(h.minute) && Array.isArray(h.hour)) history = h;
+} catch (e) {}
+let historyDirty = false;
+const bucket = { minute: null, hour: null };
+
+// Demo mode starts with a year of made-up history so the graph has something to show
+if (MOCK && !history.minute.length) {
+  const now = Date.now();
+  const fake = t => {
+    const h = new Date(t).getHours() + new Date(t).getMinutes() / 60;
+    const day = 0.5 + 0.5 * Math.sin((h - 9) / 24 * 2 * Math.PI);          // busier in the evening
+    const noise = Math.sin(t / 7e5) * 12 + Math.sin(t / 3.1e6) * 18;
+    const ups = Math.round(150 + 90 * day + noise);
+    return [ups, Math.round(ups * 0.78 + Math.sin(t / 9e5) * 8)];
+  };
+  for (let t = Math.floor((now - 365 * DAY) / HOUR) * HOUR; t < now - HOUR; t += HOUR)
+    if (t < now - 30 * DAY - 3 * DAY || t > now - 30 * DAY) history.hour.push([t, ...fake(t)]);   // a 3-day gap, like a power-off
+  for (let t = Math.floor((now - KEEP_MINUTES) / MINUTE) * MINUTE; t < now - MINUTE; t += MINUTE)
+    history.minute.push([t, ...fake(t)]);
+}   // { t, sums: [ups, pdu], counts: [ups, pdu] }
+
+function upsWatts() {
+  const d = state.ups.data;
+  if (!state.ups.online || !d) return null;
+  if (d.outputPower != null) return d.outputPower;
+  return d.load != null && d.ratingW ? Math.round(d.load / 100 * d.ratingW) : null;
+}
+
+// Same estimate as the dashboard: amps × mains voltage from the UPS, else 120 V
+function pduWatts() {
+  if (!state.pdu.online || !state.pdu.currents.length) return null;
+  const v = state.ups.online && state.ups.data && state.ups.data.inputVoltage > 80 ? state.ups.data.inputVoltage : 120;
+  return state.pdu.currents.reduce((a, b) => a + b, 0) * v;
+}
+
+function addToBucket(kind, size, t, values, keep) {
+  const start = Math.floor(t / size) * size;
+  let b = bucket[kind];
+  if (b && b.t !== start) {
+    const point = [b.t, ...b.sums.map((sum, i) => (b.counts[i] ? Math.round(sum / b.counts[i] * 10) / 10 : null))];
+    history[kind].push(point);
+    const cutoff = Date.now() - keep;
+    while (history[kind].length && history[kind][0][0] < cutoff) history[kind].shift();
+    historyDirty = true;
+    if (kind === 'minute') addToBucket('hour', HOUR, point[0], point.slice(1), KEEP_HOURS);
+    b = null;
+  }
+  if (!b) b = bucket[kind] = { t: start, sums: values.map(() => 0), counts: values.map(() => 0) };
+  values.forEach((v, i) => { if (v != null) { b.sums[i] += v; b.counts[i]++; } });
+}
+
+function recordPower() {
+  addToBucket('minute', MINUTE, Date.now(), [upsWatts(), pduWatts()], KEEP_MINUTES);
+}
+
+function saveHistory() {
+  historyDirty = false;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(HISTORY_FILE + '.tmp', JSON.stringify(history));
+    fs.renameSync(HISTORY_FILE + '.tmp', HISTORY_FILE);
+  } catch (e) { console.error(`[History] Could not write history.json: ${e.message}`); }
+}
+setInterval(() => { if (historyDirty) saveHistory(); }, 5 * 60000);
+
+// The ranges the dashboard offers: which stored series to read and how wide each
+// plotted point is (several stored points are averaged into one plotted point)
+const RANGES = {
+  '1h':  { span: HOUR,       source: 'minute', step: MINUTE },
+  '24h': { span: DAY,        source: 'minute', step: 5 * MINUTE },
+  '7d':  { span: 7 * DAY,    source: 'minute', step: 30 * MINUTE },
+  '30d': { span: 30 * DAY,   source: 'hour',   step: 2 * HOUR },
+  '1y':  { span: 365 * DAY,  source: 'hour',   step: DAY },
+};
+
+function historyFor(rangeKey) {
+  const r = RANGES[rangeKey] || RANGES['24h'];
+  const now = Date.now();
+  const from = now - r.span;
+  const unit = r.source === 'minute' ? MINUTE : HOUR;
+  const base = history[r.source].filter(p => p[0] >= from);
+
+  // Stats come from the stored points: average, peak, and energy (W × hours → kWh)
+  const stats = [0, 1].map(i => {
+    const vals = base.map(p => p[i + 1]).filter(v => v != null);
+    if (!vals.length) return { avg: null, peak: null, kwh: null };
+    return {
+      avg:  Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
+      peak: Math.round(Math.max(...vals)),
+      kwh:  Math.round(vals.reduce((a, b) => a + b, 0) * (unit / HOUR) / 1000 * 100) / 100,
+    };
+  });
+
+  const points = [];
+  for (let t = Math.floor(from / r.step) * r.step; t <= now; t += r.step) points.push([t, [0, 0], [0, 0]]);
+  for (const p of base) {
+    const slot = points[Math.floor((p[0] - points[0][0]) / r.step)];
+    if (!slot) continue;
+    for (let i = 0; i < 2; i++) if (p[i + 1] != null) { slot[1][i] += p[i + 1]; slot[2][i]++; }
+  }
+  return {
+    range: rangeKey in RANGES ? rangeKey : '24h',
+    step: r.step, from, to: now,
+    since: history.minute.length ? Math.min(history.minute[0][0], history.hour.length ? history.hour[0][0] : Infinity) : null,
+    points: points.map(([t, sums, counts]) => [t, ...sums.map((sum, i) => (counts[i] ? Math.round(sum / counts[i]) : null))]),
+    stats: { ups: stats[0], pdu: stats[1] },
+  };
+}
+
 let pollTimer = null;
 async function pollLoop() {
   await Promise.all([pollUps(), pollPdu()]);
+  recordPower();
   for (const [n, t] of Object.entries(state.pendingReboots)) if (Date.now() - t > 60000) delete state.pendingReboots[n];
   pollTimer = setTimeout(pollLoop, Math.max(2, Math.min(60, settings.pollSeconds || 5)) * 1000);
 }
@@ -826,6 +947,10 @@ async function handleApi(req, res, url) {
 
   if (url === '/api/status' && req.method === 'GET') return sendJson(res, 200, statusPayload());
   if (url === '/api/events' && req.method === 'GET') return sendJson(res, 200, events);
+  if (url === '/api/history' && req.method === 'GET') {
+    const range = new URL(req.url, 'http://x').searchParams.get('range');
+    return sendJson(res, 200, historyFor(range));
+  }
   if (url === '/api/settings' && req.method === 'GET') return sendJson(res, 200, publicSettings());
 
   if (url === '/api/settings' && req.method === 'POST') {
@@ -1102,6 +1227,17 @@ server.on('upgrade', (req, socket, head) => {
   req.powerhubUser = sess.user;
   wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
 });
+
+// docker stop / restart: save what's in memory first
+function shutdown(signal) {
+  console.log(`[PowerHub] ${signal} — saving and exiting`);
+  saveHistory();
+  if (sessionsDirty) saveSessions();
+  try { fs.writeFileSync(EVENTS_FILE, JSON.stringify(events)); } catch (e) {}
+  process.exit(0);
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(HTTP_PORT, () => {
   console.log(`\n  PowerHub v${VERSION}${MOCK ? '  (MOCK devices)' : ''}`);
