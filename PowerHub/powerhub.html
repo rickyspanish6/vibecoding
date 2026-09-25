@@ -177,6 +177,15 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 .overlay.open { display: flex; }
 .modal { background: var(--bg-card); border: 1px solid var(--border-md); border-radius: 18px; width: 100%; max-width: 420px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
 .modal.wide { max-width: 680px; }
+/* Settings keeps one size on every tab; only the content under the tabs scrolls */
+#settingsOverlay .modal { height: min(720px, calc(100vh - 32px)); }
+.modal-tabs { padding: 16px 18px 0; }
+.modal-tabs .tabs { margin-bottom: 0; }
+.settings-body { flex: 1; min-height: 0; padding-top: 18px; scrollbar-gutter: stable; }
+.settings-body::-webkit-scrollbar { width: 10px; }
+.settings-body::-webkit-scrollbar-track { background: transparent; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--border-md); border-radius: 5px; border: 2px solid var(--bg-card); }
+.settings-body::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 .modal-head { display: flex; align-items: center; padding: 16px 18px; border-bottom: 1px solid var(--border); gap: 10px; }
 .modal-head h2 { font-size: 16px; font-weight: 600; flex: 1; }
 .modal-body { padding: 18px; overflow-y: auto; }
@@ -331,7 +340,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
       <h2 id="settingsTitle">Settings</h2>
       <button class="icon-btn" id="settingsClose" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
-    <div class="modal-body">
+    <div class="modal-tabs">
       <div class="tabs">
         <button class="tab active" data-pane="paneUps">UPS</button>
         <button class="tab" data-pane="panePdu">netBooter</button>
@@ -339,6 +348,8 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
         <button class="tab" data-pane="paneGeneral">General</button>
         <button class="tab" data-pane="paneUsers">Users</button>
       </div>
+    </div>
+    <div class="modal-body settings-body">
 
       <div class="pane active" id="paneUps">
         <label class="check"><input type="checkbox" id="upsEnabled"> Monitor this UPS</label>
@@ -887,6 +898,7 @@ async function openSettings(pane) {
 function showPane(id) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.pane === id));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === id));
+  document.querySelector('.settings-body').scrollTop = 0;
 }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => showPane(t.dataset.pane));
 

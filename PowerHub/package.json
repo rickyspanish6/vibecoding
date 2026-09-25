@@ -1,6 +1,6 @@
 {
   "name": "powerhub",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "private": true,
   "description": "PowerHub — dashboard for a CyberPower UPS (RMCARD205) and a Synaccess netBooter NP-1601DU",
   "main": "server.js",

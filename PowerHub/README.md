@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v3.0.0
+# PowerHub · v3.0.1
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -189,6 +189,9 @@ The first command prints a new random password for that user (default `admin`) a
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 3.0.1 — 2026-09-25
+- Settings keeps the same size on every tab: the tab bar stays put and only the content below it scrolls, with a visible scrollbar.
 
 ### 3.0.0 — 2026-09-25
 - **Users**: each person signs in with their own username and password; all users have the same rights. Settings › Users (replaces Security) to change your password, sign out your other devices, and add users, set their passwords or remove them. The top bar shows who is signed in, and the event log records actions *by* user.
