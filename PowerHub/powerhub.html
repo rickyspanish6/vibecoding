@@ -16,6 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
 
 :root {
   --bg:        #0d0f12;
@@ -212,6 +213,20 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 .toast.bad { border-color: rgba(240,96,90,0.5); color: var(--red); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
 
+/* ── Sign-in ── */
+.auth { position: fixed; inset: 0; z-index: 300; background: var(--bg); display: none; align-items: center; justify-content: center; padding: 16px; }
+.auth.open { display: flex; }
+.auth-box { width: 100%; max-width: 360px; background: var(--bg-card); border: 1px solid var(--border-md); border-radius: 18px; padding: 28px 24px 24px; box-shadow: 0 30px 80px rgba(0,0,0,0.45); }
+.auth-brand { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; text-align: center; }
+.auth-brand img { width: 56px; height: 56px; border-radius: 14px; }
+.auth-brand h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.auth-brand p { color: var(--text-2); font-size: 13px; }
+.auth .btn.primary { width: 100%; padding: 11px; margin-top: 4px; }
+.auth-error { color: var(--red); font-size: 13px; min-height: 20px; margin: -4px 0 8px; }
+body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden; }
+.section-title { font-size: 13px; font-weight: 600; margin: 4px 0 12px; }
+.divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
 /* ── Console ── */
 .modal.console { max-width: 980px; height: min(86vh, 720px); }
 .console-head .state { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-2); font-weight: 500; }
@@ -258,6 +273,9 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
   </div>
   <div class="spacer"></div>
   <div class="pill" title="Overall status"><span class="dot" id="overallDot"></span><span id="overallText">Connecting…</span></div>
+  <button class="icon-btn" id="signOutBtn" title="Sign out" aria-label="Sign out">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+  </button>
   <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
@@ -307,6 +325,7 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
         <button class="tab" data-pane="panePdu">netBooter</button>
         <button class="tab" data-pane="paneOutlets">Outlets</button>
         <button class="tab" data-pane="paneGeneral">General</button>
+        <button class="tab" data-pane="paneSecurity">Security</button>
       </div>
 
       <div class="pane active" id="paneUps">
@@ -360,6 +379,24 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
         <div class="field" style="max-width:220px"><label for="pollSeconds">Refresh every (seconds)</label><input id="pollSeconds" type="number" min="2" max="60"></div>
         <p class="note">How often the server reads the UPS and the netBooter.</p>
       </div>
+
+      <div class="pane" id="paneSecurity">
+        <div class="section-title">Change PowerHub password</div>
+        <form id="pwForm" autocomplete="on" onsubmit="return false">
+          <input type="text" name="username" value="powerhub" autocomplete="username" hidden>
+          <div class="field" style="max-width:320px"><label for="pwCurrent">Current password</label><input id="pwCurrent" type="password" autocomplete="current-password"></div>
+          <div class="row2" style="max-width:660px">
+            <div class="field"><label for="pwNew">New password</label><input id="pwNew" type="password" autocomplete="new-password" minlength="8"><span class="hint">At least 8 characters</span></div>
+            <div class="field"><label for="pwConfirm">Repeat new password</label><input id="pwConfirm" type="password" autocomplete="new-password"></div>
+          </div>
+          <div class="test-row"><button class="btn" id="pwChange" type="button">Change password</button><span class="test-result" id="pwResult"></span></div>
+        </form>
+        <p class="note" style="margin-top:10px">Changing the password signs out every other device.</p>
+        <hr class="divider">
+        <div class="section-title">Signed-in devices</div>
+        <p class="note" style="margin-bottom:12px">Each browser stays signed in for 30 days after its last visit.</p>
+        <div class="test-row"><button class="btn danger" id="signOutOthers" type="button">Sign out all other devices</button><span class="test-result" id="othersResult"></span></div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn" id="settingsCancel">Cancel</button>
@@ -394,6 +431,22 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
   </div>
 </div>
 
+<!-- Sign-in / first-time password -->
+<div class="auth" id="authScreen">
+  <form class="auth-box" id="authForm" autocomplete="on">
+    <div class="auth-brand">
+      <img src="images/icons/icon-192.png" alt="">
+      <h1>PowerHub</h1>
+      <p id="authLead">Enter the password to continue</p>
+    </div>
+    <input type="text" name="username" value="powerhub" autocomplete="username" hidden>
+    <div class="field"><label for="authPassword" id="authPasswordLabel">Password</label><input id="authPassword" type="password" autocomplete="current-password" required></div>
+    <div class="field" id="authConfirmField" hidden><label for="authConfirm">Repeat password</label><input id="authConfirm" type="password" autocomplete="new-password"></div>
+    <div class="auth-error" id="authError"></div>
+    <button class="btn primary" type="submit" id="authSubmit">Sign in</button>
+  </form>
+</div>
+
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -423,6 +476,10 @@ async function api(method, url, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !url.startsWith('/api/auth/')) {
+    showAuth(data.passwordSet === false ? 'setup' : 'login');
+    throw new Error('Sign in required');
+  }
   if (!res.ok && data.ok === undefined) throw new Error(data.message || `HTTP ${res.status}`);
   return data;
 }
@@ -745,9 +802,10 @@ $('clearEventsBtn').onclick = async () => {
 };
 
 // ── Polling ──
-let refreshTimer = null, failCount = 0;
+let refreshTimer = null, failCount = 0, signedIn = false;
 async function refresh() {
   clearTimeout(refreshTimer);
+  if (!signedIn) return;
   try {
     status = await api('GET', '/api/status');
     failCount = 0;
@@ -758,9 +816,9 @@ async function refresh() {
       $('overallText').textContent = 'PowerHub offline';
     }
   }
-  refreshTimer = setTimeout(refresh, document.hidden ? 10000 : 2000);
+  if (signedIn) refreshTimer = setTimeout(refresh, document.hidden ? 10000 : 2000);
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && signedIn) refresh(); });
 
 // ── Settings ──
 async function openSettings(pane) {
@@ -788,6 +846,8 @@ async function openSettings(pane) {
   $('pduPassHint').textContent = s.pdu.passwordSet ? 'Leave empty to keep the saved one' : '';
   $('pollSeconds').value = s.pollSeconds;
   $('upsTestResult').textContent = $('pduTestResult').textContent = '';
+  $('pwResult').textContent = $('othersResult').textContent = '';
+  $('pwCurrent').value = $('pwNew').value = $('pwConfirm').value = '';
 
   const count = Math.max(status?.pdu.outlets.length || 0, s.pdu.outlets.length, 16);
   $('outletEditList').innerHTML = Array.from({ length: count }, (_, i) => {
@@ -854,7 +914,7 @@ $('settingsSave').onclick = async () => {
 };
 
 document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
+  if (e.key !== 'Escape' || !signedIn) return;
   if ($('confirmOverlay').classList.contains('open')) $('confirmCancel').click();
   else if ($('consoleOverlay').classList.contains('open')) return;   // Escape belongs to the terminal
   else if ($('settingsOverlay').classList.contains('open')) closeSettings();
@@ -959,7 +1019,95 @@ for (const [id, key] of [['optEcho', 'echo'], ['optBs', 'bs']]) {
   };
 }
 
-refresh();
+// ── Sign-in ──
+let authMode = 'login';
+
+function showAuth(mode) {
+  signedIn = false;
+  clearTimeout(refreshTimer);
+  if (typeof closeConsole === 'function' && $('consoleOverlay').classList.contains('open')) closeConsole();
+  $('settingsOverlay').classList.remove('open');
+  $('confirmOverlay').classList.remove('open');
+  authMode = mode;
+  const setup = mode === 'setup';
+  $('authLead').textContent = setup ? 'Create a password to protect PowerHub' : 'Enter the password to continue';
+  $('authPasswordLabel').textContent = setup ? 'New password (at least 8 characters)' : 'Password';
+  $('authPassword').autocomplete = setup ? 'new-password' : 'current-password';
+  $('authConfirmField').hidden = !setup;
+  $('authSubmit').textContent = setup ? 'Create password' : 'Sign in';
+  $('authError').textContent = '';
+  $('authPassword').value = $('authConfirm').value = '';
+  document.body.classList.add('locked');
+  $('authScreen').classList.add('open');
+  setTimeout(() => $('authPassword').focus(), 50);
+}
+
+function enterApp() {
+  signedIn = true;
+  document.body.classList.remove('locked');
+  $('authScreen').classList.remove('open');
+  refresh();
+}
+
+$('authForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const password = $('authPassword').value;
+  if (authMode === 'setup') {
+    if (password.length < 8) { $('authError').textContent = 'Use at least 8 characters'; return; }
+    if (password !== $('authConfirm').value) { $('authError').textContent = "The two passwords don't match"; return; }
+  }
+  $('authSubmit').disabled = true;
+  $('authError').textContent = '';
+  try {
+    const r = await api('POST', authMode === 'setup' ? '/api/auth/setup' : '/api/auth/login', { password });
+    if (r.ok) enterApp();
+    else $('authError').textContent = r.message || 'Could not sign in';
+  } catch (err) {
+    $('authError').textContent = 'Could not reach PowerHub';
+  }
+  $('authSubmit').disabled = false;
+});
+
+$('signOutBtn').onclick = async () => {
+  await api('POST', '/api/auth/logout').catch(() => {});
+  showAuth('login');
+};
+
+$('pwChange').onclick = async () => {
+  const out = $('pwResult');
+  const current = $('pwCurrent').value, password = $('pwNew').value;
+  out.className = 'test-result bad';
+  if (password.length < 8) return out.textContent = '✕ Use at least 8 characters';
+  if (password !== $('pwConfirm').value) return out.textContent = "✕ The new passwords don't match";
+  out.className = 'test-result';
+  out.textContent = 'Saving…';
+  try {
+    const r = await api('POST', '/api/auth/change', { current, password });
+    out.className = 'test-result ' + (r.ok ? 'ok' : 'bad');
+    out.textContent = r.ok ? '✓ Password changed' : '✕ ' + r.message;
+    if (r.ok) $('pwCurrent').value = $('pwNew').value = $('pwConfirm').value = '';
+  } catch (e) { out.className = 'test-result bad'; out.textContent = '✕ ' + e.message; }
+};
+
+$('signOutOthers').onclick = async () => {
+  if (!(await confirmDialog('Sign out other devices?', 'Every other browser and phone will have to enter the password again.', 'Sign out others', true))) return;
+  try {
+    const r = await api('POST', '/api/auth/logout-others');
+    $('othersResult').className = 'test-result ok';
+    $('othersResult').textContent = `✓ ${r.count} other device${r.count === 1 ? '' : 's'} signed out`;
+  } catch (e) { toast(e.message, true); }
+};
+
+(async function start() {
+  try {
+    const a = await api('GET', '/api/auth/status');
+    if (a.authenticated) enterApp();
+    else showAuth(a.passwordSet ? 'login' : 'setup');
+  } catch (e) {
+    showAuth('login');
+    $('authError').textContent = 'Could not reach PowerHub';
+  }
+})();
 </script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v1.3.0
+# PowerHub · v2.0.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
@@ -9,6 +9,7 @@ A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card
 - switch each of the 16 netBooter outlets on or off, power-cycle them, or switch them all at once
 - name the outlets and **lock** the critical ones (modem, router, network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard — they can still be power-cycled
 - open the netBooter's own command line (telnet) in a **Console** window, right in the dashboard
+- sign in with a password (you stay signed in for 30 days on each device)
 - keep an event log of power failures, restorations, low battery, and every command with the address it came from
 
 ```
@@ -63,10 +64,13 @@ Without Docker: `npm install`, then `npm start`.
 1. Note its address (factory default `192.168.1.100`) and login (factory default `admin` / `admin` — change it).
 2. Set the **reboot delay** there; PowerHub's power-cycle uses it.
 3. DU models can also use HTTPS; PowerHub accepts the netBooter's self-signed certificate.
+4. Avoid leaving the netBooter's own web page open: while it is, the netBooter barely answers PowerHub, and PowerHub may show it as not responding. Use PowerHub (or its Console) instead.
 
 ### Configure PowerHub
 
-Open **Settings** (gear icon, top right):
+The first time you open PowerHub it asks you to **create a password** (at least 8 characters). Do this straight away after installing: until a password exists, whoever opens the page first gets to choose it.
+
+Then open **Settings** (gear icon, top right):
 
 | Tab | What to enter |
 |---|---|
@@ -74,6 +78,7 @@ Open **Settings** (gear icon, top right):
 | **netBooter** | Address, HTTP/HTTPS, username and password → **Test connection**; telnet port for the Console (default 23) |
 | **Outlets** | A name for each outlet, and **Locked** for anything that must stay on (it can still be power-cycled) |
 | **General** | How often the devices are read (default every 5 s) |
+| **Security** | Change the PowerHub password (signs out every other device), or sign out all other devices |
 
 The UPS write community and the netBooter password are stored on the server and are never sent back to a browser.
 
@@ -99,6 +104,7 @@ The UPS write community and the netBooter password are stored on the server and 
 | `powerhub.html` | The dashboard (single page, no build step) |
 | `settings.json` | Saved settings (created on first save; in the Docker volume at `/data`) |
 | `events.json` | Last 500 events (same place) |
+| `sessions.json` | Signed-in devices (only a hash of each session token; same place) |
 
 Environment: `PORT` (default 8090), `DATA_DIR` (default: app folder; `/data` in Docker), `MOCK=1`.
 
@@ -130,8 +136,17 @@ If the UPS model lacks some objects, PowerHub reads the rest one by one and show
 
 ### HTTP API (used by the dashboard)
 
+Everything except `/api/health` and `/api/auth/*` needs a signed-in session (the `powerhub_session` cookie) and answers `401` otherwise. Requests that change something are refused if they come from another website.
+
 | Method | Path | Body |
 |---|---|---|
+| GET | `/api/health` | — (no sign-in needed; used by the Docker health check) |
+| GET | `/api/auth/status` | — → `{ passwordSet, authenticated }` |
+| POST | `/api/auth/setup` | `{ password }` — only while no password exists |
+| POST | `/api/auth/login` | `{ password }` |
+| POST | `/api/auth/logout` | — |
+| POST | `/api/auth/change` | `{ current, password }` — signs out every other device |
+| POST | `/api/auth/logout-others` | — |
 | GET | `/api/status` | — |
 | GET / POST | `/api/settings` | settings object |
 | POST | `/api/test` | `{ device: 'ups'\|'pdu', config }` |
@@ -139,11 +154,27 @@ If the UPS model lacks some objects, PowerHub reads the rest one by one and show
 | POST | `/api/pdu/outlet` | `{ outlet: 1-16, action: 'on'\|'off'\|'reboot' }` |
 | POST | `/api/pdu/all` | `{ state: 'on'\|'off' }` |
 | GET / DELETE | `/api/events` | — |
-| WebSocket | `/api/console` | JSON messages `{ type: 'data', data }` both ways; the server also sends `{ type: 'status', state, message }`. Same-origin only |
+| WebSocket | `/api/console` | JSON messages `{ type: 'data', data }` both ways; the server also sends `{ type: 'status', state, message }`. Same-origin and signed-in only |
 
 The console is a plain relay to the netBooter's telnet port. PowerHub strips telnet control codes, never sends the saved password to it, and never records what is typed (the event log only notes when a console opens and closes). The terminal emulator is [xterm.js](https://xtermjs.org), served from the app itself.
 
-**Security:** like the other dashboards in this repo, PowerHub has no login of its own. Anyone who can open the page can switch outlets, so keep it on a trusted network.
+### Security
+
+- The password is stored as a salted scrypt hash in `settings.json`; it is never stored or sent back in clear.
+- Signing in sets an HttpOnly, SameSite=Strict cookie valid for 30 days after the last visit. Signing out, changing the password or **Sign out all other devices** ends sessions immediately.
+- Each wrong password waits 1 s; after 10 wrong passwords within 10 minutes, signing in is paused for 10 minutes (for everyone, since behind Docker all browsers share one address).
+- PowerHub serves plain HTTP, so the password crosses your network unencrypted — keep it on a trusted network, or put it behind a reverse proxy with HTTPS.
+
+**Forgot the password?** On the server:
+
+```bash
+docker exec powerhub node server.js --reset-password
+```
+```bash
+docker restart powerhub
+```
+
+Then open PowerHub and create a new one. Device settings are kept.
 
 ---
 
@@ -152,6 +183,14 @@ The console is a plain relay to the netBooter's telnet port. PowerHub strips tel
 [Semantic Versioning 2.0.0](https://semver.org): MAJOR.MINOR.PATCH. The version lives in `package.json` (shown in the top bar) and in this README's title and changelog.
 
 ## Changelog
+
+### 2.0.0 — 2026-09-25
+- **Password protection**: PowerHub asks to create a password on first visit, then requires signing in (30-day sessions per device). Sign-out button in the top bar; Settings › Security to change the password or sign out other devices; `--reset-password` for a forgotten password.
+- **Breaking (API):** every API endpoint and the console now need a signed-in session; new `/api/auth/*` endpoints and `/api/health` (the Docker health check now uses it).
+- Requests that change something are refused when they come from another website.
+
+### 1.3.1 — 2026-09-25
+- netBooter status reads also retry after a timeout, and the netBooter is only reported as not responding after 3 failed polls in a row (about 15 s): its web server barely answers while its own web page is open.
 
 ### 1.3.0 — 2026-09-25
 - Locked outlets can now be power-cycled; they still can't be turned off, and **All off** still skips them.

@@ -4,6 +4,7 @@
 //   • CyberPower UPS through its RMCARD205 network card (SNMP v1/v2c, CyberPower MIB)
 //   • Synaccess netBooter NP-1601DU PDU (HTTP/HTTPS cmd.cgi "$A" commands)
 //   • a telnet console to the netBooter's own command line (WebSocket ↔ TCP 23)
+// Everything except the sign-in screen needs the PowerHub password (created on first visit).
 // The server polls both devices, keeps an event log (events.json) and stores the
 // settings (settings.json). Browsers only ever talk to this server.
 //
@@ -17,6 +18,9 @@
 // Open:
 //   http://localhost:8090
 //
+// Forgot the password?  docker exec powerhub node server.js --reset-password
+//                        (then restart the container and create a new one)
+//
 // Env: PORT (default 8090), DATA_DIR (folder for settings.json / events.json, default: this folder),
 //      MOCK=1 (simulated UPS and PDU — for trying the dashboard without hardware)
 
@@ -24,6 +28,7 @@ const http  = require('http');
 const https = require('https');
 const net   = require('net');
 const fs    = require('fs');
+const crypto = require('crypto');
 const path  = require('path');
 
 let snmp, WebSocketServer;
@@ -42,6 +47,7 @@ const DIR           = __dirname;
 const DATA_DIR      = process.env.DATA_DIR || DIR;
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const EVENTS_FILE   = path.join(DATA_DIR, 'events.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const MOCK          = process.env.MOCK === '1';
 const MAX_EVENTS    = 500;
 
@@ -96,6 +102,7 @@ function saveSettings() {
 // What the browser sees: secrets replaced by "is it set?" flags
 function publicSettings() {
   const out = JSON.parse(JSON.stringify(settings));
+  delete out.auth;
   for (const [dev, keys] of Object.entries(SECRET_KEYS)) {
     for (const k of keys) { out[dev][k + 'Set'] = !!out[dev][k]; delete out[dev][k]; }
   }
@@ -128,6 +135,100 @@ function mergeDevice(dev, current, incoming) {
     }));
   }
   return next;
+}
+
+// ── Password & sessions ──────────────────────────────────────────────────────
+// One shared password, stored as a salted scrypt hash in settings.json (settings.auth).
+// Signing in gives a random session token in an HttpOnly cookie, valid 30 days from
+// last use. Only a SHA-256 of each token is kept (sessions.json), so the file can't be
+// used to sign in.
+const COOKIE      = 'powerhub_session';
+const SESSION_TTL = 30 * 24 * 3600 * 1000;
+const MIN_PASSWORD = 8;
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return { salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') };
+}
+
+function checkPassword(password) {
+  const a = settings.auth;
+  if (!a || !a.hash || typeof password !== 'string') return false;
+  const got = Buffer.from(hashPassword(password, a.salt).hash, 'hex');
+  const want = Buffer.from(a.hash, 'hex');
+  return got.length === want.length && crypto.timingSafeEqual(got, want);
+}
+
+const passwordSet = () => !!(settings.auth && settings.auth.hash);
+const tokenId = token => crypto.createHash('sha256').update(token).digest('hex');
+
+let sessions = {};
+try { sessions = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); } catch (e) { sessions = {}; }
+let sessionsDirty = false;
+
+function saveSessions() {
+  sessionsDirty = false;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions));
+  } catch (e) { console.error(`[Auth] Could not write sessions.json: ${e.message}`); }
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of Object.entries(sessions)) if (now - s.lastSeen > SESSION_TTL) { delete sessions[id]; sessionsDirty = true; }
+  if (sessionsDirty) saveSessions();
+}, 5 * 60 * 1000);
+
+function readCookie(req) {
+  const m = (req.headers.cookie || '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]+)`));
+  return m ? m[1] : null;
+}
+
+// Returns the session id of a valid session (and refreshes its last use), or null
+function sessionOf(req) {
+  if (!passwordSet()) return null;
+  const token = readCookie(req);
+  if (!token) return null;
+  const id = tokenId(token);
+  const s = sessions[id];
+  if (!s || Date.now() - s.lastSeen > SESSION_TTL) return null;
+  if (Date.now() - s.lastSeen > 60000) { s.lastSeen = Date.now(); sessionsDirty = true; }
+  return id;
+}
+
+function newSession(res, who) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  sessions[tokenId(token)] = { created: Date.now(), lastSeen: Date.now(), from: who };
+  saveSessions();
+  setSessionCookie(res, token, SESSION_TTL / 1000);
+}
+
+function setSessionCookie(res, token, maxAge) {
+  res.setHeader('Set-Cookie', `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`);
+}
+
+// Wrong passwords: each one waits 1 s, and after 10 within 10 minutes sign-in is
+// paused for 10 minutes. Global rather than per address: behind Docker every
+// browser shows up with the same address.
+const loginGuard = { fails: [], lockedUntil: 0 };
+function loginLocked() { return Date.now() < loginGuard.lockedUntil; }
+function loginFailed() {
+  const now = Date.now();
+  loginGuard.fails = loginGuard.fails.filter(t => now - t < 10 * 60000).concat(now);
+  if (loginGuard.fails.length >= 10) {
+    loginGuard.lockedUntil = now + 10 * 60000;
+    loginGuard.fails = [];
+    logEvent('alarm', 'PowerHub', 'Too many wrong passwords — sign-in paused for 10 minutes');
+  }
+}
+
+// --reset-password: removes the password and every session, then exits
+if (process.argv.includes('--reset-password')) {
+  delete settings.auth;
+  saveSettings();
+  sessions = {};
+  saveSessions();
+  console.log('PowerHub password removed. Restart PowerHub, then open it to create a new one.');
+  process.exit(0);
 }
 
 // ── Event log (events.json) ──────────────────────────────────────────────────
@@ -335,13 +436,13 @@ function pduCommand(cfg, cmd, timeoutMs) {
   return p;
 }
 
-// Reading status changes nothing, so a dropped connection is retried once straight away.
+// Reading status changes nothing, so a dropped or timed-out request is retried once.
 // Commands are never retried: a repeated power-cycle would cycle the outlet twice.
 async function pduStatus(cfg) {
   try {
     return await pduCommand(cfg, '$A5', 4000);
   } catch (e) {
-    if (!['ECONNRESET', 'EPIPE'].includes(e.code) && !/socket hang up/i.test(e.message)) throw e;
+    if (!['ECONNRESET', 'EPIPE'].includes(e.code) && !/socket hang up|timed out/i.test(e.message)) throw e;
     await new Promise(r => setTimeout(r, 300));
     return pduCommand(cfg, '$A5', 4000);
   }
@@ -411,15 +512,17 @@ const state = {
 
 const configured = dev => MOCK || (settings[dev].enabled && !!settings[dev].host);
 
-// A device only counts as offline after two failed polls in a row, so one dropped
-// request (the netBooter's web server does that now and then) isn't reported as an outage
+// A device only counts as offline after several failed polls in a row, so a dropped
+// request isn't reported as an outage. The netBooter gets more slack: its web server
+// barely answers while someone has its own web page open.
 const failures = { ups: 0, pdu: 0 };
+const FAIL_LIMIT = { ups: 2, pdu: 3 };
 
 function setOnline(dev, ok, err) {
   const s = state[dev];
   const name = settings[dev].name;
   failures[dev] = ok ? 0 : failures[dev] + 1;
-  if (!ok && failures[dev] < 2 && s.online) return;
+  if (!ok && failures[dev] < FAIL_LIMIT[dev] && s.online) return;
   if (ok && s.online === false) logEvent('info', name, 'Connection restored');
   if (!ok && s.online !== false) logEvent('alarm', name, `Not responding — ${err}`);
   s.online = ok;
@@ -555,6 +658,80 @@ function statusPayload() {
 async function handleApi(req, res, url) {
   const who = (req.socket.remoteAddress || '').replace(/^::ffff:/, '');
 
+  if (url === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION });
+
+  // Requests that change something must come from PowerHub's own page
+  if (req.method !== 'GET' && req.headers.origin) {
+    let same = false;
+    try { same = new URL(req.headers.origin).host === req.headers.host; } catch (e) {}
+    if (!same) return sendJson(res, 403, { ok: false, message: 'Forbidden' });
+  }
+
+  const sid = sessionOf(req);
+
+  if (url === '/api/auth/status' && req.method === 'GET')
+    return sendJson(res, 200, { passwordSet: passwordSet(), authenticated: !!sid, version: VERSION });
+
+  if (url === '/api/auth/setup' && req.method === 'POST') {
+    if (passwordSet()) return sendJson(res, 409, { ok: false, message: 'A password is already set' });
+    const { password } = await readBody(req);
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD)
+      return sendJson(res, 400, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+    settings.auth = hashPassword(password);
+    saveSettings();
+    newSession(res, who);
+    logEvent('info', 'PowerHub', `Password created (from ${who})`);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (url === '/api/auth/login' && req.method === 'POST') {
+    if (!passwordSet()) return sendJson(res, 409, { ok: false, message: 'No password set yet' });
+    if (loginLocked()) return sendJson(res, 429, { ok: false, message: 'Too many wrong passwords. Try again in a few minutes.' });
+    const { password } = await readBody(req);
+    if (!checkPassword(password)) {
+      loginFailed();
+      await new Promise(r => setTimeout(r, 1000));
+      return sendJson(res, 401, { ok: false, message: 'Wrong password' });
+    }
+    newSession(res, who);
+    logEvent('info', 'PowerHub', `Signed in (from ${who})`);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (url === '/api/auth/logout' && req.method === 'POST') {
+    if (sid) { delete sessions[sid]; saveSessions(); }
+    setSessionCookie(res, '', 0);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  // Everything below needs a signed-in session
+  if (!sid) return sendJson(res, 401, { ok: false, message: 'Sign in required', passwordSet: passwordSet() });
+
+  if (url === '/api/auth/change' && req.method === 'POST') {
+    const { current, password } = await readBody(req);
+    if (!checkPassword(current)) {
+      loginFailed();
+      await new Promise(r => setTimeout(r, 1000));
+      return sendJson(res, 200, { ok: false, message: 'The current password is wrong' });
+    }
+    if (typeof password !== 'string' || password.length < MIN_PASSWORD)
+      return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
+    settings.auth = hashPassword(password);
+    saveSettings();
+    sessions = {};                    // every other device has to sign in again
+    newSession(res, who);
+    logEvent('info', 'PowerHub', `Password changed — other devices signed out (from ${who})`);
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (url === '/api/auth/logout-others' && req.method === 'POST') {
+    const n = Object.keys(sessions).length - 1;
+    sessions = { [sid]: sessions[sid] };
+    saveSessions();
+    logEvent('info', 'PowerHub', `Signed out ${n} other device${n === 1 ? '' : 's'} (from ${who})`);
+    return sendJson(res, 200, { ok: true, count: n });
+  }
+
   if (url === '/api/status' && req.method === 'GET') return sendJson(res, 200, statusPayload());
   if (url === '/api/events' && req.method === 'GET') return sendJson(res, 200, events);
   if (url === '/api/settings' && req.method === 'GET') return sendJson(res, 200, publicSettings());
@@ -562,6 +739,7 @@ async function handleApi(req, res, url) {
   if (url === '/api/settings' && req.method === 'POST') {
     const body = await readBody(req);
     settings = {
+      ...settings,
       pollSeconds: Math.max(2, Math.min(60, parseInt(body.pollSeconds, 10) || settings.pollSeconds)),
       ups: mergeDevice('ups', settings.ups, body.ups),
       pdu: mergeDevice('pdu', settings.pdu, body.pdu),
@@ -824,7 +1002,7 @@ server.on('upgrade', (req, socket, head) => {
   // Same-origin only, so another web page can't open the console through someone's browser
   let sameOrigin = false;
   try { sameOrigin = new URL(req.headers.origin).host === req.headers.host; } catch (e) {}
-  if (url !== '/api/console' || !sameOrigin) {
+  if (url !== '/api/console' || !sameOrigin || !sessionOf(req)) {
     socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     return socket.destroy();
   }
