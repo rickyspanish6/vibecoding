@@ -4,11 +4,14 @@ Standalone scripts that don't need a project of their own.
 
 | Script | What it does |
 | --- | --- |
-| [Repair-WindowsUpdatePolicies.ps1](Repair-WindowsUpdatePolicies.ps1) | Audits and repairs Windows Update policies on Windows 10/11 |
+| [Repair-WindowsUpdatePolicies-v1.2.0.ps1](Repair-WindowsUpdatePolicies-v1.2.0.ps1) | Audits, backs up, repairs and restores Windows Update policies on Windows 10/11 |
+
+Scripts carry their version in the file name; the latest version replaces the
+previous file.
 
 ---
 
-## Repair-WindowsUpdatePolicies.ps1
+## Repair-WindowsUpdatePolicies · v1.2.0
 
 An interactive PowerShell tool that finds whatever is stopping or restricting
 Windows Update and puts it back to how a clean Windows install behaves: policies
@@ -18,7 +21,7 @@ anything, backs up before every change, and logs everything.
 
 ```
 ========================================
- Windows Update Policy Repair
+ Windows Update Policy Repair v1.2.0
 ========================================
  Windows 11 24H2 - build 26100.4652
 
@@ -28,7 +31,9 @@ anything, backs up before every change, and logs everything.
 4. Reset Windows Update components
 5. Restore ALL Windows Update policies
 6. Run complete Windows Update repair
-7. Exit
+7. Back up current Windows Update configuration
+8. Restore Windows Update configuration from a backup
+9. Exit
 
 Select an option:
 ```
@@ -40,7 +45,7 @@ The menu comes back after every operation until you pick **Exit**.
 Open PowerShell **as Administrator** in the folder with the script:
 
 ```bash
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Repair-WindowsUpdatePolicies.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Repair-WindowsUpdatePolicies-v1.2.0.ps1
 ```
 
 If you start it without admin rights it offers to relaunch itself elevated. It
@@ -103,6 +108,15 @@ warning and makes a full backup first.
 audit → backup → option 2 → option 3 → option 4 → check services →
 `gpupdate /force` → test scan for updates → final audit → summary.
 
+**7 · Back up current configuration** — saves every setting this tool manages,
+with an optional description, without changing anything. Use it before
+experimenting, or to keep a known-good state.
+
+**8 · Restore from a backup** — lists every backup on this PC (manual ones and
+the automatic ones taken before each repair), shows exactly what would change,
+and puts the configuration back as it was. See
+[Backup and restore](#backup-and-restore).
+
 Every operation ends with a summary:
 
 ```
@@ -136,6 +150,34 @@ value doesn't stick, because the next Group Policy refresh writes it back. The
 script removes the matching Windows Update entries from those files too, and
 keeps every other setting in them byte-for-byte.
 
+### Backup and restore
+
+Every backup folder contains a `snapshot.json`: an exact record of every setting
+this tool manages — policy values, Local Group Policy entries, MDM policy
+stores, the policy cache, the Settings-app pause, service start types, scan
+tasks, update-related firewall rules and hosts lines.
+
+A restore (option 8) compares that record with the PC as it is now and changes
+only the differences:
+
+- values added since the backup are **removed**, values changed or removed since
+  are **written back** — so you return to exactly the saved state, which a plain
+  `reg import` can't do (it never deletes values added later);
+- in Local Group Policy files only the Windows Update entries are restored;
+  every other policy in them is kept;
+- settings the tool doesn't manage are never touched.
+
+You see the full list of changes before confirming, and the current state is
+backed up first, so a restore can itself be undone with option 8.
+
+Backups are made automatically before options 2–6 and before a restore, so you
+can always go back to how things were before a repair. A backup taken on another
+PC can be applied too (you're warned first), by choosing **P** and entering its
+folder path.
+
+A restore can put back a *blocking* configuration if that's what the backup
+contains, including a disabled service; the plan says so before you confirm.
+
 ### Safety
 
 - **Backups first.** Every key it might touch is exported with `reg export`,
@@ -166,12 +208,14 @@ C:\ProgramData\WindowsUpdatePolicyRepair\<yyyyMMdd-HHmmss>\
   Backup-<operation>-<time>\
     Registry\*.reg               exported keys
     Files\...                    Registry.pol files, hosts and firewall policy, as they were
+    snapshot.json                exact state, used by option 8
     RESTORE-README.txt
 ```
 
-To undo: double-click the `.reg` files (or `reg import <file>`), copy the saved
-files back under `C:\Windows\System32\`, and run `gpupdate /force`. Renamed
-cache folders can be renamed back once the services are stopped.
+To undo, use option 8. The `.reg` files and copied files are still there for a
+manual restore (`reg import <file>`, copy the files back under
+`C:\Windows\System32\`, then `gpupdate /force`). Renamed cache folders can be
+renamed back once the services are stopped.
 
 ### Still "managed by your organisation"?
 
@@ -203,5 +247,17 @@ organisation* after a repair:
 - Altered service registrations are only reported (see above).
 - Firewall rules delivered by Group Policy can't be changed locally; they're
   listed under "Could not modify".
+- A restore only covers users who are signed in, and firewall rules that still
+  exist (rules are enabled/disabled, never recreated).
+- Backups made with v1.0/v1.1 have no `snapshot.json`; restore them manually
+  from their `.reg` files.
 - Windows Server runs, but it's built and tested for Windows 10/11 client
   editions.
+
+### Version history
+
+| Version | Changes |
+| --- | --- |
+| 1.2.0 | Back up (option 7) and restore (option 8) the exact Windows Update configuration; version in the file name |
+| 1.1.0 | Catches policies that survived a repair: MDM provider stores, Windows Update policy cache, blocked update programs (IFEO), firewall rules, altered service registrations |
+| 1.0.0 | First version: audit, remove blocking policies, restore defaults, reset components, complete repair |

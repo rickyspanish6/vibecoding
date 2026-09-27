@@ -30,15 +30,18 @@
     they are never created.
 
 .NOTES
+    Version: 1.2.0 (the version is also part of the file name).
+
     Run from an elevated console:
-        powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Repair-WindowsUpdatePolicies.ps1
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Repair-WindowsUpdatePolicies-v1.2.0.ps1
 
     Logs, audit reports and backups are written to:
         %ProgramData%\WindowsUpdatePolicyRepair\<yyyyMMdd-HHmmss>\
 
-    Restoring a backup: double-click the .reg files in the Backup-* folder (or run
-    `reg import <file>`), and copy any saved Registry.pol files back to
-    %SystemRoot%\System32\GroupPolicy\... then run `gpupdate /force`.
+    Restoring a backup: menu option 8 returns every managed setting to exactly the
+    state saved in a backup's snapshot.json (option 7 makes a backup on demand; one is
+    also made automatically before every change). The .reg files remain available for
+    a manual restore.
 #>
 #Requires -Version 5.1
 [CmdletBinding()]
@@ -47,9 +50,10 @@ param()
 #region ---------------------------------------------------------------- Constants
 
 $script:ToolName    = 'Windows Update Policy Repair'
-$script:ToolVersion = '1.0.0'
+$script:ToolVersion = '1.2.0'
 $script:LogFile     = $null
 $script:SessionDir  = $null
+$script:BaseDir     = $null
 $script:OSInfo      = $null
 $script:Summary     = $null
 $script:ReportLines = $null
@@ -234,6 +238,7 @@ function New-OperationSummary {
         PoliciesRemoved  = 0
         PoliciesReset    = 0
         ServicesRepaired = 0
+        Restored         = 0
         ComponentsReset  = 'No'
         BackupDir        = $null
         Cancelled        = $false
@@ -373,7 +378,7 @@ function Remove-RegistryPolicyValue {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Name,
         [string]$Reason = '',
-        [ValidateSet('Removed', 'Reset', 'None')][string]$Counter = 'Removed',
+        [ValidateSet('Removed', 'Reset', 'Restored', 'None')][string]$Counter = 'Removed',
         [bool]$OrgManaged = $false
     )
     $key = $null
@@ -393,6 +398,7 @@ function Remove-RegistryPolicyValue {
         switch ($Counter) {
             'Removed' { $script:Summary.PoliciesRemoved++ }
             'Reset'   { $script:Summary.PoliciesReset++ }
+            'Restored' { $script:Summary.Restored++ }
         }
     }
     catch {
@@ -1319,27 +1325,32 @@ function Add-IfeoFindings {
     }
 }
 
-function Add-FirewallFindings {
-    <# Enabled outbound Block rules aimed at update services or programs. Locally created ones can be disabled (not deleted). #>
-    param($Findings)
+function Get-UpdateFirewallRules {
+    <# Outbound Block rules aimed at update services or programs, enabled or not. Throws if the firewall API is unavailable. #>
     $svcNames = @('wuauserv', 'UsoSvc', 'DoSvc', 'BITS', 'WaaSMedicSvc')
-    try {
-        $ids = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-        foreach ($f in @(Get-NetFirewallServiceFilter -All -ErrorAction Stop)) {
-            if ($f.Service -and ($svcNames -contains $f.Service)) { [void]$ids.Add($f.InstanceID) }
-        }
-        foreach ($f in @(Get-NetFirewallApplicationFilter -All -ErrorAction Stop)) {
-            if ($f.Program -and $f.Program -ne 'Any' -and ($script:WUExecutables -contains ([IO.Path]::GetFileName($f.Program)).ToLowerInvariant())) { [void]$ids.Add($f.InstanceID) }
-        }
+    $ids = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($f in @(Get-NetFirewallServiceFilter -All -ErrorAction Stop)) {
+        if ($f.Service -and ($svcNames -contains $f.Service)) { [void]$ids.Add($f.InstanceID) }
     }
-    catch {
-        $Findings.Add((New-Finding -Area $script:Areas.Firewall -Location 'Windows Firewall' -Name '(rules)' -RawValue $null -Severity 'Info' -Note ('Could not read firewall rules: {0}' -f $_.Exception.Message)))
-        return
+    foreach ($f in @(Get-NetFirewallApplicationFilter -All -ErrorAction Stop)) {
+        if ($f.Program -and $f.Program -ne 'Any' -and ($script:WUExecutables -contains ([IO.Path]::GetFileName($f.Program)).ToLowerInvariant())) { [void]$ids.Add($f.InstanceID) }
     }
     foreach ($id in $ids) {
         try { $r = Get-NetFirewallRule -Name $id -ErrorAction Stop }
         catch { continue }   # filter without a readable rule (e.g. removed meanwhile)
-        if ([string]$r.Direction -ne 'Outbound' -or [string]$r.Action -ne 'Block' -or [string]$r.Enabled -ne 'True') { continue }
+        if ([string]$r.Direction -eq 'Outbound' -and [string]$r.Action -eq 'Block') { $r }
+    }
+}
+
+function Add-FirewallFindings {
+    <# Enabled outbound Block rules aimed at update services or programs. Locally created ones can be disabled (not deleted). #>
+    param($Findings)
+    try { $rules = @(Get-UpdateFirewallRules) }
+    catch {
+        $Findings.Add((New-Finding -Area $script:Areas.Firewall -Location 'Windows Firewall' -Name '(rules)' -RawValue $null -Severity 'Info' -Note ('Could not read firewall rules: {0}' -f $_.Exception.Message)))
+        return
+    }
+    foreach ($r in ($rules | Where-Object { [string]$_.Enabled -eq 'True' })) {
         $gp = ([string]$r.PolicyStoreSourceType -eq 'GroupPolicy')
         $action = if ($gp) { $null } else {
             [pscustomobject]@{ Type = 'FirewallRule'; RuleName = $r.Name; Counter = 'Reset'; Display = ('Disable firewall rule "{0}"' -f $r.DisplayName) }
@@ -1528,6 +1539,20 @@ function Add-TaskFindings {
     }
 }
 
+function Test-HostsLineBlocksUpdate {
+    <# True for an active (uncommented) hosts line that maps a Windows Update endpoint. #>
+    param([string]$Line)
+    if ($Line -match '^\s*#' -or [string]::IsNullOrWhiteSpace($Line)) { return $false }
+    $tokens = @((($Line -split '#', 2)[0]).Trim() -split '\s+')
+    if ($tokens.Count -lt 2) { return $false }
+    foreach ($h in $tokens[1..($tokens.Count - 1)]) {
+        foreach ($suffix in $script:WUHostSuffixes) {
+            if ($h -ieq $suffix -or $h.EndsWith('.' + $suffix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+    }
+    return $false
+}
+
 function Add-HostsFindings {
     param($Findings)
     $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
@@ -1539,16 +1564,7 @@ function Add-HostsFindings {
     }
     for ($i = 0; $i -lt $lines.Length; $i++) {
         $line = $lines[$i]
-        if ($line -match '^\s*#' -or [string]::IsNullOrWhiteSpace($line)) { continue }
-        $tokens = @((($line -split '#', 2)[0]).Trim() -split '\s+')
-        if ($tokens.Count -lt 2) { continue }
-        $hit = $false
-        foreach ($h in $tokens[1..($tokens.Count - 1)]) {
-            foreach ($s in $script:WUHostSuffixes) {
-                if ($h -ieq $s -or $h.EndsWith('.' + $s, [StringComparison]::OrdinalIgnoreCase)) { $hit = $true }
-            }
-        }
-        if ($hit) {
+        if (Test-HostsLineBlocksUpdate $line) {
             $action = [pscustomobject]@{ Type = 'Hosts'; File = $hostsPath; LineIndex = $i; Line = $line; Counter = 'Reset'; Display = ('Comment out hosts line {0}: {1}' -f ($i + 1), $line.Trim()) }
             $Findings.Add((New-Finding -Area $script:Areas.Hosts -Location ('{0} (line {1})' -f $hostsPath, ($i + 1)) -Name $line.Trim() -RawValue $line.Trim() `
                 -Severity 'Block' -Note 'Redirects a Windows Update endpoint.' -Action $action -Tier 'Hosts'))
@@ -1792,7 +1808,7 @@ function Backup-WindowsUpdatePolicies {
         reg import), copies Local Group Policy Registry.pol files and the hosts file.
         Returns the backup folder, or $null if any export failed (callers then abort).
     #>
-    param([string]$Label = 'Manual')
+    param([string]$Label = 'Manual', [string]$Description = '')
     $dir = Join-Path $script:SessionDir ('Backup-{0}-{1}' -f $Label, (Get-Date -Format 'HHmmss'))
     Write-Log -Message ('Creating backup in {0}' -f $dir)
     try {
@@ -1843,10 +1859,27 @@ function Backup-WindowsUpdatePolicies {
     if ($LASTEXITCODE -eq 0) { $count++ }
     else { Write-Log -Message ('Firewall policy export failed: {0}' -f $out.Trim()) -Level WARN }
 
+    # Exact snapshot of every managed setting, used by option 8 to restore this backup.
+    try {
+        $snap = Get-ConfigurationSnapshot -Label $Label -Description $Description
+        $snapFile = Join-Path $dir 'snapshot.json'
+        [System.IO.File]::WriteAllText($snapFile, ($snap | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding($false)))
+        Write-Log -Message ('Saved configuration snapshot {0}' -f $snapFile) -Level DEBUG
+    }
+    catch {
+        Write-Log -Message ('Configuration snapshot failed: {0}' -f $_.Exception.Message) -Level ERROR
+        $ok = $false
+    }
+
     $readme = @(
-        'Windows Update Policy Repair - backup'
+        ('Windows Update Policy Repair v{0} - backup' -f $script:ToolVersion)
         ('Created: {0}' -f (Get-Date))
+        $(if ($Description) { 'Description: ' + $Description } else { '' })
         ''
+        'Easiest restore: run the script and choose option 8, "Restore Windows Update configuration".'
+        'It returns every setting the script manages to exactly this state (snapshot.json).'
+        ''
+        'Manual restore:'
         'Registry\*.reg : restore with "reg import <file>" (or double-click) from an elevated prompt.'
         'Files\*        : paths are relative to %SystemRoot%\System32. Copy Registry.pol files back to'
         '                 GroupPolicy\... and run "gpupdate /force". Copy drivers\etc\hosts back if needed.'
@@ -1862,6 +1895,584 @@ function Backup-WindowsUpdatePolicies {
     Write-Log -Message ('Backup complete: {0} item(s) saved.' -f $count) -Level SUCCESS
     if ($script:Summary) { $script:Summary.BackupDir = $dir }
     return $dir
+}
+
+#endregion
+
+#region ---------------------------------------------------------------- Configuration snapshot and restore
+
+# A snapshot records the exact state of every setting this script can change. It is saved as
+# snapshot.json in every Backup-* folder: manual backups (option 7) and the automatic ones
+# taken before each repair. Restoring (option 8) compares the snapshot with the current state
+# and changes only what differs: values added since the backup are deleted, values changed or
+# removed since are written back. A plain "reg import" cannot do that, because it never
+# deletes values added after the export. Settings the script does not manage are not touched.
+
+$script:SnapshotVersion = 1
+
+function Get-MdmProviderIds {
+    try {
+        $rk = Open-RegistryKey -Path ('HKLM\' + $script:Paths.MdmProviders)
+        if (-not $rk) { return }
+        try { $rk.GetSubKeyNames() } finally { $rk.Close() }
+    }
+    catch { Write-Log -Message ('Cannot list MDM providers: {0}' -f $_.Exception.Message) -Level WARN }
+}
+
+function Get-TrackedRegistryLocations {
+    <#
+        Every registry location the script can modify. Filter limits which value names are
+        tracked (shared keys such as Explorer or UX\Settings also hold unrelated settings).
+        Recurse tracks sub-keys too; CleanupEmpty removes the key on restore if it did not
+        exist in the backup and nothing is left in it.
+    #>
+    param([string[]]$Sids)
+    $p = $script:Paths
+    $doNames = @($script:PolicyCatalog | Where-Object { $_.Key -eq $p.DO } | ForEach-Object Name)
+    $list = New-Object System.Collections.Generic.List[object]
+    $add = {
+        param([string]$Path, [string]$Filter, [bool]$Recurse, [bool]$CleanupEmpty)
+        $list.Add([pscustomobject]@{ Path = $Path; Filter = $Filter; Recurse = $Recurse; CleanupEmpty = $CleanupEmpty })
+    }
+    & $add ('HKLM\' + $p.WU) '.*' $false $true
+    & $add ('HKLM\' + $p.AU) '.*' $false $true
+    & $add ('HKLM\' + $p.DO) ('^(' + ($doNames -join '|') + ')$') $false $true
+    & $add ('HKLM\' + $p.DriverSearch) '^DontSearchWindowsUpdate$' $false $true
+    & $add ('HKLM\' + $p.ExplorerPol) '^NoWindowsUpdate$' $false $false
+    & $add ('HKLM\' + $p.ICM) '^DisableWindowsUpdateAccess$' $false $false
+    & $add ('HKLM\' + $p.UXSettings) '^(Pause.*|FlightSettingsMaxPauseDays)$' $false $false
+    & $add ('HKLM\' + $p.UpdatePolicySettings) '^(PausedFeatureStatus|PausedQualityStatus|PausedFeatureDate|PausedQualityDate)$' $false $false
+    & $add ('HKLM\' + $p.MdmUpdate) '.*' $false $false
+    & $add ('HKLM\' + $p.MdmDO) '.*' $false $false
+    & $add ('HKLM\' + $p.GPCache) '.*' $true $true
+    foreach ($exe in $script:WUExecutables) { & $add ('HKLM\{0}\{1}' -f $p.IFEO, $exe) '^Debugger$' $false $false }
+    foreach ($prov in @(Get-MdmProviderIds)) {
+        foreach ($area in @('Update', 'DeliveryOptimization')) {
+            & $add ('HKLM\{0}\{1}\default\Device\{2}' -f $p.MdmProviders, $prov, $area) '.*' $false $false
+        }
+    }
+    foreach ($sid in $Sids) {
+        & $add ('HKU\{0}\{1}' -f $sid, $p.UserWU) '.*' $false $true
+        & $add ('HKU\{0}\{1}' -f $sid, $p.ExplorerPol) '^NoWindowsUpdate$' $false $false
+    }
+    return $list
+}
+
+function Get-RegistryKeyPaths {
+    param([string]$Path)
+    $k = Open-RegistryKey -Path $Path
+    if (-not $k) { return }
+    try { $subs = @($k.GetSubKeyNames()) } finally { $k.Close() }
+    $Path
+    foreach ($sub in $subs) { Get-RegistryKeyPaths -Path ('{0}\{1}' -f $Path, $sub) }
+}
+
+function ConvertTo-SnapshotValue {
+    <# Registry value -> JSON-safe form (binary as base64, multi-string as array). #>
+    param([string]$Name, $Value, [string]$Kind)
+    $data = switch ($Kind) {
+        'Binary'      { [Convert]::ToBase64String([byte[]]$Value) }
+        'None'        { if ($Value -is [byte[]]) { [Convert]::ToBase64String($Value) } else { '' } }
+        'MultiString' { , ([string[]]@($Value)) }
+        'DWord'       { [int]$Value }
+        'QWord'       { [long]$Value }
+        default       { [string]$Value }
+    }
+    [pscustomobject]@{ Name = $Name; Kind = $Kind; Data = $data }
+}
+
+function Get-SnapshotValueSignature {
+    param($Value)
+    if ($null -eq $Value) { return '(absent)' }
+    $d = if ($Value.Kind -eq 'MultiString') { (@($Value.Data) | ForEach-Object { [string]$_ }) -join [char]0 } else { [string]$Value.Data }
+    return ('{0}|{1}' -f $Value.Kind, $d)
+}
+
+function Format-SnapshotValue {
+    param($Value)
+    if ($null -eq $Value) { return '(absent)' }
+    switch ($Value.Kind) {
+        'Binary'      { return '(binary data)' }
+        'None'        { return '(binary data)' }
+        'MultiString' { return ((@($Value.Data) | ForEach-Object { [string]$_ }) -join '; ') }
+    }
+    $t = [string]$Value.Data
+    if ($t.Length -eq 0) { return '(empty string)' }
+    return $t
+}
+
+function Set-RegistryValueFromSnapshot {
+    param([string]$Path, $Value)
+    $parts = $Path -split '\\', 2
+    $base = switch ($parts[0].ToUpperInvariant()) {
+        'HKLM' { [Microsoft.Win32.Registry]::LocalMachine }
+        'HKU'  { [Microsoft.Win32.Registry]::Users }
+        default { throw "Unsupported registry hive '$($parts[0])'." }
+    }
+    $key = $null
+    try {
+        $key = $base.CreateSubKey($parts[1])   # opens for writing, creating the key if needed
+        $kind = [Microsoft.Win32.RegistryValueKind]$Value.Kind
+        switch ($Value.Kind) {
+            'Binary'      { $key.SetValue($Value.Name, [byte[]][Convert]::FromBase64String([string]$Value.Data), $kind) }
+            'None'        { $key.SetValue($Value.Name, [byte[]][Convert]::FromBase64String([string]$Value.Data), $kind) }
+            'MultiString' { $key.SetValue($Value.Name, [string[]]@(@($Value.Data) | ForEach-Object { [string]$_ }), $kind) }
+            'DWord'       { $key.SetValue($Value.Name, [int]$Value.Data, $kind) }
+            'QWord'       { $key.SetValue($Value.Name, [long]$Value.Data, $kind) }
+            default       { $key.SetValue($Value.Name, [string]$Value.Data, $kind) }
+        }
+        Write-Log -Message ('Restored {0}\{1} = {2}' -f $Path, $Value.Name, (Format-SnapshotValue $Value)) -Level CHANGE
+        $script:Summary.Restored++
+    }
+    catch { Add-Failure -Target ('{0}\{1}' -f $Path, $Value.Name) -Reason (Get-FailureReason $_) }
+    finally { if ($key) { $key.Close() } }
+}
+
+function Get-RegistryLocationSnapshot {
+    param($Location)
+    $paths = if ($Location.Recurse) { @(Get-RegistryKeyPaths -Path $Location.Path) }
+             elseif (Test-RegistryKeyExists $Location.Path) { @($Location.Path) } else { @() }
+    $keys = foreach ($kp in $paths) {
+        $vals = @(Get-RegistryValueSet -Path $kp | Where-Object { $_.Name -ne '' -and $_.Name -match $Location.Filter } |
+                  ForEach-Object { ConvertTo-SnapshotValue -Name $_.Name -Value $_.Value -Kind ([string]$_.Kind) })
+        [pscustomobject]@{ Path = $kp; Values = $vals }
+    }
+    [pscustomobject]@{
+        Path = $Location.Path; Filter = $Location.Filter; Recurse = [bool]$Location.Recurse
+        CleanupEmpty = [bool]$Location.CleanupEmpty; Keys = @($keys)
+    }
+}
+
+function Get-PolicyFileTargets {
+    <# The two standard Local Group Policy files (even if absent) plus any per-user/group ones. #>
+    $gp = Join-Path $env:SystemRoot 'System32\GroupPolicy'
+    [pscustomobject]@{ Path = (Join-Path $gp 'Machine\Registry.pol'); Scope = 'Machine' }
+    [pscustomobject]@{ Path = (Join-Path $gp 'User\Registry.pol'); Scope = 'User' }
+    foreach ($f in @(Get-LocalPolicyFiles | Where-Object { $_.Path -like '*\GroupPolicyUsers\*' })) {
+        [pscustomobject]@{ Path = $f.Path; Scope = $f.Scope }
+    }
+}
+
+function Test-PolEntryTracked {
+    param([string]$Scope, $Entry)
+    $key = $Entry.Key.TrimEnd('\')
+    $eff = $Entry.ValueName -replace '^\*\*del\.', ''
+    return [bool]((Find-PolicyDef -Scope $Scope -Key $key -Name $eff) -or (Test-IsSweepKey -Scope $Scope -Key $key))
+}
+
+function Get-PolFileSnapshot {
+    <# Windows Update entries of one Registry.pol, stored as their raw bytes (base64). #>
+    param([string]$Path, [string]$Scope)
+    $snap = [pscustomobject]@{ Path = $Path; Scope = $Scope; Exists = $false; Unparsed = $false; Entries = @() }
+    if (-not (Test-Path -LiteralPath $Path)) { return $snap }
+    $snap.Exists = $true
+    try { $pol = Read-RegistryPolFile -FilePath $Path }
+    catch {
+        Write-Log -Message ('Snapshot: {0} could not be parsed and will not be restored: {1}' -f $Path, $_.Exception.Message) -Level WARN
+        $snap.Unparsed = $true
+        return $snap
+    }
+    $snap.Entries = @($pol.Entries | Where-Object { Test-PolEntryTracked -Scope $Scope -Entry $_ } |
+                      ForEach-Object { [Convert]::ToBase64String($pol.Bytes, $_.Start, $_.Length) })
+    return $snap
+}
+
+function Get-HostsUpdateLines {
+    $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+    if (-not (Test-Path -LiteralPath $hostsPath)) { return }
+    foreach ($line in [System.IO.File]::ReadAllLines($hostsPath, [System.Text.Encoding]::Default)) {
+        if (Test-HostsLineBlocksUpdate $line) { $line.Trim() }
+    }
+}
+
+function Get-ConfigurationSnapshot {
+    <# Captures everything the script manages. Throws on read errors so an incomplete backup is never reported as complete. #>
+    param([string]$Label = 'Manual', [string]$Description = '')
+    $sids = @(Get-LoadedUserSids)
+    $registry = foreach ($loc in @(Get-TrackedRegistryLocations -Sids $sids)) { Get-RegistryLocationSnapshot -Location $loc }
+    $pol = foreach ($t in @(Get-PolicyFileTargets)) { Get-PolFileSnapshot -Path $t.Path -Scope $t.Scope }
+    $services = foreach ($d in (Get-ServiceDefinitions)) { [pscustomobject]@{ Name = $d.Name; StartMode = (Get-ServiceStartMode -Name $d.Name) } }
+    $tasks = foreach ($t in $script:TaskDefs) {
+        $state = 'Missing'
+        try { $state = [string](Get-ScheduledTask -TaskPath $t.Path -TaskName $t.Name -ErrorAction Stop).State }
+        catch { Write-Log -Message ('Snapshot: task {0}{1} not found.' -f $t.Path, $t.Name) -Level DEBUG }
+        [pscustomobject]@{ Path = $t.Path; Name = $t.Name; State = $state }
+    }
+    $fwOk = $true
+    $fw = @()
+    try {
+        $fw = @(Get-UpdateFirewallRules | ForEach-Object {
+            [pscustomobject]@{ Name = $_.Name; DisplayName = $_.DisplayName; Enabled = ([string]$_.Enabled -eq 'True') }
+        })
+    }
+    catch {
+        $fwOk = $false
+        Write-Log -Message ('Snapshot: firewall rules unavailable ({0}); they will not be restored from this backup.' -f $_.Exception.Message) -Level WARN
+    }
+    [pscustomobject]@{
+        SnapshotVersion   = $script:SnapshotVersion
+        ToolVersion       = $script:ToolVersion
+        Created           = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+        Computer          = $env:COMPUTERNAME
+        OS                = ('{0} {1} build {2}' -f $script:OSInfo.Name, $script:OSInfo.DisplayVersion, $script:OSInfo.FullBuild)
+        Label             = $Label
+        Description       = $Description
+        UserSids          = $sids
+        Registry          = @($registry)
+        PolicyFiles       = @($pol)
+        Services          = @($services)
+        Tasks             = @($tasks)
+        FirewallAvailable = $fwOk
+        Firewall          = $fw
+        HostsLines        = @(Get-HostsUpdateLines)
+    }
+}
+
+function Get-BackupLabelText {
+    param([string]$Label)
+    switch ($Label) {
+        'Manual'          { return 'Manual backup' }
+        'RemoveBlocking'  { return 'Automatic, before option 2' }
+        'RestoreDefaults' { return 'Automatic, before option 3' }
+        'Components'      { return 'Automatic, before option 4' }
+        'RestoreAll'      { return 'Automatic, before option 5' }
+        'CompleteRepair'  { return 'Automatic, before option 6' }
+        'BeforeRestore'   { return 'Automatic, before a restore' }
+        'Hosts'           { return 'Automatic, before a hosts-file edit' }
+    }
+    return $Label
+}
+
+function Get-AvailableBackups {
+    <# Every restorable backup (folders with snapshot.json) from all sessions, newest first. #>
+    if (-not (Test-Path -LiteralPath $script:BaseDir)) { return }
+    $found = foreach ($session in @(Get-ChildItem -LiteralPath $script:BaseDir -Directory -ErrorAction SilentlyContinue)) {
+        foreach ($b in @(Get-ChildItem -LiteralPath $session.FullName -Directory -Filter 'Backup-*' -ErrorAction SilentlyContinue)) {
+            $json = Join-Path $b.FullName 'snapshot.json'
+            if (-not (Test-Path -LiteralPath $json)) { continue }
+            try {
+                $j = Get-Content -LiteralPath $json -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+                [pscustomobject]@{ Folder = $b.FullName; Created = [string]$j.Created; Label = [string]$j.Label; Description = [string]$j.Description; Computer = [string]$j.Computer }
+            }
+            catch { Write-Log -Message ('Unreadable backup {0}: {1}' -f $json, $_.Exception.Message) -Level WARN }
+        }
+    }
+    $found | Sort-Object Created -Descending
+}
+
+function Get-RestorePlan {
+    <# Compares a snapshot with the current state. Returns Changes, CleanupKeys and Warnings. #>
+    param($Snapshot)
+    $changes = New-Object System.Collections.Generic.List[object]
+    $cleanup = New-Object System.Collections.Generic.List[string]
+    $warnings = New-Object System.Collections.Generic.List[string]
+    $sids = @(Get-LoadedUserSids)
+
+    # ---- Registry: every location in the backup plus every location tracked now.
+    $locs = [ordered]@{}
+    foreach ($l in @($Snapshot.Registry)) { $locs[('{0}|{1}' -f $l.Path, $l.Filter).ToLowerInvariant()] = [pscustomobject]@{ Def = $l; Backup = $l } }
+    foreach ($l in @(Get-TrackedRegistryLocations -Sids $sids)) {
+        $id = ('{0}|{1}' -f $l.Path, $l.Filter).ToLowerInvariant()
+        if (-not $locs.Contains($id)) { $locs[$id] = [pscustomobject]@{ Def = $l; Backup = $null } }
+    }
+    foreach ($entry in $locs.Values) {
+        $def = $entry.Def
+        if ($def.Path -match '^HKU\\([^\\]+)\\' -and ($sids -notcontains $Matches[1])) {
+            if ($entry.Backup -and @($entry.Backup.Keys | ForEach-Object { @($_.Values) }).Count -gt 0) {
+                $warnings.Add(('User {0} is not signed in; their user-level Windows Update policies were not restored.' -f $Matches[1]))
+            }
+            continue
+        }
+        $current = Get-RegistryLocationSnapshot -Location $def
+        $bKeys = @{}; $cKeys = @{}
+        if ($entry.Backup) { foreach ($k in @($entry.Backup.Keys)) { $bKeys[$k.Path.ToLowerInvariant()] = $k } }
+        foreach ($k in @($current.Keys)) { $cKeys[$k.Path.ToLowerInvariant()] = $k }
+        foreach ($kp in @(@($bKeys.Keys) + @($cKeys.Keys) | Select-Object -Unique)) {
+            $bv = @{}; $cv = @{}
+            $keyPath = if ($bKeys.ContainsKey($kp)) { $bKeys[$kp].Path } else { $cKeys[$kp].Path }
+            if ($bKeys.ContainsKey($kp)) { foreach ($v in @($bKeys[$kp].Values)) { $bv[$v.Name.ToLowerInvariant()] = $v } }
+            if ($cKeys.ContainsKey($kp)) { foreach ($v in @($cKeys[$kp].Values)) { $cv[$v.Name.ToLowerInvariant()] = $v } }
+            foreach ($n in @($cv.Keys)) {
+                if (-not $bv.ContainsKey($n)) {
+                    $changes.Add([pscustomobject]@{
+                        Type = 'RegDelete'; Path = $keyPath; Name = $cv[$n].Name
+                        Display = ('Remove  {0}\{1}  (now {2}; absent in backup)' -f $keyPath, $cv[$n].Name, (Format-SnapshotValue $cv[$n]))
+                    })
+                }
+            }
+            foreach ($n in @($bv.Keys)) {
+                $now = if ($cv.ContainsKey($n)) { $cv[$n] } else { $null }
+                if ((Get-SnapshotValueSignature $now) -ne (Get-SnapshotValueSignature $bv[$n])) {
+                    $changes.Add([pscustomobject]@{
+                        Type = 'RegSet'; Path = $keyPath; Value = $bv[$n]
+                        Display = ('Set     {0}\{1} = {2}  (now {3})' -f $keyPath, $bv[$n].Name, (Format-SnapshotValue $bv[$n]), (Format-SnapshotValue $now))
+                    })
+                }
+            }
+            if (($def.CleanupEmpty -or $def.Recurse) -and -not $bKeys.ContainsKey($kp)) { $cleanup.Add($keyPath) }
+        }
+    }
+
+    # ---- Local Group Policy files: Windows Update entries only; every other entry is kept.
+    $polTargets = [ordered]@{}
+    foreach ($pf in @($Snapshot.PolicyFiles)) { $polTargets[$pf.Path.ToLowerInvariant()] = [pscustomobject]@{ Path = $pf.Path; Scope = $pf.Scope; Backup = $pf } }
+    foreach ($t in @(Get-PolicyFileTargets)) {
+        if (-not $polTargets.Contains($t.Path.ToLowerInvariant())) { $polTargets[$t.Path.ToLowerInvariant()] = [pscustomobject]@{ Path = $t.Path; Scope = $t.Scope; Backup = $null } }
+    }
+    foreach ($t in $polTargets.Values) {
+        if ($t.Backup -and $t.Backup.Unparsed) { $warnings.Add(('{0} could not be read when the backup was made; it was not restored.' -f $t.Path)); continue }
+        $wanted = if ($t.Backup) { @($t.Backup.Entries) } else { @() }
+        $now = Get-PolFileSnapshot -Path $t.Path -Scope $t.Scope
+        if ($now.Unparsed) { $warnings.Add(('{0} cannot be parsed now; it was not restored.' -f $t.Path)); continue }
+        if ((@($now.Entries) -join ',') -ne ($wanted -join ',')) {
+            $changes.Add([pscustomobject]@{
+                Type = 'PolFile'; Path = $t.Path; Scope = $t.Scope; Entries = $wanted
+                Display = ('Local Group Policy {0}: restore {1} Windows Update entr(ies) (now {2})' -f $t.Path, $wanted.Count, @($now.Entries).Count)
+            })
+        }
+    }
+
+    # ---- Services (start type).
+    foreach ($b in @($Snapshot.Services)) {
+        if ($b.StartMode -notin @('Manual', 'Automatic', 'AutomaticDelayed', 'Disabled')) { continue }
+        $cur = Get-ServiceStartMode -Name $b.Name
+        if ($cur -eq 'Missing') { $warnings.Add(('Service {0} no longer exists; start type not restored.' -f $b.Name)); continue }
+        if ($cur -ne $b.StartMode) {
+            $note = if ($b.StartMode -eq 'Disabled') { '  [the backup had this service DISABLED]' } else { '' }
+            $changes.Add([pscustomobject]@{ Type = 'Service'; Name = $b.Name; StartMode = $b.StartMode; Display = ('Service {0}: {1} -> {2}{3}' -f $b.Name, $cur, $b.StartMode, $note) })
+        }
+    }
+
+    # ---- Scheduled tasks (enabled / disabled).
+    foreach ($b in @($Snapshot.Tasks)) {
+        if ($b.State -eq 'Missing') { continue }
+        $cur = 'Missing'
+        try { $cur = [string](Get-ScheduledTask -TaskPath $b.Path -TaskName $b.Name -ErrorAction Stop).State }
+        catch { $warnings.Add(('Task {0}{1} not found; not restored.' -f $b.Path, $b.Name)); continue }
+        $wantDisabled = ($b.State -eq 'Disabled')
+        if ($wantDisabled -ne ($cur -eq 'Disabled')) {
+            $changes.Add([pscustomobject]@{
+                Type = 'Task'; Path = $b.Path; Name = $b.Name; Enable = (-not $wantDisabled)
+                Display = ('Task {0}{1}: {2}' -f $b.Path, $b.Name, $(if ($wantDisabled) { 'disable (as in backup)' } else { 'enable (as in backup)' }))
+            })
+        }
+    }
+
+    # ---- Firewall rules (enabled state only; rules are never created or deleted).
+    if ($Snapshot.FirewallAvailable) {
+        $curRules = @()
+        try { $curRules = @(Get-UpdateFirewallRules) }
+        catch { $warnings.Add(('Firewall rules could not be read ({0}); not restored.' -f $_.Exception.Message)) }
+        $backupNames = @($Snapshot.Firewall | ForEach-Object Name)
+        foreach ($b in @($Snapshot.Firewall)) {
+            $r = @($curRules | Where-Object { $_.Name -eq $b.Name })
+            if ($r.Count -eq 0) { $warnings.Add(('Firewall rule "{0}" no longer exists; not restored.' -f $b.DisplayName)); continue }
+            if ((([string]$r[0].Enabled -eq 'True')) -ne [bool]$b.Enabled) {
+                $changes.Add([pscustomobject]@{ Type = 'Firewall'; Name = $b.Name; DisplayName = $b.DisplayName; Enable = [bool]$b.Enabled
+                    Display = ('Firewall rule "{0}": {1}' -f $b.DisplayName, $(if ($b.Enabled) { 'enable (as in backup)' } else { 'disable (as in backup)' })) })
+            }
+        }
+        foreach ($r in ($curRules | Where-Object { [string]$_.Enabled -eq 'True' -and $backupNames -notcontains $_.Name })) {
+            $changes.Add([pscustomobject]@{ Type = 'Firewall'; Name = $r.Name; DisplayName = $r.DisplayName; Enable = $false
+                Display = ('Firewall rule "{0}": disable (created after the backup)' -f $r.DisplayName) })
+        }
+    }
+
+    # ---- Hosts file: Windows Update lines only.
+    $nowLines = @(Get-HostsUpdateLines)
+    $backupLines = @($Snapshot.HostsLines)
+    foreach ($l in $nowLines) {
+        if ($backupLines -notcontains $l) { $changes.Add([pscustomobject]@{ Type = 'HostsComment'; Line = $l; Display = ('Hosts: comment out "{0}" (not in backup)' -f $l) }) }
+    }
+    foreach ($l in $backupLines) {
+        if ($nowLines -notcontains $l) { $changes.Add([pscustomobject]@{ Type = 'HostsUncomment'; Line = $l; Display = ('Hosts: re-activate "{0}" (as in backup)' -f $l) }) }
+    }
+
+    [pscustomobject]@{ Changes = $changes; CleanupKeys = $cleanup; Warnings = $warnings }
+}
+
+function Set-PolFileTrackedEntries {
+    <# Rewrites one Registry.pol: current non-Windows-Update entries + the backed-up Windows Update entries. #>
+    param([string]$Path, [string]$Scope, [string[]]$Entries)
+    $exists = Test-Path -LiteralPath $Path
+    $kept = @()
+    $bytes = $null
+    if ($exists) {
+        $pol = Read-RegistryPolFile -FilePath $Path
+        $bytes = $pol.Bytes
+        $kept = @($pol.Entries | Where-Object { -not (Test-PolEntryTracked -Scope $Scope -Entry $_) })
+    }
+    if (-not $exists -and @($Entries).Count -eq 0) { return }
+    $ms = New-Object System.IO.MemoryStream
+    try {
+        $header = [byte[]](0x50, 0x52, 0x65, 0x67, 1, 0, 0, 0)
+        $ms.Write($header, 0, 8)
+        foreach ($e in $kept) { $ms.Write($bytes, $e.Start, $e.Length) }
+        foreach ($b64 in @($Entries)) { $raw = [Convert]::FromBase64String($b64); $ms.Write($raw, 0, $raw.Length) }
+        $newBytes = $ms.ToArray()
+    }
+    finally { $ms.Dispose() }
+    $dir = Split-Path -Path $Path -Parent
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force -ErrorAction Stop | Out-Null }
+    $tmp = $Path + '.wurepair.tmp'
+    [System.IO.File]::WriteAllBytes($tmp, $newBytes)
+    try {
+        $null = Read-RegistryPolFile -FilePath $tmp
+        [System.IO.File]::Copy($tmp, $Path, $true)
+    }
+    finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }   # temp file cleanup only
+    Write-Log -Message ('Restored {0} Windows Update entr(ies) in {1}' -f @($Entries).Count, $Path) -Level CHANGE
+    $script:Summary.Restored++
+}
+
+function Set-HostsUpdateLines {
+    <# Comments out / re-activates specific Windows Update hosts lines. Other lines are untouched. #>
+    param([object[]]$Changes)
+    if (@($Changes).Count -eq 0) { return }
+    $file = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+    try {
+        $lines = [System.IO.File]::ReadAllLines($file, [System.Text.Encoding]::Default)
+        $stamp = Get-Date -Format 'yyyy-MM-dd'
+        $done = 0
+        foreach ($c in $Changes) {
+            $hit = $false
+            for ($i = 0; $i -lt $lines.Length; $i++) {
+                if ($c.Type -eq 'HostsComment' -and $lines[$i].Trim() -eq $c.Line -and (Test-HostsLineBlocksUpdate $lines[$i])) {
+                    $lines[$i] = ('# [WU Policy Repair {0}] {1}' -f $stamp, $lines[$i]); $hit = $true; break
+                }
+                if ($c.Type -eq 'HostsUncomment' -and $lines[$i] -match '^# \[WU Policy Repair [^\]]*\] (.*)$' -and $Matches[1].Trim() -eq $c.Line) {
+                    $lines[$i] = $Matches[1]; $hit = $true; break
+                }
+            }
+            if ($hit) { $done++ } else { Add-SummaryWarning ('Hosts line "{0}" not found; not restored.' -f $c.Line) }
+        }
+        if ($done -gt 0) {
+            [System.IO.File]::WriteAllLines($file, $lines, [System.Text.Encoding]::Default)
+            $script:Summary.Restored += $done
+            Write-Log -Message ('Updated {0} Windows Update line(s) in {1}' -f $done, $file) -Level CHANGE
+            $null = & (Join-Path $env:SystemRoot 'System32\ipconfig.exe') /flushdns 2>&1
+        }
+    }
+    catch { Add-Failure -Target $file -Reason (Get-FailureReason $_) }
+}
+
+function Invoke-RestorePlan {
+    param($Plan)
+    $c = @($Plan.Changes)
+    # Local Group Policy first, so a policy refresh cannot fight the registry restore.
+    foreach ($x in ($c | Where-Object Type -eq 'PolFile')) {
+        try { Set-PolFileTrackedEntries -Path $x.Path -Scope $x.Scope -Entries @($x.Entries) }
+        catch { Add-Failure -Target $x.Path -Reason ('Local Group Policy file not restored: {0}' -f (Get-FailureReason $_)) }
+    }
+    foreach ($x in ($c | Where-Object Type -eq 'RegDelete')) {
+        Remove-RegistryPolicyValue -Path $x.Path -Name $x.Name -Reason '[not in backup]' -Counter 'Restored'
+    }
+    foreach ($x in ($c | Where-Object Type -eq 'RegSet')) { Set-RegistryValueFromSnapshot -Path $x.Path -Value $x.Value }
+    foreach ($x in ($c | Where-Object Type -eq 'Service')) {
+        if (Repair-ServiceStartType -Name $x.Name -StartMode $x.StartMode) { $script:Summary.ServicesRepaired-- ; $script:Summary.Restored++ }
+    }
+    foreach ($x in ($c | Where-Object Type -eq 'Task')) {
+        try {
+            if ($x.Enable) { Enable-ScheduledTask -TaskPath $x.Path -TaskName $x.Name -ErrorAction Stop | Out-Null }
+            else { Disable-ScheduledTask -TaskPath $x.Path -TaskName $x.Name -ErrorAction Stop | Out-Null }
+            Write-Log -Message ('Task {0}{1} {2}' -f $x.Path, $x.Name, $(if ($x.Enable) { 'enabled' } else { 'disabled' })) -Level CHANGE
+            $script:Summary.Restored++
+        }
+        catch { Add-Failure -Target ('Scheduled task ' + $x.Path + $x.Name) -Reason (Get-FailureReason $_) }
+    }
+    foreach ($x in ($c | Where-Object Type -eq 'Firewall')) {
+        try {
+            if ($x.Enable) { Enable-NetFirewallRule -Name $x.Name -ErrorAction Stop } else { Disable-NetFirewallRule -Name $x.Name -ErrorAction Stop }
+            Write-Log -Message ('Firewall rule "{0}" {1}' -f $x.DisplayName, $(if ($x.Enable) { 'enabled' } else { 'disabled' })) -Level CHANGE
+            $script:Summary.Restored++
+        }
+        catch { Add-Failure -Target ('Firewall rule ' + $x.DisplayName) -Reason (Get-FailureReason $_) }
+    }
+    Set-HostsUpdateLines -Changes @($c | Where-Object { $_.Type -in @('HostsComment', 'HostsUncomment') })
+    # Keys that did not exist at backup time: remove them if nothing is left (deepest first).
+    foreach ($k in (@($Plan.CleanupKeys) | Sort-Object Length -Descending)) { Remove-EmptyRegistryKey $k }
+    Restart-UpdateAgent
+}
+
+function Backup-CurrentConfiguration {
+    <# Option 7: a named backup you can restore later with option 8. #>
+    [CmdletBinding()]
+    param()
+    Write-Section 'Back up current Windows Update configuration'
+    Write-Host '  Saves every Windows Update setting this tool manages, so you can return to'
+    Write-Host '  exactly this state later with option 8. Nothing is changed.'
+    $desc = [string](Read-Host '  Optional description (Enter to skip)')
+    $dir = Backup-WindowsUpdatePolicies -Label 'Manual' -Description $desc.Trim()
+    if ($dir) { Write-Log -Message 'Backup ready. Use option 8 to restore it.' -Level SUCCESS }
+}
+
+function Restore-WindowsUpdateConfiguration {
+    <# Option 8: return every managed setting to the state recorded in a backup. #>
+    [CmdletBinding()]
+    param()
+    Write-Section 'Restore Windows Update configuration from a backup'
+    $backups = @(Get-AvailableBackups | Select-Object -First 20)
+    if ($backups.Count -eq 0) { Write-Host ('  No restorable backups found under {0}.' -f $script:BaseDir) -ForegroundColor Yellow }
+    $i = 0
+    foreach ($b in $backups) {
+        $i++
+        $extra = if ($b.Description) { (' - "{0}"' -f $b.Description) } else { '' }
+        $pc = if ($b.Computer -and $b.Computer -ne $env:COMPUTERNAME) { (' [from {0}]' -f $b.Computer) } else { '' }
+        Write-Host ('  {0,2}. {1}  {2}{3}{4}' -f $i, $b.Created, (Get-BackupLabelText $b.Label), $extra, $pc)
+    }
+    Write-Host '   P. Enter the path of a backup folder'
+    Write-Host ''
+    $sel = ([string](Read-Host '  Select a backup (Enter to cancel)')).Trim()
+    if (-not $sel) { Write-Log -Message 'Restore cancelled.' -Level WARN; $script:Summary.Cancelled = $true; return }
+    $folder = $null
+    if ($sel -match '^[Pp]$') { $folder = ([string](Read-Host '  Backup folder path')).Trim().Trim('"') }
+    elseif ($sel -match '^\d+$' -and [int]$sel -ge 1 -and [int]$sel -le $backups.Count) { $folder = $backups[[int]$sel - 1].Folder }
+    else { Write-Host '  Invalid selection.' -ForegroundColor Yellow; $script:Summary.Cancelled = $true; return }
+
+    $json = Join-Path $folder 'snapshot.json'
+    if (-not (Test-Path -LiteralPath $json)) {
+        Add-Failure -Target $folder -Reason 'No snapshot.json in this folder (backups made before v1.2.0 can only be restored manually from their .reg files).'
+        return
+    }
+    try { $snap = Get-Content -LiteralPath $json -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json }
+    catch { Add-Failure -Target $json -Reason ('Unreadable snapshot: {0}' -f $_.Exception.Message); return }
+    if ([int]$snap.SnapshotVersion -gt $script:SnapshotVersion) {
+        Add-Failure -Target $json -Reason ('Snapshot format {0} is newer than this script supports ({1}). Use a newer version of the script.' -f $snap.SnapshotVersion, $script:SnapshotVersion)
+        return
+    }
+    Write-Log -Message ('Restoring from {0} ({1}, {2}, created {3} by v{4})' -f $folder, (Get-BackupLabelText $snap.Label), $snap.OS, $snap.Created, $snap.ToolVersion)
+    if ($snap.Computer -and $snap.Computer -ne $env:COMPUTERNAME) {
+        Write-Host ('  This backup was made on {0}, not on this PC ({1}).' -f $snap.Computer, $env:COMPUTERNAME) -ForegroundColor Yellow
+        if (-not (Read-YesNo -Prompt '  Apply it here anyway?' -Default 'N')) { $script:Summary.Cancelled = $true; return }
+    }
+
+    $plan = Get-RestorePlan -Snapshot $snap
+    foreach ($w in $plan.Warnings) { Add-SummaryWarning $w }
+    if ($plan.Changes.Count -eq 0) {
+        Write-Log -Message 'The current configuration already matches this backup. Nothing to restore.' -Level SUCCESS
+        return
+    }
+    Write-Host ''
+    Write-Host ('  {0} change(s) are needed to return to this backup:' -f $plan.Changes.Count) -ForegroundColor White
+    $n = 0
+    foreach ($x in $plan.Changes) {
+        $n++
+        Write-Host ('  {0,3}. {1}' -f $n, $x.Display) -ForegroundColor Yellow
+        Write-Log -Message ('Planned restore: {0}' -f $x.Display) -NoConsole
+    }
+    Write-Host ''
+    if (-not (Read-YesNo -Prompt '  Restore this backup?' -Default 'N')) {
+        Write-Log -Message 'Restore cancelled. No changes made.' -Level WARN
+        $script:Summary.Cancelled = $true
+        return
+    }
+    # The current state is backed up first, so a restore can itself be undone.
+    if (-not (Backup-WindowsUpdatePolicies -Label 'BeforeRestore' -Description ('Before restoring {0}' -f $snap.Created))) {
+        Write-Log -Message 'Backup of the current state failed - restore aborted without changes.' -Level ERROR
+        return
+    }
+    Invoke-RestorePlan -Plan $plan
+    Write-Log -Message 'Restore finished. Restart Windows so Settings and Windows Update pick up the restored configuration.' -Level SUCCESS
 }
 
 #endregion
@@ -1934,14 +2545,15 @@ function Confirm-ManagedDeviceChange {
 }
 
 function Repair-ServiceStartType {
-    <# Restores a Disabled service to its default start type via the Service Control Manager. #>
-    param([string]$Name, [ValidateSet('Manual', 'Automatic', 'AutomaticDelayed')][string]$StartMode)
-    $scArg = @{ Manual = 'demand'; Automatic = 'auto'; AutomaticDelayed = 'delayed-auto' }[$StartMode]
+    <# Sets a service start type through the Service Control Manager (repair: Disabled -> default). #>
+    param([string]$Name, [ValidateSet('Manual', 'Automatic', 'AutomaticDelayed', 'Disabled')][string]$StartMode)
+    # 'Disabled' is only ever requested by a restore that puts back a backed-up state.
+    $scArg = @{ Manual = 'demand'; Automatic = 'auto'; AutomaticDelayed = 'delayed-auto'; Disabled = 'disabled' }[$StartMode]
     $sc = Join-Path $env:SystemRoot 'System32\sc.exe'
     $out = & $sc config $Name start= $scArg 2>&1 | Out-String
     $code = $LASTEXITCODE
     if ($code -eq 0) {
-        Write-Log -Message ('Service {0} start type restored to {1}' -f $Name, $StartMode) -Level CHANGE
+        Write-Log -Message ('Service {0} start type set to {1}' -f $Name, $StartMode) -Level CHANGE
         $script:Summary.ServicesRepaired++
         return $true
     }
@@ -2557,6 +3169,7 @@ function Show-OperationSummary {
     Write-Host ('Policies removed:         {0}' -f $s.PoliciesRemoved)
     Write-Host ('Policies reset:           {0}' -f $s.PoliciesReset)
     Write-Host ('Services repaired:        {0}' -f $s.ServicesRepaired)
+    if ($s.Restored -gt 0) { Write-Host ('Settings restored:        {0}' -f $s.Restored) }
     Write-Host ('Components reset:         {0}' -f $s.ComponentsReset)
     Write-Host ('Registry backup:          {0}' -f $(if ($s.BackupDir) { $s.BackupDir } else { '(none needed)' }))
     Write-Host ('Log file:                 {0}' -f $script:LogFile)
@@ -2590,7 +3203,7 @@ function Show-OperationSummary {
 function Show-Menu {
     Write-Host ''
     Write-Host '========================================' -ForegroundColor Cyan
-    Write-Host ' Windows Update Policy Repair' -ForegroundColor Cyan
+    Write-Host (' Windows Update Policy Repair v{0}' -f $script:ToolVersion) -ForegroundColor Cyan
     Write-Host '========================================' -ForegroundColor Cyan
     Write-Host (' {0} {1} - build {2}' -f $script:OSInfo.Name, $script:OSInfo.DisplayVersion, $script:OSInfo.FullBuild) -ForegroundColor DarkGray
     Write-Host ''
@@ -2600,7 +3213,9 @@ function Show-Menu {
     Write-Host '4. Reset Windows Update components'
     Write-Host '5. Restore ALL Windows Update policies'
     Write-Host '6. Run complete Windows Update repair'
-    Write-Host '7. Exit'
+    Write-Host '7. Back up current Windows Update configuration'
+    Write-Host '8. Restore Windows Update configuration from a backup'
+    Write-Host '9. Exit'
     Write-Host ''
     return ([string](Read-Host 'Select an option')).Trim()
 }
@@ -2619,8 +3234,8 @@ function Invoke-MenuAction {
 }
 
 function Initialize-Session {
-    $base = Join-Path $env:ProgramData 'WindowsUpdatePolicyRepair'
-    $script:SessionDir = Join-Path $base (Get-Date -Format 'yyyyMMdd-HHmmss')
+    $script:BaseDir = Join-Path $env:ProgramData 'WindowsUpdatePolicyRepair'
+    $script:SessionDir = Join-Path $script:BaseDir (Get-Date -Format 'yyyyMMdd-HHmmss')
     New-Item -ItemType Directory -Path $script:SessionDir -Force -ErrorAction Stop | Out-Null
     $script:LogFile = Join-Path $script:SessionDir 'WindowsUpdateRepair.log'
     $script:OSInfo = Get-WindowsVersionInfo
@@ -2680,8 +3295,10 @@ function Start-WindowsUpdateRepairTool {
                 '4' { Invoke-MenuAction -Title 'Windows Update Component Reset' -Action { Reset-WindowsUpdateComponents } }
                 '5' { Invoke-MenuAction -Title 'Restore ALL Windows Update Policies' -Action { Reset-WindowsUpdatePolicies -Mode All } }
                 '6' { Invoke-MenuAction -Title 'Windows Update Repair' -Action { Repair-WindowsUpdate } }
-                '7' { $exit = $true }
-                default { Write-Host 'Invalid selection. Enter a number from 1 to 7.' -ForegroundColor Yellow }
+                '7' { Invoke-MenuAction -Title 'Configuration Backup' -Action { Backup-CurrentConfiguration } }
+                '8' { Invoke-MenuAction -Title 'Configuration Restore' -Action { Restore-WindowsUpdateConfiguration } }
+                '9' { $exit = $true }
+                default { Write-Host 'Invalid selection. Enter a number from 1 to 9.' -ForegroundColor Yellow }
             }
             if (-not $exit) { $null = Read-Host "`nPress Enter to return to the menu" }
         } until ($exit)
