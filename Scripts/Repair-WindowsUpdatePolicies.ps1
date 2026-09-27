@@ -80,6 +80,17 @@ $script:Paths = [pscustomobject]@{
     # Policies delivered by MDM (Intune etc.) or provisioning packages.
     MdmUpdate            = 'SOFTWARE\Microsoft\PolicyManager\current\device\Update'
     MdmDO                = 'SOFTWARE\Microsoft\PolicyManager\current\device\DeliveryOptimization'
+    # Per-enrollment MDM policy stores. PolicyManager rebuilds "current" from these, so
+    # a value removed only from "current" comes back.
+    MdmProviders         = 'SOFTWARE\Microsoft\PolicyManager\providers'
+    # Windows Update's cached copy of Group Policy. A stale cache keeps "managed by your
+    # organisation" showing after the policies themselves are gone; it is rebuilt from
+    # current policy at the next refresh.
+    GPCache              = 'SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\GPCache'
+    # The policy state Windows Update actually evaluated (read-only, shown for diagnosis).
+    PolicyState          = 'SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\PolicyState'
+    # A "Debugger" value here stops the named program from ever running (blocker technique).
+    IFEO                 = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options'
     Enrollments          = 'SOFTWARE\Microsoft\Enrollments'
     GpoList              = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Group Policy\State\Machine\GPO-List'
     RebootRequired       = 'SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
@@ -104,6 +115,10 @@ $script:Areas = [pscustomobject]@{
     DO       = 'Delivery Optimization policies'
     LocalGpo = 'Local Group Policy (Registry.pol)'
     Mdm      = 'MDM / Intune policies (PolicyManager)'
+    Cache    = 'Cached Group Policy (Windows Update GPCache)'
+    Effective = 'Effective policy state (as Windows Update sees it, read-only)'
+    Ifeo     = 'Blocked update programs (Image File Execution Options)'
+    Firewall = 'Firewall rules'
     UxPause  = 'Pause state (Settings app)'
     Services = 'Services'
     Tasks    = 'Scheduled tasks'
@@ -117,6 +132,13 @@ $script:Areas = [pscustomobject]@{
 $script:WUHostSuffixes = @(
     'windowsupdate.com', 'windowsupdate.microsoft.com', 'update.microsoft.com',
     'delivery.mp.microsoft.com', 'dsp.mp.microsoft.com', 'emdl.ws.microsoft.com'
+)
+
+# Windows Update programs that blocker tools disable via an IFEO "Debugger" value or a
+# firewall rule. None of them has a Debugger value on a clean install.
+$script:WUExecutables = @(
+    'usoclient.exe', 'mousocoreworker.exe', 'waasmedicagent.exe', 'sihclient.exe', 'wuauclt.exe',
+    'musnotification.exe', 'musnotificationux.exe', 'tiworker.exe', 'trustedinstaller.exe'
 )
 
 # Scheduled tasks that start Windows Update scans. Both are enabled on a clean install;
@@ -805,7 +827,7 @@ function Get-ManagementState {
     <# Detects domain join, Entra ID join, MDM enrollment and ConfigMgr - sources that re-apply policy. #>
     $s = [pscustomobject]@{
         DomainJoined = $false; Domain = $null; EntraJoined = $false; WorkplaceJoined = $false
-        MdmEnrolled = $false; MdmProviders = @(); ConfigMgr = $false; DomainGpos = @(); IsManaged = $false
+        MdmEnrolled = $false; MdmProviders = @(); ActiveEnrollmentIds = @(); ConfigMgr = $false; DomainGpos = @(); IsManaged = $false
     }
     try {
         $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
@@ -837,6 +859,8 @@ function Get-ManagementState {
                     try {
                         $state = $k.GetValue('EnrollmentState')
                         $provider = $k.GetValue('ProviderID')
+                        # Any active enrollment owns its PolicyManager provider store.
+                        if ($state -eq 1) { $s.ActiveEnrollmentIds += (ConvertTo-EnrollmentId $sub) }
                         if ($state -eq 1 -and $provider) {
                             $s.MdmEnrolled = $true
                             $s.MdmProviders += [string]$provider
@@ -876,6 +900,11 @@ function Get-ManagementState {
     $s.MdmProviders = @($s.MdmProviders | Select-Object -Unique)
     $s.IsManaged = $s.DomainJoined -or $s.EntraJoined -or $s.MdmEnrolled -or $s.ConfigMgr
     return $s
+}
+
+function ConvertTo-EnrollmentId {
+    param($Value)
+    return ([string]$Value).Trim().Trim('{', '}').ToUpperInvariant()
 }
 
 function Test-PendingReboot {
@@ -950,13 +979,13 @@ function Get-ServiceDefinitions {
     <# Clean-install start types. Only a Disabled service is ever changed. #>
     $usoDefault = if ($script:OSInfo.Build -ge 19041) { 'AutomaticDelayed' } else { 'Manual' }
     @(
-        [pscustomobject]@{ Name = 'wuauserv';         Display = 'Windows Update';                    Default = 'Manual';           Required = $true;  Verify = $true }
-        [pscustomobject]@{ Name = 'BITS';             Display = 'Background Intelligent Transfer';  Default = 'Manual';           Required = $true;  Verify = $true }
-        [pscustomobject]@{ Name = 'CryptSvc';         Display = 'Cryptographic Services';           Default = 'Automatic';        Required = $true;  Verify = $true }
-        [pscustomobject]@{ Name = 'UsoSvc';           Display = 'Update Orchestrator Service';      Default = $usoDefault;        Required = $true;  Verify = $false }
-        [pscustomobject]@{ Name = 'WaaSMedicSvc';     Display = 'Windows Update Medic Service';     Default = 'Manual';           Required = $false; Verify = $false }
-        [pscustomobject]@{ Name = 'DoSvc';            Display = 'Delivery Optimization';            Default = 'AutomaticDelayed'; Required = $false; Verify = $false }
-        [pscustomobject]@{ Name = 'TrustedInstaller'; Display = 'Windows Modules Installer';        Default = 'Manual';           Required = $true;  Verify = $false }
+        [pscustomobject]@{ Name = 'wuauserv';         Display = 'Windows Update';                    Default = 'Manual';           Required = $true;  Verify = $true;  Image = 'svchost\.exe';          Dll = 'wuaueng\.dll$' }
+        [pscustomobject]@{ Name = 'BITS';             Display = 'Background Intelligent Transfer';  Default = 'Manual';           Required = $true;  Verify = $true;  Image = 'svchost\.exe';          Dll = 'qmgr\.dll$' }
+        [pscustomobject]@{ Name = 'CryptSvc';         Display = 'Cryptographic Services';           Default = 'Automatic';        Required = $true;  Verify = $true;  Image = 'svchost\.exe';          Dll = 'cryptsvc\.dll$' }
+        [pscustomobject]@{ Name = 'UsoSvc';           Display = 'Update Orchestrator Service';      Default = $usoDefault;        Required = $true;  Verify = $false; Image = 'svchost\.exe';          Dll = 'usosvc\.dll$' }
+        [pscustomobject]@{ Name = 'WaaSMedicSvc';     Display = 'Windows Update Medic Service';     Default = 'Manual';           Required = $false; Verify = $false; Image = 'svchost\.exe';          Dll = 'waasmedicsvc\.dll$' }
+        [pscustomobject]@{ Name = 'DoSvc';            Display = 'Delivery Optimization';            Default = 'AutomaticDelayed'; Required = $false; Verify = $false; Image = 'svchost\.exe';          Dll = 'dosvc\.dll$' }
+        [pscustomobject]@{ Name = 'TrustedInstaller'; Display = 'Windows Modules Installer';        Default = 'Manual';           Required = $true;  Verify = $false; Image = 'trustedinstaller\.exe'; Dll = $null }
     )
 }
 
@@ -1129,11 +1158,19 @@ function Get-MdmSeverity {
 
 function Add-MdmFindings {
     <#
-        PolicyManager\current\device holds the winning MDM / provisioning-package policies.
-        On an enrolled device these are owned by the MDM service and are never modified here.
-        Without an active enrollment they are orphaned and option 5 may remove them.
+        MDM / provisioning-package policies live in two places:
+          PolicyManager\providers\<enrollment GUID>\default\Device\<Area>  - each source's own copy
+          PolicyManager\current\device\<Area>                               - the merged winner
+        PolicyManager rebuilds "current" from the provider stores, so a stale value must be
+        removed from its provider store too or it comes back. A value is treated as
+        organization-owned only when its provider is an ACTIVE enrollment; values whose
+        provider has no active enrollment (removed enrollment, old provisioning package) are
+        orphaned and may be removed.
     #>
     param($Findings, $Management)
+    $active = @($Management.ActiveEnrollmentIds)
+
+    # 1) Winning (merged) values.
     foreach ($mk in @($script:Paths.MdmUpdate, $script:Paths.MdmDO)) {
         $path = 'HKLM\' + $mk
         try { $values = @(Get-RegistryValueSet -Path $path) }
@@ -1147,24 +1184,169 @@ function Add-MdmFindings {
             if ($v.Name -eq '' -or $v.Name -match '_(ProviderSet|WinningProvider)$') { continue }
             $sev = Get-MdmSeverity -Name $v.Name -Value $v.Value
             $related = @(@(('{0}_ProviderSet' -f $v.Name), ('{0}_WinningProvider' -f $v.Name)) | Where-Object { $names -contains $_ })
-            if ($Management.MdmEnrolled) {
-                $action = $null
-                $src = ('MDM ({0})' -f ($Management.MdmProviders -join ', '))
-                $org = $true
-                $note = 'Delivered by MDM. Change it in the MDM console (e.g. Intune update ring); it is not modified here.'
-            }
-            else {
-                $action = [pscustomobject]@{
-                    Type = 'RegValue'; Path = $path; Name = $v.Name; Counter = 'Removed'; Related = $related
-                    Display = ('{0}\{1} (+ MDM metadata)' -f $path, $v.Name)
-                }
-                $src = 'Orphaned MDM / provisioning-package value (no active MDM enrollment)'
-                $org = $false
-                $note = 'No active MDM enrollment was found; this value is left over from a removed enrollment or a provisioning package.'
-            }
-            $Findings.Add((New-Finding -Area $script:Areas.Mdm -Location $path -Name $v.Name -RawValue $v.Value -Severity $sev `
-                -Source $src -Org $org -Note $note -Action $action -Tier 'MDM'))
+            $winner = @($values | Where-Object { $_.Name -eq ('{0}_WinningProvider' -f $v.Name) } | ForEach-Object { ConvertTo-EnrollmentId $_.Value })
+            $owner = if ($winner.Count -and $winner[0]) { $winner[0] } else { $null }
+            $org = if ($owner) { $active -contains $owner } else { [bool]$Management.MdmEnrolled }
+            Add-MdmFinding -Findings $Findings -Path $path -Value $v -Severity $sev -Owner $owner -Org $org -Related $related
         }
+    }
+
+    # 2) Per-provider stores.
+    $root = 'HKLM\' + $script:Paths.MdmProviders
+    $providers = @()
+    try {
+        $rk = Open-RegistryKey -Path $root
+        if ($rk) { try { $providers = @($rk.GetSubKeyNames()) } finally { $rk.Close() } }
+    }
+    catch {
+        $Findings.Add((New-Finding -Area $script:Areas.Mdm -Location $root -Name '(key)' -RawValue $null -Severity 'Info' `
+            -Note ('Could not read: {0}' -f (Get-FailureReason $_))))
+    }
+    foreach ($prov in $providers) {
+        $id = ConvertTo-EnrollmentId $prov
+        $org = $active -contains $id
+        foreach ($area in @('Update', 'DeliveryOptimization')) {
+            $path = '{0}\{1}\default\Device\{2}' -f $root, $prov, $area
+            try { $values = @(Get-RegistryValueSet -Path $path) }
+            catch {
+                $Findings.Add((New-Finding -Area $script:Areas.Mdm -Location $path -Name '(key)' -RawValue $null -Severity 'Info' `
+                    -Note ('Could not read: {0}' -f (Get-FailureReason $_))))
+                continue
+            }
+            foreach ($v in $values) {
+                if ($v.Name -eq '' -or $v.Name -match '_(ProviderSet|WinningProvider|LastWrite)$') { continue }
+                $sev = Get-MdmSeverity -Name $v.Name -Value $v.Value
+                Add-MdmFinding -Findings $Findings -Path $path -Value $v -Severity $sev -Owner $id -Org $org -Related @()
+            }
+        }
+    }
+}
+
+function Add-MdmFinding {
+    param($Findings, [string]$Path, $Value, [string]$Severity, [string]$Owner, [bool]$Org, [object[]]$Related)
+    if ($Org) {
+        $action = $null
+        $src = if ($Owner) { ('Active MDM enrollment {0}' -f $Owner) } else { 'Active MDM enrollment' }
+        $note = 'Delivered by an active MDM enrollment. Change it in the MDM console (e.g. Intune update ring); it is not modified here.'
+    }
+    else {
+        $suffix = if ($Related.Count) { ' (+ MDM metadata)' } else { '' }
+        $action = [pscustomobject]@{
+            Type = 'RegValue'; Path = $Path; Name = $Value.Name; Counter = 'Removed'; Related = $Related
+            Display = ('{0}\{1}{2}' -f $Path, $Value.Name, $suffix)
+        }
+        $src = if ($Owner) { ('Orphaned provider {0} (no active enrollment)' -f $Owner) } else { 'Orphaned MDM / provisioning value' }
+        $note = 'No active enrollment owns this value: it is left over from a removed enrollment or a provisioning package.'
+    }
+    $Findings.Add((New-Finding -Area $script:Areas.Mdm -Location $Path -Name $Value.Name -RawValue $Value.Value -Severity $Severity `
+        -Source $src -Org $Org -Note $note -Action $action -Tier 'MDM'))
+}
+
+function Get-RegistryValuesRecursive {
+    param([string]$Path, [int]$Depth = 5)
+    foreach ($v in @(Get-RegistryValueSet -Path $Path)) { $v }
+    if ($Depth -le 0) { return }
+    $k = Open-RegistryKey -Path $Path
+    if (-not $k) { return }
+    try { $subs = @($k.GetSubKeyNames()) } finally { $k.Close() }
+    foreach ($sub in $subs) { Get-RegistryValuesRecursive -Path ('{0}\{1}' -f $Path, $sub) -Depth ($Depth - 1) }
+}
+
+function Find-PolicyDefByName {
+    <# Looks a bare value name up among the core machine Windows Update policies. #>
+    param([string]$Name)
+    foreach ($key in @($script:Paths.WU, $script:Paths.AU)) {
+        $d = Find-PolicyDef -Scope 'Machine' -Key $key -Name $Name
+        if ($d) { return $d }
+    }
+    return $null
+}
+
+function Add-GpCacheFindings {
+    param($Findings)
+    $path = 'HKLM\' + $script:Paths.GPCache
+    try {
+        if (-not (Test-RegistryKeyExists $path)) { return }
+        $values = @(Get-RegistryValuesRecursive -Path $path | Where-Object { $_.Name -ne '' })
+    }
+    catch {
+        $Findings.Add((New-Finding -Area $script:Areas.Cache -Location $path -Name '(key)' -RawValue $null -Severity 'Info' -Note ('Could not read: {0}' -f (Get-FailureReason $_))))
+        return
+    }
+    if ($values.Count -eq 0) { return }
+    $sev = 'Custom'
+    $bad = @()
+    foreach ($v in $values) {
+        $d = Find-PolicyDefByName -Name $v.Name
+        if ($d -and ((& $d.Eval $v.Value) -in @('Block', 'Restrict'))) { $bad += ('{0}={1}' -f $v.Name, (Format-RegValue $v.Value)) }
+    }
+    if ($bad.Count) { $sev = 'Block' }
+    $names = @($values | ForEach-Object Name | Select-Object -Unique)
+    $shown = ($names | Select-Object -First 8) -join ', '
+    if ($names.Count -gt 8) { $shown += ', ...' }
+    $note = 'Windows Update''s cached copy of Group Policy. If it still holds removed policies, Settings keeps saying "managed by your organisation". Windows rebuilds it from current policy.'
+    if ($bad.Count) { $note += (' Cached blocking values: {0}.' -f ($bad -join ', ')) }
+    $action = [pscustomobject]@{ Type = 'CacheKey'; Path = $path; Counter = 'Reset'; Display = ('Clear policy cache {0}' -f $path) }
+    $Findings.Add((New-Finding -Area $script:Areas.Cache -Location $path -Name ('{0} cached value(s)' -f $values.Count) -RawValue $shown `
+        -Severity $sev -Source 'Windows Update policy cache' -Note $note -Action $action -Tier 'Cache'))
+}
+
+function Add-PolicyStateFindings {
+    <# Read-only: what Windows Update itself evaluated. Useful when the source of a policy is unclear. #>
+    param($Findings)
+    $path = 'HKLM\' + $script:Paths.PolicyState
+    try { $values = @(Get-RegistryValueSet -Path $path | Where-Object { $_.Name -ne '' }) }
+    catch { return }
+    foreach ($v in $values) {
+        $Findings.Add((New-Finding -Area $script:Areas.Effective -Location $path -Name $v.Name -RawValue $v.Value -Severity 'Info'))
+    }
+}
+
+function Add-IfeoFindings {
+    param($Findings)
+    foreach ($exe in $script:WUExecutables) {
+        $path = 'HKLM\{0}\{1}' -f $script:Paths.IFEO, $exe
+        try { $dbg = @(Get-RegistryValueSet -Path $path | Where-Object { $_.Name -eq 'Debugger' }) }
+        catch {
+            $Findings.Add((New-Finding -Area $script:Areas.Ifeo -Location $path -Name 'Debugger' -RawValue $null -Severity 'Info' -Note ('Could not read: {0}' -f (Get-FailureReason $_))))
+            continue
+        }
+        foreach ($v in $dbg) {
+            $action = [pscustomobject]@{ Type = 'RegValue'; Path = $path; Name = 'Debugger'; Counter = 'Reset'; Related = @(); Display = ('{0}\Debugger' -f $path) }
+            $Findings.Add((New-Finding -Area $script:Areas.Ifeo -Location $path -Name ('{0} Debugger' -f $exe) -RawValue $v.Value -Severity 'Block' `
+                -Source 'Update-blocking tool' -Note ('Prevents {0} from running. Not present on a clean install; only this value is removed.' -f $exe) -Action $action -Tier 'Tamper'))
+        }
+    }
+}
+
+function Add-FirewallFindings {
+    <# Enabled outbound Block rules aimed at update services or programs. Locally created ones can be disabled (not deleted). #>
+    param($Findings)
+    $svcNames = @('wuauserv', 'UsoSvc', 'DoSvc', 'BITS', 'WaaSMedicSvc')
+    try {
+        $ids = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+        foreach ($f in @(Get-NetFirewallServiceFilter -All -ErrorAction Stop)) {
+            if ($f.Service -and ($svcNames -contains $f.Service)) { [void]$ids.Add($f.InstanceID) }
+        }
+        foreach ($f in @(Get-NetFirewallApplicationFilter -All -ErrorAction Stop)) {
+            if ($f.Program -and $f.Program -ne 'Any' -and ($script:WUExecutables -contains ([IO.Path]::GetFileName($f.Program)).ToLowerInvariant())) { [void]$ids.Add($f.InstanceID) }
+        }
+    }
+    catch {
+        $Findings.Add((New-Finding -Area $script:Areas.Firewall -Location 'Windows Firewall' -Name '(rules)' -RawValue $null -Severity 'Info' -Note ('Could not read firewall rules: {0}' -f $_.Exception.Message)))
+        return
+    }
+    foreach ($id in $ids) {
+        try { $r = Get-NetFirewallRule -Name $id -ErrorAction Stop }
+        catch { continue }   # filter without a readable rule (e.g. removed meanwhile)
+        if ([string]$r.Direction -ne 'Outbound' -or [string]$r.Action -ne 'Block' -or [string]$r.Enabled -ne 'True') { continue }
+        $gp = ([string]$r.PolicyStoreSourceType -eq 'GroupPolicy')
+        $action = if ($gp) { $null } else {
+            [pscustomobject]@{ Type = 'FirewallRule'; RuleName = $r.Name; Counter = 'Reset'; Display = ('Disable firewall rule "{0}"' -f $r.DisplayName) }
+        }
+        $src = if ($gp) { 'Group Policy firewall rule' } else { 'Local firewall rule' }
+        $Findings.Add((New-Finding -Area $script:Areas.Firewall -Location ('Firewall rule {0}' -f $r.Name) -Name $r.DisplayName -RawValue 'Outbound, Block, Enabled' `
+            -Severity 'Block' -Source $src -Org $gp -Note 'Blocks Windows Update traffic. Local rules are disabled, not deleted.' -Action $action -Tier 'Tamper'))
     }
 }
 
@@ -1297,7 +1479,31 @@ function Add-ServiceFindings {
         else { $sev = 'OK' }
         $Findings.Add((New-Finding -Area $script:Areas.Services -Location ('HKLM\SYSTEM\CurrentControlSet\Services\' + $d.Name) `
             -Name ('{0} ({1})' -f $d.Display, $d.Name) -RawValue ('{0} / {1}' -f $mode, $status) -Severity $sev -Note $note -Action $action -Tier 'Service'))
+        if ($mode -ne 'Missing') { Add-ServiceRegistrationFinding -Findings $Findings -Definition $d }
     }
+}
+
+function Add-ServiceRegistrationFinding {
+    <#
+        Some blocker tools point a service at a missing binary/DLL so it can never run. This is
+        reported but NOT auto-fixed: the correct values differ between builds, and guessing them
+        could leave the service worse off.
+    #>
+    param($Findings, $Definition)
+    $base = 'HKLM\SYSTEM\CurrentControlSet\Services\' + $Definition.Name
+    try {
+        $img = @(Get-RegistryValueSet -Path $base | Where-Object Name -eq 'ImagePath' | ForEach-Object Value)
+        $dll = @(Get-RegistryValueSet -Path ($base + '\Parameters') | Where-Object Name -eq 'ServiceDll' | ForEach-Object Value)
+    }
+    catch { return }
+    $problems = @()
+    if ($img.Count -and [string]$img[0] -notmatch $Definition.Image) { $problems += ('ImagePath = {0}' -f $img[0]) }
+    if ($Definition.Dll -and $dll.Count -and [string]$dll[0] -notmatch $Definition.Dll) { $problems += ('ServiceDll = {0}' -f $dll[0]) }
+    if ($Definition.Dll -and $dll.Count -eq 0 -and [string]$img[0] -match 'svchost') { $problems += 'ServiceDll missing' }
+    if ($problems.Count -eq 0) { return }
+    $Findings.Add((New-Finding -Area $script:Areas.Services -Location $base -Name ('{0} registration' -f $Definition.Name) -RawValue ($problems -join '; ') `
+        -Severity 'Block' -Source 'Altered service registration' `
+        -Note 'The service points at an unexpected program or DLL. Not changed automatically: repair with an in-place upgrade (keeps apps and files), or import this key from a healthy PC on the same build.'))
 }
 
 function Add-TaskFindings {
@@ -1381,11 +1587,15 @@ function Get-WindowsUpdateState {
     Add-RegistryPolicyFindings -Findings $findings -PolIndex $polIndex -Management $mgmt -Sids $sids
     Add-PolFileFindings -Findings $findings -PolFiles $polFiles
     Add-MdmFindings -Findings $findings -Management $mgmt
+    Add-GpCacheFindings -Findings $findings
     Add-PauseStateFindings -Findings $findings
     $wsus = Update-WsusFindings -Findings $findings
     Add-ServiceFindings -Findings $findings
     Add-TaskFindings -Findings $findings
     Add-HostsFindings -Findings $findings
+    Add-IfeoFindings -Findings $findings
+    Add-FirewallFindings -Findings $findings
+    Add-PolicyStateFindings -Findings $findings
 
     $proxy = Get-WinHttpProxy
     if ($proxy) {
@@ -1454,8 +1664,8 @@ function Show-AuditReport {
     else { Out-Report '   => Not managed by an organization (standalone PC).' Green }
 
     $sections = @($a.Access, $a.AU, $a.Feature, $a.Quality, $a.Pause, $a.Target, $a.WUfB, $a.WSUS, $a.Driver,
-                  $a.Restart, $a.Legacy, $a.Unknown, $a.User, $a.DO, $a.LocalGpo, $a.Mdm, $a.UxPause,
-                  $a.Services, $a.Tasks, $a.Hosts, $a.Network, $a.Errors)
+                  $a.Restart, $a.Legacy, $a.Unknown, $a.User, $a.DO, $a.LocalGpo, $a.Mdm, $a.Cache, $a.UxPause,
+                  $a.Services, $a.Tasks, $a.Ifeo, $a.Firewall, $a.Hosts, $a.Network, $a.Effective, $a.Errors)
     $emptyText = @{
         $a.Unknown  = 'None.'
         $a.User     = ('Not configured in {0} loaded user hive(s) - DEFAULT / NORMAL.' -f $State.UserSids.Count)
@@ -1463,6 +1673,10 @@ function Show-AuditReport {
         $a.Mdm      = 'No MDM Windows Update policies - DEFAULT / NORMAL.'
         $a.UxPause  = 'Updates are not paused - DEFAULT / NORMAL.'
         $a.Hosts    = 'No Windows Update endpoints redirected - DEFAULT / NORMAL.'
+        $a.Cache    = 'No cached Windows Update policy - DEFAULT / NORMAL.'
+        $a.Ifeo     = 'No update program is blocked - DEFAULT / NORMAL.'
+        $a.Firewall = 'No firewall rule blocks Windows Update - DEFAULT / NORMAL.'
+        $a.Effective = 'No evaluated policy state recorded.'
         $a.Errors   = $null
     }
     foreach ($sec in $sections) {
@@ -1553,7 +1767,21 @@ function Get-BackupKeyList {
     foreach ($sid in $Sids) {
         foreach ($k in ($script:PolicyCatalog | Where-Object Scope -eq 'User' | Select-Object -ExpandProperty Key -Unique)) { $keys.Add(('HKU\{0}\{1}' -f $sid, $k)) }
     }
-    foreach ($k in @($script:Paths.UXSettings, $script:Paths.UpdatePolicySettings, $script:Paths.MdmUpdate, $script:Paths.MdmDO)) { $keys.Add('HKLM\' + $k) }
+    foreach ($k in @($script:Paths.UXSettings, $script:Paths.UpdatePolicySettings, $script:Paths.MdmUpdate, $script:Paths.MdmDO,
+                     $script:Paths.GPCache, $script:Paths.PolicyState)) { $keys.Add('HKLM\' + $k) }
+    foreach ($exe in $script:WUExecutables) { $keys.Add(('HKLM\{0}\{1}' -f $script:Paths.IFEO, $exe)) }
+    try {
+        $rk = Open-RegistryKey -Path ('HKLM\' + $script:Paths.MdmProviders)
+        if ($rk) {
+            try { $provs = @($rk.GetSubKeyNames()) } finally { $rk.Close() }
+            foreach ($prov in $provs) {
+                foreach ($area in @('Update', 'DeliveryOptimization')) {
+                    $keys.Add(('HKLM\{0}\{1}\default\Device\{2}' -f $script:Paths.MdmProviders, $prov, $area))
+                }
+            }
+        }
+    }
+    catch { Write-Log -Message ('Cannot list MDM providers for backup: {0}' -f $_.Exception.Message) -Level WARN }
     foreach ($d in (Get-ServiceDefinitions)) { $keys.Add('HKLM\SYSTEM\CurrentControlSet\Services\' + $d.Name) }
     return ($keys | Select-Object -Unique)
 }
@@ -1609,6 +1837,12 @@ function Backup-WindowsUpdatePolicies {
         }
     }
 
+    # Local firewall policy, so disabled rules can be restored (netsh advfirewall import).
+    $wfw = Join-Path (Join-Path $dir 'Files') 'firewall-policy.wfw'
+    $out = & (Join-Path $env:SystemRoot 'System32\netsh.exe') advfirewall export $wfw 2>&1 | Out-String
+    if ($LASTEXITCODE -eq 0) { $count++ }
+    else { Write-Log -Message ('Firewall policy export failed: {0}' -f $out.Trim()) -Level WARN }
+
     $readme = @(
         'Windows Update Policy Repair - backup'
         ('Created: {0}' -f (Get-Date))
@@ -1616,6 +1850,7 @@ function Backup-WindowsUpdatePolicies {
         'Registry\*.reg : restore with "reg import <file>" (or double-click) from an elevated prompt.'
         'Files\*        : paths are relative to %SystemRoot%\System32. Copy Registry.pol files back to'
         '                 GroupPolicy\... and run "gpupdate /force". Copy drivers\etc\hosts back if needed.'
+        'Files\firewall-policy.wfw : "netsh advfirewall import <file>" restores the whole local firewall policy.'
     )
     try { Set-Content -LiteralPath (Join-Path $dir 'RESTORE-README.txt') -Value $readme -Encoding UTF8 -ErrorAction Stop }
     catch { Write-Log -Message ('Could not write README: {0}' -f $_.Exception.Message) -Level WARN }
@@ -1637,6 +1872,7 @@ function Get-RemediationPlan {
     <#
         Blocking : values that block or restrict updates (+ disabled services/tasks, active pause)
         Defaults : every documented core policy value + anything blocking (policy locations only)
+                   + the Windows Update policy cache
         All      : everything with an action, including unrecognized values in WU policy keys,
                    Delivery Optimization, user-level, legacy, orphaned MDM and pause state
     #>
@@ -1647,7 +1883,7 @@ function Get-RemediationPlan {
         $bad = $f.Severity -in @('Block', 'Restrict')
         $include = switch ($Mode) {
             'Blocking' { $bad }
-            'Defaults' { ($t -in @('RegValue', 'PolEntry')) -and ($f.Tier -notin @('State')) -and ($bad -or $f.Tier -eq 'Standard') }
+            'Defaults' { (($t -in @('RegValue', 'PolEntry')) -and ($f.Tier -notin @('State', 'Tamper')) -and ($bad -or $f.Tier -eq 'Standard')) -or $t -eq 'CacheKey' }
             'All'      { $true }
         }
         if ($include) { $f }
@@ -1666,6 +1902,8 @@ function Show-RemediationPlan {
             'PolEntry' { 'Remove GPO   ' }
             'Service'  { 'Service      ' }
             'Task'     { 'Task         ' }
+            'CacheKey' { 'Clear cache  ' }
+            'FirewallRule' { 'Firewall     ' }
             default    { 'Change       ' }
         }
         $color = switch ($f.Status) { 'POTENTIALLY BLOCKING' { 'Red' } 'ORGANIZATION MANAGED' { 'Magenta' } default { 'Yellow' } }
@@ -1727,6 +1965,35 @@ function Enable-UpdateTask {
         $reason = if ($_.Exception.Message -match 'denied|0x80070005') { 'Access denied (task protected by Windows)' } else { $_.Exception.Message }
         Add-Failure -Target ('Scheduled task ' + $TaskPath + $TaskName) -Reason $reason
     }
+}
+
+function Clear-UpdatePolicyCache {
+    <#
+        Deletes Windows Update's cached copy of Group Policy (UpdatePolicy\GPCache). This is the
+        only key tree the script ever deletes: it is a cache, exported first, and Windows Update
+        rebuilds it from the policy that is actually in force.
+    #>
+    param([string]$Path)
+    if ($Path -ne ('HKLM\' + $script:Paths.GPCache)) { throw "Refusing to delete unexpected key $Path" }
+    try {
+        $idx = $Path.LastIndexOf('\')
+        $parent = Open-RegistryKey -Path $Path.Substring(0, $idx) -Writable
+        if ($null -eq $parent) { return }
+        try { $parent.DeleteSubKeyTree($Path.Substring($idx + 1), $false) } finally { $parent.Close() }
+        Write-Log -Message ('Cleared Windows Update policy cache {0}' -f $Path) -Level CHANGE
+        $script:Summary.PoliciesReset++
+    }
+    catch { Add-Failure -Target $Path -Reason (Get-FailureReason $_) }
+}
+
+function Disable-UpdateFirewallRule {
+    param([string]$RuleName, [string]$DisplayName)
+    try {
+        Disable-NetFirewallRule -Name $RuleName -ErrorAction Stop
+        Write-Log -Message ('Disabled firewall rule "{0}" ({1})' -f $DisplayName, $RuleName) -Level CHANGE
+        $script:Summary.PoliciesReset++
+    }
+    catch { Add-Failure -Target ('Firewall rule ' + $DisplayName) -Reason (Get-FailureReason $_) }
 }
 
 function Restart-UpdateAgent {
@@ -1805,6 +2072,8 @@ function Invoke-RemediationPlan {
             }
             'Service' { $null = Repair-ServiceStartType -Name $act.ServiceName -StartMode $act.TargetMode }
             'Task'    { Enable-UpdateTask -TaskPath $act.TaskPath -TaskName $act.TaskName }
+            'CacheKey' { Clear-UpdatePolicyCache -Path $act.Path; $changedPolicy = $true }
+            'FirewallRule' { Disable-UpdateFirewallRule -RuleName $act.RuleName -DisplayName $f.Name }
         }
     }
     if ($RemoveEmptyKeys) { Remove-EmptyPolicyKeys -Sids $Sids }
