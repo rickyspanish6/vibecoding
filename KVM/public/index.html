@@ -157,6 +157,17 @@ function select(p) {
   if (p.up) connect(p); else { disconnect(); renderDetail(); }
 }
 
+// Restyle Raritan's client to match the dashboard. The iframe is same-origin, so we can add our stylesheet.
+function themeClient(frame) {
+  try {
+    const doc = frame.contentDocument;
+    if (doc.getElementById('kxc-theme')) return;
+    const link = doc.createElement('link');
+    link.id = 'kxc-theme'; link.rel = 'stylesheet'; link.href = '/hkc-theme.css';
+    doc.head.append(link);
+  } catch { /* cross-origin or not ready: the stock look is fine */ }
+}
+
 // The KX has one remote channel, and it only frees up after the old client's WebSocket closes.
 // Removing the iframe closes it; if the KX still says "busy" (the iframe is same-origin, so we can read
 // its dialog), tear down and retry.
@@ -181,6 +192,7 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
       });
       const frame = el('iframe'); frame.title = p.name; frame.allow = 'clipboard-read; clipboard-write; fullscreen';
       frame.src = `/jsclient/Client.asp#${hash}`;
+      frame.addEventListener('load', () => themeClient(frame));
       const s = $('screen'); s.className = 'screen live'; s.replaceChildren(frame);
       connected = p.id; renderList(); renderDetail(true);
       await sleep(4000); // let the handshake finish before judging the result

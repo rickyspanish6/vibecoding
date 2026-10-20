@@ -1,0 +1,48 @@
+/* Theme for Raritan's embedded HTML KVM client. The dashboard injects this into the same-origin iframe
+   (see connect() in index.html). HKC is Bootstrap 3 with toolbar buttons named .toolbaricon.<action>, so
+   !important is needed to beat its own stylesheet. Colours mirror the dashboard tokens. */
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --line: #e3e6eb; --text: #14181f; --muted: #667085; --hover: #eef1f5;
+  --accent: #2563eb; --accent-text: #ffffff; --icon-filter: none; --logo-filter: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1016; --panel: #151921; --line: #252b36; --text: #e8ebf0; --muted: #8b95a7; --hover: #1c212b;
+    --accent: #5b8cff; --accent-text: #0b1020;
+    --icon-filter: invert(.86) hue-rotate(180deg); --logo-filter: brightness(0) invert(.92);
+  }
+}
+
+html, body { background: var(--bg) !important; color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif !important; }
+
+/* Menu bar and toolbar */
+#controls, .navbar, .navbar-default, #status, #toolbar-container { background: var(--panel) !important; border-color: var(--line) !important; box-shadow: none !important; }
+#status { border-top: 1px solid var(--line) !important; color: var(--muted) !important; }
+.navbar-default .navbar-nav > li > a, .navbar-default .navbar-brand, .navbar-default .navbar-text { color: var(--muted) !important; font-size: 13px; }
+.navbar-default .navbar-nav > li > a:hover, .navbar-default .navbar-nav > .open > a, .navbar-default .navbar-nav > .open > a:hover, .navbar-default .navbar-nav > .open > a:focus {
+  background: var(--hover) !important; color: var(--text) !important; border-radius: 8px;
+}
+.navbar-brand img, #controls img { filter: var(--logo-filter); }
+
+.toolbaricon { filter: var(--icon-filter); opacity: .8; border-radius: 8px; transition: opacity .12s, background-color .12s; }
+.toolbaricon:hover { opacity: 1; background-color: var(--hover) !important; }
+.toolbar-divider { background: var(--line) !important; border-color: var(--line) !important; }
+
+/* Menus */
+.dropdown-menu { background: var(--panel) !important; border: 1px solid var(--line) !important; border-radius: 12px !important; box-shadow: 0 10px 30px rgba(0, 0, 0, .28) !important; padding: 6px !important; }
+.dropdown-menu > li > a { color: var(--text) !important; border-radius: 8px; padding: 6px 12px; }
+.dropdown-menu > li > a:hover, .dropdown-menu > li > a:focus, .dropdown-menu > .active > a { background: var(--hover) !important; color: var(--text) !important; }
+.dropdown-menu .divider { background-color: var(--line) !important; }
+.dropdown-label, .dropdown-header { color: var(--muted) !important; }
+
+/* Dialogs (connection info, settings, virtual media, ...) */
+.modal-content { background: var(--panel) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: 14px !important; box-shadow: 0 20px 60px rgba(0, 0, 0, .4) !important; }
+.modal-header, .modal-footer { border-color: var(--line) !important; }
+.modal-title { font-family: inherit !important; font-weight: 650; }
+.close { color: var(--text) !important; text-shadow: none !important; opacity: .6; }
+.btn-default { background: transparent !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: 8px; }
+.btn-default:hover { background: var(--hover) !important; }
+.btn-primary { background: var(--accent) !important; color: var(--accent-text) !important; border: 0 !important; border-radius: 8px; }
+.form-control { background: var(--bg) !important; color: var(--text) !important; border: 1px solid var(--line) !important; border-radius: 8px; box-shadow: none !important; }
+.list-group-item, .pretty-list-group-item { background: transparent !important; color: var(--text) !important; border-color: var(--line) !important; }
+.table, .table > tbody > tr > td, .table > thead > tr > th { color: var(--text) !important; border-color: var(--line) !important; }

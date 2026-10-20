@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.2.0] - 2026-10-20
+
+### Added
+- Themed console frame: the embedded Raritan client's menu bar, toolbar, menus and dialogs now follow the dashboard's
+  light and dark colours (`public/hkc-theme.css`, injected into the same-origin iframe).
+
 ## [1.1.0] - 2026-10-20
 
 ### Added
