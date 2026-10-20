@@ -104,13 +104,14 @@ function parseSessions(text) {
     .map((line) => line.split('|').map((s) => s.trim()))
     .filter((cols) => cols.length === 5 && /^s_\d+$/.test(cols[2]))
     .filter(([status]) => !status.startsWith('*'))
-    .map(([status, user, id, port, from]) => ({ status, user, id, port: port === 'RC' ? null : Number(port), from }));
+    .map(([status, user, id, port, from]) => ({
+      id, user, from, status, self: false, port: port === 'RC' ? null : Number(port), portName: null, portId: null,
+    }));
 }
 
 let sessionsCache = { at: 0, value: [] };
 
-function readSessions() {
-  if (MOCK) return Promise.resolve([{ status: '3 min idle', user: 'mofa', id: 's_1', port: 4, from: '10.0.0.5' }]);
+function readSessionsSsh() {
   if (Date.now() - sessionsCache.at < 4000) return Promise.resolve(sessionsCache.value);
   return new Promise((resolve, reject) => {
     const ssh = spawn('ssh', ['-tt', '-i', SSH_KEY, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
@@ -206,6 +207,73 @@ async function ensureSession() {
   await loginInFlight;
 }
 
+// --- Users by Port: the KX's own session list and disconnect actions -----------------------------------
+// um_users_port.asp lists every session (with the ids the SSH userlist lacks) and posts the same form the
+// KX's "Disconnect User From Port" / "Force User Logoff" buttons submit. Everything about a session is taken
+// from that page, never from the browser, and this app's own session ("*this session") is never touched.
+
+async function kxPage(path) {
+  for (let i = 0; i < 2; i++) {
+    const { res, body } = await upstream({ path, headers: jar.size ? { cookie: cookieHeader() } : {} });
+    if (res.statusCode < 400 && !toLogin(res)) return body.toString('utf8');
+    await ensureSession();
+  }
+  throw new Error('The KX session could not be refreshed');
+}
+
+async function readUsersByPort() {
+  const html = await kxPage('/um_users_port.asp');
+  const nonce = html.match(/name="one_time_nonce" value="([^"]*)"/)?.[1];
+  const row = /new PortUser\("([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)"\)/g;
+  const sessions = [...html.matchAll(row)].map(([, portNo, portName, user, from, status, id, portId]) => ({
+    id, user, from, status: status.replace('*this session', '').trim(), self: status.includes('*this session'),
+    port: Number.isInteger(Number(portNo)) && portNo !== '' ? Number(portNo) : null,
+    portName: portId ? portName : null, portId: portId || null,
+  }));
+  return { nonce, sessions };
+}
+
+async function readSessions() {
+  if (MOCK) return [{ id: '1', user: 'mofa', from: '10.0.0.5', status: '3 min idle', self: false, port: 4, portName: 'B25-CTL-OPC01', portId: 'P_x_3' }];
+  if (USER && PASSWORD) return (await readUsersByPort()).sessions;
+  return readSessionsSsh();
+}
+
+// mode "port": disconnect the sessions from their ports; "logoff": force them off the KX entirely.
+async function kick(ids, mode) {
+  if (MOCK) return [];
+  const { nonce, sessions } = await readUsersByPort();
+  const targets = ids.map((id) => sessions.find((s) => s.id === id)).filter((s) => s && !s.self && (mode === 'logoff' || s.portId));
+  if (!targets.length) return sessions;
+  const form = new URLSearchParams({ one_time_nonce: nonce, __templates__: ' umusersport', selected_num: String(targets.length) });
+  form.set(mode === 'port' ? 'action_disconnect_multiple_ports' : 'action_logoff_multiple_users', '1');
+  targets.forEach((s, i) => {
+    form.set(`userport_sid_${i}`, s.id);
+    if (mode === 'port') { form.set(`userport_portid_${i}`, s.portId); form.set(`userport_portname_${i}`, s.portName); }
+    else form.set(`userport_username_${i}`, s.user);
+  });
+  const body = form.toString();
+  const { res } = await upstream({
+    method: 'POST',
+    path: '/um_users_port.asp',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(body), cookie: cookieHeader() },
+  }, body);
+  if (res.statusCode >= 400 || toLogin(res)) throw new Error(`The KX refused the request (${res.statusCode})`);
+  sessionsCache.at = 0;
+  portsCache.at = 0;
+  return (await readUsersByPort()).sessions;
+}
+
+function readJson(req) {
+  return new Promise((resolve, reject) => {
+    if (!/^application\/json/.test(req.headers['content-type'] ?? '')) return reject(Object.assign(new Error('JSON body required'), { status: 415 }));
+    let raw = '';
+    req.on('data', (c) => { raw += c; if (raw.length > 10_000) req.destroy(); });
+    req.on('end', () => { try { resolve(JSON.parse(raw || '{}')); } catch { reject(Object.assign(new Error('Bad JSON'), { status: 400 })); } });
+    req.on('error', reject);
+  });
+}
+
 // --- HTTP proxy to the KX (anything that isn't ours) -----------------------------------------------
 
 function proxy(req, res) {
@@ -279,7 +347,18 @@ const server = createServer(async (req, res) => {
       lastActivity = Date.now();
       return json(res, 200, { version: VERSION, device: await readDevice(), ports: await readPorts(), rfbOpen });
     }
-    if (pathname === '/api/sessions') return json(res, 200, { sessions: await readSessions() });
+    if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, { sessions: await readSessions() });
+    if (pathname === '/api/sessions/disconnect' && req.method === 'POST') {
+      const { id, mode } = await readJson(req);
+      if (typeof id !== 'string' || !['port', 'logoff'].includes(mode)) return json(res, 400, { error: 'id and mode (port|logoff) required' });
+      return json(res, 200, { sessions: await kick([id], mode) });
+    }
+    // Everyone else's console sessions, so the single remote channel is free. Never this app's own session.
+    if (pathname === '/api/sessions/disconnect-all' && req.method === 'POST') {
+      await readJson(req);
+      const others = (await readSessions()).filter((s) => !s.self && s.portId).map((s) => s.id);
+      return json(res, 200, { disconnected: others.length, sessions: others.length ? await kick(others, 'port') : await readSessions() });
+    }
 
     // Logs in to the KX if needed and gives the browser the session cookies HKC reads (kvm_session_id).
     // Only cookie names are returned, never values.

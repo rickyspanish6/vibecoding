@@ -47,6 +47,11 @@
   .sessions ul { padding: 0; overflow: visible; }
   .sessions li { display: flex; flex-direction: column; padding: 4px 0; font-size: 12px; color: var(--muted); }
   .sessions .tag { color: var(--text); }
+  .sessions .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .sessions .meta { opacity: .85; }
+  .mini { padding: 1px 8px; border-radius: 6px; border: 1px solid var(--line); background: none; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+  .mini:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+  .mini:disabled { opacity: .5; cursor: default; }
   .sessions .tag.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); margin-right: 6px; }
   .num { color: var(--muted); font-variant-numeric: tabular-nums; width: 22px; flex: none; font-size: 12px; }
   .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -89,7 +94,7 @@
     <h2 id="title">Select a target</h2><span class="chip" id="state" hidden></span><span class="chip" id="type" hidden></span>
     <span class="spacer"></span>
     <a class="link" id="raritan" target="_blank" rel="noopener" hidden>Open in Raritan’s client</a>
-    <button class="btn stop" id="disconnectAll" title="Close this dashboard's console session and cancel any pending connect">Disconnect all</button>
+    <button class="btn stop" id="disconnectAll" title="End this page's console and every other client's console session on the KX">Disconnect all</button>
     <button class="btn" id="connect" disabled>Connect</button>
   </header>
   <section class="screen" id="screen"><div><strong>No target selected</strong><span>Pick a port on the left.</span></div></section>
@@ -163,6 +168,8 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
   try {
     const r = await fetch('/api/session'); const data = await r.json();
     if (!r.ok) throw new Error(data.error);
+    // The KX has one remote channel: end whoever else holds a console so ours can take it.
+    try { await post('/api/sessions/disconnect-all'); } catch { /* fall back to the retry loop below */ }
     for (let i = 0; i < 6; i++) {
       message('Connecting to ' + p.name, i ? `Waiting for the KX to free its channel (try ${i + 1}/6)…` : reason ?? 'Releasing the previous session…');
       await sleep(i ? 2500 : 1200);
@@ -206,25 +213,56 @@ function checkLink(rfbOpen) {
   reconnects.push(now); connect(p, 'Connection lost. Reconnecting…');
 }
 
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error);
+  return data;
+}
+
+function renderSessions(sessions) {
+  const box = $('slist'); box.replaceChildren();
+  for (const s of [...sessions].sort((a, b) => Number(!!b.portId) - Number(!!a.portId))) {
+    const li = el('li'), top = el('div', 'row');
+    const name = s.portId ? (s.portName ?? `Port ${s.port}`) : 'Web login';
+    top.append(el('span', s.portId ? 'tag live' : 'tag', s.self ? `${name} · this dashboard` : name));
+    if (!s.self && (s.portId || s.id)) {
+      const btn = el('button', 'mini', s.portId ? 'Disconnect' : 'Log off');
+      btn.title = s.portId ? 'End this console session' : 'Force this web login off the KX';
+      btn.onclick = async () => {
+        if (!s.portId && !confirm(`Log ${s.user} (${s.from}) off the KX?`)) return;
+        btn.disabled = true;
+        try { renderSessions((await post('/api/sessions/disconnect', { id: s.id, mode: s.portId ? 'port' : 'logoff' })).sessions); load(); }
+        catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; btn.disabled = false; }
+      };
+      top.append(btn);
+    }
+    li.append(top, el('span', 'meta', `${s.user} · ${s.from} · ${s.status}`));
+    box.append(li);
+  }
+  $('scount').textContent = sessions.length; $('sessions').hidden = !sessions.length;
+}
+
 async function loadSessions() {
   try {
     const r = await fetch('/api/sessions'); const data = await r.json();
     if (!r.ok) throw new Error(data.error);
-    const box = $('slist'); box.replaceChildren();
-    for (const s of [...data.sessions].sort((a, b) => (b.port != null) - (a.port != null))) {
-      const li = el('li'), port = ports.find((p) => p.id === s.port);
-      li.append(el('span', s.port != null ? 'tag live' : 'tag', s.port != null ? (port?.name ?? `Port ${s.port}`) : 'Web login'),
-        el('span', null, `${s.user} · ${s.from} · ${s.status}`));
-      box.append(li);
-    }
-    $('scount').textContent = data.sessions.length; $('sessions').hidden = !data.sessions.length;
-  } catch { $('sessions').hidden = true; } // SSH not set up: the panel just stays hidden
+    renderSessions(data.sessions);
+  } catch { $('sessions').hidden = true; } // no KX login or SSH set up: the panel just stays hidden
 }
 
 function disconnect() { attempt++; connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
 
 $('connect').onclick = () => (connected != null ? disconnect() : connect());
-$('disconnectAll').onclick = () => { disconnect(); message('Disconnected', 'Pick a target to connect.'); renderDetail(true); };
+// Ends this page's console and every other client's console session on the KX (never the app's own web login).
+$('disconnectAll').onclick = async () => {
+  disconnect(); message('Disconnecting everyone…', 'Ending console sessions on the KX.'); renderDetail(true);
+  try {
+    const d = await post('/api/sessions/disconnect-all');
+    message('Disconnected', d.disconnected ? `Ended ${d.disconnected} other console session${d.disconnected > 1 ? 's' : ''}. Pick a target to connect.` : 'No other console sessions were open. Pick a target to connect.');
+    renderSessions(d.sessions); load();
+  } catch (e) { message('Could not end the other sessions', e.message); }
+};
 
 async function load() {
   try {

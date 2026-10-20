@@ -10,7 +10,7 @@ connected to the switch.
 - **Console:** the backend reverse-proxies the KX under `http://127.0.0.1:3000`, because the KX blocks framing and
   its client opens `wss://<host>/rfb`. It logs in once with `KX_USER` / `KX_PASSWORD`, keeps the session cookies
   (also saved to `.kx-session.json`), and the browser never sees the password. `/jsclient/Client.asp` is loaded in an iframe.
-- **Sessions panel:** the KX CLI's `userlist` over SSH key login.
+- **Sessions panel:** the KX's own *Users By Port* page (per-session Disconnect / Log off, and Disconnect all); falls back to the CLI's `userlist` over SSH key login when no web login is configured (read-only then).
 - **Keep-alive / auto-reconnect:** the session is re-checked every minute while the page is open; if the console
   socket drops, the page reconnects (up to 3 times in 2 minutes).
 - **Safety:** the server only answers `localhost` / `127.0.0.1` Hosts and same-origin requests, because it holds a
@@ -52,6 +52,5 @@ git tag -a vX.Y.Z -m "KX Console vX.Y.Z"
 
 ## Known limits
 
-- Disconnect all closes this page's session only; other clients on the KX can't be kicked yet.
 - The console is Raritan's client; the video protocol (`e-RIC RFB` over `wss://<host>/rfb`, WebGL/WASM decoder) is not reimplemented.
 - No power control (the KX CLI has none).

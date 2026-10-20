@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.1.0] - 2026-10-20
+
+### Added
+- Session management from the KX's own Users By Port page: the sessions panel now shows each session with its port,
+  and has per-session **Disconnect** (end a console) and **Log off** (force a web login off the KX) buttons.
+- **Disconnect all** now also ends every other client's console session on the KX (never this app's own login).
+- Connecting to a target first ends other clients' console sessions, so the KX's single remote channel is free.
+
+### Changed
+- `/api/sessions` reads the KX web page when `KX_USER` / `KX_PASSWORD` are set (SSH `userlist` remains the fallback).
+
 ## [1.0.0] - 2026-10-20
 
 First release.
