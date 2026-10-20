@@ -40,6 +40,16 @@ npm run mock           # fake data, no KX needed
 | `KX_SSH_USER`, `KX_SSH_KEY` | `KX_USER`, `~/.ssh/kx3_rsa` | SSH key login for the sessions panel |
 | `PORT` | `3000` | Dashboard port |
 
+## Versioning
+
+[Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): breaking changes to config or behavior bump MAJOR,
+new features MINOR, fixes PATCH. `package.json` is the single source of truth (shown in the sidebar and returned by
+`/api/ports`). To release: bump `version`, add a section to [CHANGELOG.md](CHANGELOG.md), commit, then tag it:
+
+```bash
+git tag -a vX.Y.Z -m "KX Console vX.Y.Z"
+```
+
 ## Known limits
 
 - Disconnect all closes this page's session only; other clients on the KX can't be kicked yet.

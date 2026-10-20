@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 const root = fileURLToPath(new URL('./public/', import.meta.url));
+// Single source of truth for the app version (SemVer): package.json.
+const VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 
 const HOST = process.env.KX_HOST ?? '172.16.0.3';
 const COMMUNITY = process.env.KX_SNMP_COMMUNITY ?? 'public';
@@ -275,7 +277,7 @@ const server = createServer(async (req, res) => {
   try {
     if (pathname === '/api/ports') {
       lastActivity = Date.now();
-      return json(res, 200, { device: await readDevice(), ports: await readPorts(), rfbOpen });
+      return json(res, 200, { version: VERSION, device: await readDevice(), ports: await readPorts(), rfbOpen });
     }
     if (pathname === '/api/sessions') return json(res, 200, { sessions: await readSessions() });
 
@@ -313,4 +315,4 @@ setInterval(async () => {
 }, 60_000).unref();
 
 server.on('upgrade', proxyUpgrade);
-server.listen(PORT, '127.0.0.1', () => console.log(`KX dashboard on http://127.0.0.1:${PORT}${MOCK ? ' (mock data)' : ''}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`KX Console v${VERSION} on http://127.0.0.1:${PORT}${MOCK ? ' (mock data)' : ''}`));
