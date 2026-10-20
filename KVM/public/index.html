@@ -80,7 +80,7 @@
 </head>
 <body>
 <aside>
-  <div class="brand"><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p></div>
+  <div class="brand"><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p><a class="link" id="signout" href="/login" hidden>Sign out</a></p></div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search targets  ( / )" aria-label="Search targets">
     <label class="check"><input type="checkbox" id="all"> Show unused ports</label>
@@ -266,6 +266,7 @@ async function loadSessions() {
 function disconnect() { attempt++; connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
 
 $('connect').onclick = () => (connected != null ? disconnect() : connect());
+$('signout').onclick = async (e) => { e.preventDefault(); disconnect(); await post('/api/logout').catch(() => {}); location.href = '/login'; };
 // Ends this page's console and every other client's console session on the KX (never the app's own web login).
 $('disconnectAll').onclick = async () => {
   disconnect(); message('Disconnecting everyone…', 'Ending console sessions on the KX.'); renderDetail(true);
@@ -283,6 +284,7 @@ async function load() {
     ports = data.ports; device = data.device; $('err').style.display = 'none';
     if (selected == null) selected = ports.find((p) => p.up)?.id ?? null;
     $('ver').textContent = `KX Console v${data.version}`;
+    $('signout').hidden = !data.auth;
     $('dev').textContent = data.device.name; $('sub').textContent = `${data.device.model} · ${data.device.host}`;
     renderList(); renderDetail(); checkLink(data.rfbOpen);
   } catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }

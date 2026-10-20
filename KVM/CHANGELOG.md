@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.3.0] - 2026-10-20
+
+### Added
+- Optional dashboard login: set `DASH_PASSWORD` and every page, API call and console WebSocket requires signing in
+  (HttpOnly, SameSite=Strict session cookie, 12 h; 5 wrong passwords lock the client out for 60 s). Sign out link in the sidebar.
+- `BIND` and `ALLOWED_HOSTS` to serve the dashboard beyond localhost.
+
+### Security
+- The server refuses to start on a non-loopback `BIND` without `DASH_PASSWORD`.
+- Host and Origin checks now honor `ALLOWED_HOSTS`; the dashboard cookie is never forwarded to the KX.
+
 ## [1.2.0] - 2026-10-20
 
 ### Added

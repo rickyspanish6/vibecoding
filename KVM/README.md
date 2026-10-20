@@ -13,8 +13,10 @@ connected to the switch.
 - **Sessions panel:** the KX's own *Users By Port* page (per-session Disconnect / Log off, and Disconnect all); falls back to the CLI's `userlist` over SSH key login when no web login is configured (read-only then).
 - **Keep-alive / auto-reconnect:** the session is re-checked every minute while the page is open; if the console
   socket drops, the page reconnects (up to 3 times in 2 minutes).
-- **Safety:** the server only answers `localhost` / `127.0.0.1` Hosts and same-origin requests, because it holds a
-  logged-in admin session. Do not expose it beyond localhost without adding authentication.
+- **Safety:** the server holds a logged-in KX admin session, so it only answers `localhost` / `127.0.0.1` Hosts and
+  same-origin requests, and listens on loopback by default. To use it from another machine set `BIND=0.0.0.0`,
+  `ALLOWED_HOSTS=<the name you browse to>` and a `DASH_PASSWORD` (required for any non-loopback `BIND`); put it behind
+  HTTPS (a reverse proxy) when it leaves your machine, since the login cookie is not marked `Secure` over plain HTTP.
 
 The KX allows **one remote KVM channel at a time**, so clicking a target drops the current one first.
 
@@ -39,6 +41,12 @@ npm run mock           # fake data, no KX needed
 | `KX_DEVICE_ID` | `000d5d11da6a` | The `<id>` in HKC's `P_<id>_<n>` port ids; copy it from a console URL on your unit |
 | `KX_SSH_USER`, `KX_SSH_KEY` | `KX_USER`, `~/.ssh/kx3_rsa` | SSH key login for the sessions panel |
 | `PORT` | `3000` | Dashboard port |
+| `BIND` | `127.0.0.1` | Address to listen on (non-loopback requires `DASH_PASSWORD`) |
+| `DASH_PASSWORD` | unset | Turns on the dashboard login |
+| `ALLOWED_HOSTS` | | Extra Host names (comma separated) accepted besides localhost |
+
+**Harden the KX too:** the SNMP community defaults to `public`. Change it in the KX (Device Settings > Device Services),
+then set the same value as `KX_SNMP_COMMUNITY`; the app does not change KX settings itself.
 
 ## Versioning
 

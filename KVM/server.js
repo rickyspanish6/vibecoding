@@ -8,6 +8,7 @@
 import { createServer } from 'node:http';
 import { request as httpsRequest, Agent } from 'node:https';
 import { connect as tlsConnect } from 'node:tls';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
@@ -30,6 +31,17 @@ const SSH_USER = process.env.KX_SSH_USER ?? USER ?? 'mofa';
 const SSH_KEY = process.env.KX_SSH_KEY ?? join(homedir(), '.ssh', 'kx3_rsa');
 const PORT = Number(process.env.PORT ?? 3000);
 const MOCK = process.env.KX_MOCK === '1';
+
+// Dashboard access control. By default we listen on loopback only and need no login. To listen elsewhere
+// (BIND=0.0.0.0) a DASH_PASSWORD is mandatory, because this server holds a logged-in KX admin session.
+const BIND = process.env.BIND ?? '127.0.0.1';
+const DASH_PASSWORD = process.env.DASH_PASSWORD;
+const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+const LOOPBACK = ['127.0.0.1', 'localhost', '::1'];
+if (!LOOPBACK.includes(BIND) && !DASH_PASSWORD) {
+  console.error(`Refusing to listen on ${BIND} without DASH_PASSWORD: it would expose the KX admin session.`);
+  process.exit(1);
+}
 
 // --- SNMP port list --------------------------------------------------------------------------
 
@@ -294,7 +306,7 @@ function proxy(req, res) {
 
 // HKC opens wss://<host>/rfb. Pipe the upgrade straight through to the KX with the session cookie attached.
 function proxyUpgrade(req, socket, head) {
-  if (!req.url.startsWith('/rfb') || !sameOrigin(req)) return socket.destroy();
+  if (!req.url.startsWith('/rfb') || !sameOrigin(req) || !dashAuthed(req)) return socket.destroy();
   const up = tlsConnect({ host: HOST, port: 443, rejectUnauthorized: false });
   let counted = false;
   const close = () => { if (counted) { counted = false; rfbOpen--; } up.destroy(); socket.destroy(); };
@@ -334,18 +346,93 @@ async function publicFile(pathname) {
 // isn't the dashboard talking to itself: a wrong Host (DNS rebinding) or a cross-site Origin.
 function sameOrigin(req) {
   const host = req.headers.host ?? '';
-  if (!/^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(host)) return false;
+  const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
+  if (!LOOPBACK.includes(name) && !ALLOWED_HOSTS.includes(name)) return false;
   const origin = req.headers.origin;
-  return !origin || origin === `http://${host}`;
+  if (!origin) return true;
+  try { return new URL(origin).host === host; } catch { return false; }
 }
+
+// --- Dashboard login (only when DASH_PASSWORD is set) ----------------------------------------------
+
+const AUTH_COOKIE = 'kxc_session';
+const AUTH_TTL = 12 * 3600 * 1000;
+const authSessions = new Map(); // token -> expiry (ms)
+const failures = new Map();     // ip -> { n, until }
+const digest = (s) => createHash('sha256').update(s).digest();
+const passwordOk = (p) => timingSafeEqual(digest(String(p)), digest(DASH_PASSWORD));
+
+function cookieOf(req, name) {
+  return req.headers.cookie?.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`))?.slice(name.length + 1);
+}
+
+function dashAuthed(req) {
+  if (!DASH_PASSWORD) return true;
+  const token = cookieOf(req, AUTH_COOKIE);
+  const expiry = token && authSessions.get(token);
+  if (!expiry) return false;
+  if (expiry < Date.now()) { authSessions.delete(token); return false; }
+  return true;
+}
+
+function dashLogin(req, res, password) {
+  const ip = req.socket.remoteAddress;
+  const f = failures.get(ip) ?? { n: 0, until: 0 };
+  if (f.until > Date.now()) return json(res, 429, { error: `Too many attempts. Try again in ${Math.ceil((f.until - Date.now()) / 1000)}s.` });
+  if (!passwordOk(password)) {
+    f.n += 1;
+    if (f.n >= 5) { f.until = Date.now() + 60_000; f.n = 0; }
+    failures.set(ip, f);
+    return json(res, 401, { error: 'Wrong password' });
+  }
+  failures.delete(ip);
+  const token = randomBytes(32).toString('hex');
+  authSessions.set(token, Date.now() + AUTH_TTL);
+  res.setHeader('set-cookie', `${AUTH_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${AUTH_TTL / 1000}`);
+  return json(res, 200, { ok: true });
+}
+
+const loginPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KX Console · Sign in</title><style>
+:root{--bg:#f6f7f9;--panel:#fff;--line:#e3e6eb;--text:#14181f;--muted:#667085;--accent:#2563eb;--accent-text:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1016;--panel:#151921;--line:#252b36;--text:#e8ebf0;--muted:#8b95a7;--accent:#5b8cff;--accent-text:#0b1020}}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif}
+form{width:min(340px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;gap:12px}
+h1{margin:0;font-size:18px}p{margin:0;color:var(--muted);font-size:12px}
+input{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+button{padding:10px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.5}
+#e{color:#b42318;min-height:1.2em;font-size:13px}</style></head><body>
+<form id="f"><h1>KX Console</h1><p>Sign in to continue.</p>
+<input id="p" type="password" placeholder="Password" autocomplete="current-password" autofocus required>
+<div id="e" role="alert"></div><button id="b">Sign in</button></form>
+<script>f.onsubmit=async(ev)=>{ev.preventDefault();b.disabled=true;e.textContent='';
+try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:p.value})});
+const d=await r.json();if(!r.ok)throw new Error(d.error);location.href='/'}catch(x){e.textContent=x.message;b.disabled=false;p.select()}};</script></body></html>`;
 
 const server = createServer(async (req, res) => {
   if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' });
   const { pathname } = new URL(req.url, 'http://localhost');
   try {
+    if (DASH_PASSWORD) {
+      if (pathname === '/login' && req.method === 'GET') {
+        if (dashAuthed(req)) { res.writeHead(302, { location: '/' }); return res.end(); }
+        res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
+        return res.end(loginPage);
+      }
+      if (pathname === '/api/login' && req.method === 'POST') return dashLogin(req, res, (await readJson(req)).password ?? '');
+      if (pathname === '/api/logout' && req.method === 'POST') {
+        authSessions.delete(cookieOf(req, AUTH_COOKIE));
+        res.setHeader('set-cookie', `${AUTH_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+        return json(res, 200, { ok: true });
+      }
+      if (!dashAuthed(req)) {
+        if (req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')) { res.writeHead(302, { location: '/login' }); return res.end(); }
+        return json(res, 401, { error: 'Sign in required' });
+      }
+    }
     if (pathname === '/api/ports') {
       lastActivity = Date.now();
-      return json(res, 200, { version: VERSION, device: await readDevice(), ports: await readPorts(), rfbOpen });
+      return json(res, 200, { version: VERSION, auth: Boolean(DASH_PASSWORD), device: await readDevice(), ports: await readPorts(), rfbOpen });
     }
     if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, { sessions: await readSessions() });
     if (pathname === '/api/sessions/disconnect' && req.method === 'POST') {
@@ -394,4 +481,4 @@ setInterval(async () => {
 }, 60_000).unref();
 
 server.on('upgrade', proxyUpgrade);
-server.listen(PORT, '127.0.0.1', () => console.log(`KX Console v${VERSION} on http://127.0.0.1:${PORT}${MOCK ? ' (mock data)' : ''}`));
+server.listen(PORT, BIND, () => console.log(`KX Console v${VERSION} on http://${BIND}:${PORT}${DASH_PASSWORD ? ' (login required)' : ''}${MOCK ? ' (mock data)' : ''}`));
