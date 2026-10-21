@@ -7,6 +7,7 @@
 // Dev tool: runs Raritan's own HKC with a logging WebSocket so we can see exactly which bytes it sends and
 // receives on /rfb. Open /native/hkc-capture.html?port=9 (KX UI port number); read the result with
 // window.__capture() in the console. It opens a real console, so only use it when nothing else is connected.
+// Add &drive=mac on port 10 to have it type/click a short scripted sequence into HKC (Mac target only).
 (async () => {
   const port = Number(new URLSearchParams(location.search).get('port') || 1);
   const [{ ports, device }] = [await (await fetch('/api/ports')).json()];
@@ -39,6 +40,42 @@
   // Load HKC's own page into this window so the patched WebSocket is the one it uses.
   const html = await (await fetch('/jsclient/Client.asp')).text();
   document.open(); document.write(html); document.close();
+
+  // ?drive=mac (port 10 only, the Mac approved for real input): after HKC is up, feed it a short scripted
+  // sequence through its own input handlers so its exact key/pointer frames are recorded in __capture().
+  if (new URLSearchParams(location.search).get('drive') === 'mac' && port === 10) {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    await sleep(7000);
+    const box = document.getElementById('canvas-box'), canvas = document.getElementById('canvas');
+    const rect = () => canvas.getBoundingClientRect();
+    const key = (type, code, mods = {}) => box.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true, cancelable: true, ...mods }));
+    const tap = async (code, mods) => { key('keydown', code, mods); await sleep(40); key('keyup', code, mods); await sleep(40); };
+    const mouse = async (type, fx, fy, button = 0) => { const r = rect(); canvas.dispatchEvent(new MouseEvent(type, { clientX: r.left + fx * r.width, clientY: r.top + fy * r.height, button, bubbles: true, cancelable: true })); await sleep(60); };
+    const mark = (name) => log.push({ t: Math.round(performance.now() - t0), dir: 'mark', name });
+
+    mark('pointer moves');
+    for (const [fx, fy] of [[0.02, 0.02], [0.98, 0.02], [0.5, 0.5], [0.3, 0.7]]) await mouse('mousemove', fx, fy);
+    mark('Cmd+Space (Spotlight)');
+    key('keydown', 'MetaLeft', { metaKey: true }); await sleep(40); await tap('Space', { metaKey: true }); key('keyup', 'MetaLeft'); await sleep(1200);
+    mark('Shift+H');
+    key('keydown', 'ShiftLeft', { shiftKey: true }); await sleep(40); await tap('KeyH', { shiftKey: true }); key('keyup', 'ShiftLeft'); await sleep(40);
+    mark('i');
+    await tap('KeyI');
+    mark('1 and !');
+    await tap('Digit1'); key('keydown', 'ShiftLeft', { shiftKey: true }); await sleep(40); await tap('Digit1', { shiftKey: true }); key('keyup', 'ShiftLeft');
+    mark('Cmd+A, Backspace');
+    key('keydown', 'MetaLeft', { metaKey: true }); await sleep(40); await tap('KeyA', { metaKey: true }); key('keyup', 'MetaLeft'); await sleep(100); await tap('Backspace');
+    mark('left click');
+    await mouse('mousemove', 0.5, 0.35); await mouse('mousedown', 0.5, 0.35, 0); await mouse('mouseup', 0.5, 0.35, 0);
+    mark('Escape');
+    await tap('Escape');
+    mark('right click');
+    await mouse('mousemove', 0.8, 0.6); await mouse('mousedown', 0.8, 0.6, 2); await mouse('mouseup', 0.8, 0.6, 2); await sleep(1200); await tap('Escape');
+    mark('wheel');
+    await mouse('mousemove', 0.5, 0.5); canvas.dispatchEvent(new WheelEvent('wheel', { clientX: rect().left + 100, clientY: rect().top + 100, deltaY: 120, bubbles: true, cancelable: true })); await sleep(400);
+    mark('done');
+    window.__driveDone = true;
+  }
 })();
 </script>
 </head>

@@ -105,12 +105,16 @@ quality. The data is not interpretable on the main thread: HKC posts it to the d
 | 3 | framebuffer update request | type, incremental u8, u32 `0` (x, y), u16 width, u16 height |
 | 4 | key event | type, `0`, u16 `(key & 0x7fff) \| (down ? 0x8000 : 0)`. `key` is the physical-key number from the table in `rfbproto.js` (`KEY`), derived from `KeyboardEvent.code` |
 | 5 | pointer event (absolute) | type, u8 buttons (1 left, 2 middle, 4 right), u16 x, u16 y, u16 wheel (-1/0/1). `147` is the relative variant |
+| 6 | (scancode event) | defined in HKC's constants, never sent by it |
 | 7 | client init | see handshake |
 | 8 | associated tag | type, `0`, u16 len, bytes |
 | 137 | KVM switch | type, `0`, u16 len, portId |
 | 145 | video settings request | **2 bytes**: `91 01` **[capture]** (a 5-byte form exists in HKC's writer but is not what it sends) |
 | 146 | video refresh | type only |
+| 134 | mouse sync | type, u8 `1` (hard sync) **[src]**. HKC sends it only when the user picks "Synchronize mouse" (toolbar `syncMouse`), then re-sends the last pointer event. It is never automatic |
+| 147 | relative pointer | type, u8 buttons, u16 dx, u16 dy (two's complement), u16 wheel **[src]**. Used only in HKC's "single mouse" mode (pointer lock on the canvas) |
 | 148 | ping request | type, 3 pad, s32 counter |
+| 155 | set connection parameter | type, u8 keyLen, u8 valueLen, key, value **[src]**; HKC writes `current_mouse_mode` = `absolute` / `auto` / `direct` when the user changes the mouse mode in its menu |
 | 156 | power switch | type, u8 (0 on, 1 off, 2 cycle) (not wired up) |
 
 ## Video decoding
@@ -150,3 +154,35 @@ Files loaded from the KX through the proxy: `/js/js_decoding_worker.min.js`, `/j
    protocol issue (fixed in the dashboard).
 6. The KX keeps a console session on its books for about 30 s after the socket closes, so the port shows as busy
    (SNMP status 3) and a quick reconnect can be refused. Plan reconnect delays accordingly.
+
+## Mouse (how HKC maps it)
+
+- HKC never negotiates a mouse mode by itself. It sends **absolute pointer events (type 5) in canvas pixels**:
+  `x = floor((clientX - canvasRect.left) / scale)`, with `scale` the canvas's CSS scale, so the number is the
+  framebuffer pixel under the cursor at any display size. The KX decides what that means for the target.
+- The server announces `support_mouse_absolute|auto|direct` (yes/no) and `current_mouse_mode` (type 132). The user
+  can change the mode (HKC menu → parameter `current_mouse_mode`), start "single mouse" mode (relative events with
+  pointer lock), or press "Synchronize mouse" (type 134).
+- Buttons are a bitmask (1 left, 2 middle, 4 right) sent with every pointer event; the wheel is -1/0/1 in the
+  last field, with the cursor position.
+- `kxclient.js` does the same: absolute by default, `setMouseMode('relative')` for pointer lock,
+  `setMouseMode('absolute'|'auto'|'direct')` for the KX mode, `syncMouse()`.
+
+## Keyboard (how HKC maps it)
+
+Key events carry a **physical key number**, not a character (the target's layout does the rest). HKC's own EN
+table maps all 119 modern `KeyboardEvent.code` values exactly as `keyFromCode()` does (checked entry by entry
+against the source), except that **Safari on macOS** reports `Backquote` / `IntlBackslash` swapped, which HKC
+swaps back. Behaviour that `keyboard.js` reproduces:
+
+- a key that is already held is ignored (no auto-repeat events; the target repeats on its own);
+- on every new key press, modifiers the browser reports as up but we still hold are released (lost keyups);
+- AltGr: Windows browsers send ControlLeft then AltRight; ControlLeft is held back 30 ms so that AltRight can
+  swallow it, and releasing the companion Ctrl releases AltGr. (HKC mishandles a Ctrl tap shorter than 30 ms and can
+  leave Ctrl stuck; `keyboard.js` delivers it as press + release instead.)
+- macOS: CapsLock yields one browser event per toggle, sent as press + release each time; a key pressed while Cmd
+  is held never gets a keyup, so it is released at once;
+- everything held is released on blur and on disconnect.
+
+HKC has no client-side hotkeys: the `HOTKEY_*` / `MOUSESYNC_KEY` parameters (Alt+F12 and friends) are for Raritan's
+other clients and are ignored, so Alt+F12 reaches the target as two ordinary keys.

@@ -69,6 +69,10 @@
   .link { color: var(--muted); font-size: 12px; text-decoration: none; }
   .link:hover { color: var(--text); text-decoration: underline; }
   .screen.live { padding: 0; place-items: stretch; overflow: hidden; }
+  .sel { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 13px; }
+  .stat { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .screen.native { place-items: center; background: #000; }
+  .screen canvas { max-width: 100%; max-height: 100%; outline: none; cursor: default; }
   .screen iframe { width: 100%; height: 100%; border: 0; background: var(--screen); }
   .screen { flex: 1; min-height: 240px; border-radius: 14px; background: var(--screen); display: grid; place-items: center; text-align: center;
     color: var(--screen-text); border: 1px solid var(--line); padding: 24px; }
@@ -94,6 +98,12 @@
     <h2 id="title">Select a target</h2><span class="chip" id="state" hidden></span><span class="chip" id="type" hidden></span>
     <span class="spacer"></span>
     <a class="link" id="raritan" target="_blank" rel="noopener" hidden>Open in Raritan’s client</a>
+    <select id="clientMode" class="sel" aria-label="Console client" title="Console client. Native is a beta: pointer and keyboard are still being verified.">
+      <option value="raritan">Raritan client</option><option value="native">Native (beta)</option>
+    </select>
+    <span class="stat" id="nstat"></span>
+    <button class="btn stop" id="cad" hidden title="Send Ctrl-Alt-Del to the target">Ctrl-Alt-Del</button>
+    <button class="btn stop" id="refreshVideo" hidden title="Ask the KX for a fresh video frame">Refresh video</button>
     <button class="btn stop" id="disconnectAll" title="End this page's console and every other client's console session on the KX">Disconnect all</button>
     <button class="btn" id="connect" disabled>Connect</button>
   </header>
@@ -102,6 +112,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let ports = [], selected = null, device = null, connected = null, connecting = false;
+let nativeClient = null, nativeRes = '';
 let missed = 0, reconnects = []; // polls without an open console socket / recent auto-reconnect times
 
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
@@ -135,6 +146,8 @@ function renderDetail(keepScreen = false) {
   const link = $('raritan'); link.hidden = !p.up; link.href = `/api/ports/${p.id}/console`;
   const btn = $('connect'), live = connected === p.id;
   btn.disabled = !p.up && !live; btn.textContent = live ? 'Disconnect' : 'Connect'; btn.classList.toggle('stop', live);
+  const nativeLive = Boolean(nativeClient) && live;
+  $('cad').hidden = $('refreshVideo').hidden = !nativeLive;
   if (live || keepScreen || connecting) return; // keep the running session / status text; polling must not rebuild them
   const s = $('screen'); s.className = 'screen'; s.replaceChildren(); const d = el('div');
   d.append(el('strong', null, p.up ? 'Ready to connect' : 'Target is offline'),
@@ -181,26 +194,53 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
     if (!r.ok) throw new Error(data.error);
     // The KX has one remote channel: end whoever else holds a console so ours can take it.
     try { await post('/api/sessions/disconnect-all'); } catch { /* fall back to the retry loop below */ }
-    for (let i = 0; i < 6; i++) {
-      message('Connecting to ' + p.name, i ? `Waiting for the KX to free its channel (try ${i + 1}/6)…` : reason ?? 'Releasing the previous session…');
+    const native = clientMode() === 'native';
+    const tries = native ? 12 : 6; // the KX keeps a port marked busy for ~30 s after a disconnect
+    for (let i = 0; i < tries; i++) {
+      message('Connecting to ' + p.name, i ? `Waiting for the KX to free its channel (try ${i + 1}/${tries})…` : reason ?? 'Releasing the previous session…');
       await sleep(i ? 2500 : 1200);
       if (mine !== attempt) return;
-      const n = p.id - 1; // HKC numbers ports from 0
-      const hash = new URLSearchParams({
-        portId: `P_${device.deviceId}_${n}`, portNo: n, channelName: p.name, portType: p.type, portPermission: 'CCC',
-        appId: `${Date.now()}_${Math.floor(Math.random() * 1e15)}`, embedded: 'true', numberOfTargets: '1',
-      });
-      const frame = el('iframe'); frame.title = p.name; frame.allow = 'clipboard-read; clipboard-write; fullscreen';
-      frame.src = `/jsclient/Client.asp#${hash}`;
-      frame.addEventListener('load', () => themeClient(frame));
-      const s = $('screen'); s.className = 'screen live'; s.replaceChildren(frame);
-      connected = p.id; renderList(); renderDetail(true);
-      await sleep(4000); // let the handshake finish before judging the result
-      if (mine !== attempt) return;
+      const s = $('screen');
       let busy = false;
-      try { busy = BUSY.test(frame.contentDocument.body.innerText); } catch { /* not readable: assume fine */ }
+      if (native) {
+        const canvas = el('canvas'); canvas.setAttribute('aria-label', p.name);
+        s.className = 'screen live native'; s.replaceChildren(canvas);
+        let failure = null;
+        const { KxClient } = await import('/native/kxclient.js');
+        const kx = new KxClient({
+          canvas, portNo: p.id, // same numbering as the KX port list
+          onstatus: (st) => { $('nstat').textContent = st; },
+          onerror: (e) => { failure = e; },
+          onresolution: ({ width, height }) => { nativeRes = `${width}×${height}`; },
+          onstats: ({ fps, kbps }) => { $('nstat').textContent = `${nativeRes} · ${fps} fps · ${kbps} kbit/s`; },
+        });
+        nativeClient = kx; // set before connecting so disconnect() can always tear it down
+        try { await kx.connect(); } catch (e) { failure = e; }
+        connected = p.id; renderList(); renderDetail(true);
+        await sleep(4000); // let the handshake finish before judging the result
+        if (mine !== attempt) return;
+        busy = Boolean(failure) || !kx.ws;
+        if (!busy) canvas.focus();
+      } else {
+        const n = p.id - 1; // HKC numbers ports from 0
+        const hash = new URLSearchParams({
+          portId: `P_${device.deviceId}_${n}`, portNo: n, channelName: p.name, portType: p.type, portPermission: 'CCC',
+          appId: `${Date.now()}_${Math.floor(Math.random() * 1e15)}`, embedded: 'true', numberOfTargets: '1',
+        });
+        // HKC defaults "Scale Video" to off. It reads localStorage.scaleMode at connect and its settings dialog writes
+        // the same key, so seed it to on only when the user never chose (the iframe shares our origin).
+        try { if (localStorage.getItem('scaleMode') === null) localStorage.setItem('scaleMode', 'true'); } catch { /* no storage */ }
+        const frame = el('iframe'); frame.title = p.name; frame.allow = 'clipboard-read; clipboard-write; fullscreen';
+        frame.src = `/jsclient/Client.asp#${hash}`;
+        frame.addEventListener('load', () => themeClient(frame));
+        s.className = 'screen live'; s.replaceChildren(frame);
+        connected = p.id; renderList(); renderDetail(true);
+        await sleep(4000);
+        if (mine !== attempt) return;
+        try { busy = BUSY.test(frame.contentDocument.body.innerText); } catch { /* not readable: assume fine */ }
+      }
       if (!busy) { connecting = false; return; }
-      connected = null; renderList(); s.replaceChildren(); // drop the failed client so the KX releases the channel
+      closeNative(); connected = null; renderList(); s.replaceChildren(); // drop the failed client so the KX releases the channel
     }
     throw new Error('The KX still reports its remote channel as in use. Another client may be connected (see its Connected Users list).');
   } catch (e) {
@@ -263,9 +303,20 @@ async function loadSessions() {
   } catch { $('sessions').hidden = true; } // no KX login or SSH set up: the panel just stays hidden
 }
 
-function disconnect() { attempt++; connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
+// Which console client to use: Raritan's embedded HKC (default) or our native client (beta).
+const clientMode = () => $('clientMode').value;
+function closeNative() { nativeClient?.disconnect(); nativeClient = null; $('nstat').textContent = ''; }
+
+function disconnect() { attempt++; closeNative(); connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
 
 $('connect').onclick = () => (connected != null ? disconnect() : connect());
+try { const v = localStorage.getItem('kxc-client'); if (['raritan', 'native'].includes(v)) $('clientMode').value = v; } catch { /* no storage */ }
+$('clientMode').onchange = () => {
+  try { localStorage.setItem('kxc-client', clientMode()); } catch { /* no storage */ }
+  if (connected != null) connect(); // switch the running console to the other client
+};
+$('cad').onclick = () => { const p = ports.find((x) => x.id === connected); if (p && confirm(`Send Ctrl-Alt-Del to ${p.name}?`)) nativeClient?.sendCtrlAltDel(); };
+$('refreshVideo').onclick = () => nativeClient?.refreshVideo();
 $('signout').onclick = async (e) => { e.preventDefault(); disconnect(); await post('/api/logout').catch(() => {}); location.href = '/login'; };
 // Ends this page's console and every other client's console session on the KX (never the app's own web login).
 $('disconnectAll').onclick = async () => {
@@ -291,7 +342,7 @@ async function load() {
 }
 
 $('q').oninput = $('all').onchange = renderList;
-addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement !== $('q')) { e.preventDefault(); $('q').focus(); } });
+addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement !== $('q') && document.activeElement?.tagName !== 'CANVAS') { e.preventDefault(); $('q').focus(); } });
 load(); setInterval(load, 5000);
 loadSessions(); setInterval(loadSessions, 10000);
 </script>

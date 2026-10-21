@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { RfbSession, ByteStream, write, keyFromCode, KEY } from './rfbproto.js';
 import { renderYCbCr, layoutFor } from './ycbcr.js';
+import { KeyboardTranslator } from './keyboard.js';
+import { pointerPosition } from './kxclient.js';
 
 const enc = new TextEncoder();
 const cat = (...parts) => { const u = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let o = 0; for (const p of parts) { u.set(p, o); o += p.length; } return u; };
@@ -133,6 +135,138 @@ await test('client frames equal the bytes captured from HKC (hkc-capture.html, 2
   assert.equal(hex(write.videoRefresh()), '92');
   assert.equal(hex(write.ping(0)), '94 00 00 00 00 00 00 00');
   assert.equal(hex(write.ping(2)), '94 00 00 00 00 00 00 02');
+});
+
+
+// --- keyboard ---------------------------------------------------------------------------------------------
+
+const fakeClock = () => {
+  let now = 0, id = 0; const timers = new Map();
+  return {
+    setTimeout: (fn, ms) => { timers.set(++id, { at: now + ms, fn }); return id; },
+    clearTimeout: (t) => timers.delete(t),
+    advance(ms) { now += ms; for (const [t, x] of [...timers]) if (x.at <= now) { timers.delete(t); x.fn(); } },
+  };
+};
+const keyboard = (opts = {}) => {
+  const clock = fakeClock(), out = [];
+  const kb = new KeyboardTranslator({ send: (k, d) => out.push(`${k}${d ? '↓' : '↑'}`), setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, ...opts });
+  const ev = (type, code, mods = []) => ({ type, code, getModifierState: (m) => mods.includes(m) });
+  return { kb, out, clock, ev };
+};
+
+await test('keyboard: press and release, auto-repeat is ignored, unknown keys are not ours', () => {
+  const { kb, out, ev } = keyboard();
+  assert.equal(kb.handle(ev('keydown', 'ShiftLeft', ['Shift'])), true);
+  assert.equal(kb.handle(ev('keydown', 'ShiftLeft', ['Shift'])), true); // repeat: handled but not re-sent
+  assert.equal(kb.handle(ev('keydown', 'ShiftLeft', ['Shift'])), true);
+  assert.deepEqual(out, [`${KEY.SHIFTLEFT}↓`]);
+  assert.equal(kb.handle(ev('keyup', 'ShiftLeft')), true);
+  assert.deepEqual(out, [`${KEY.SHIFTLEFT}↓`, `${KEY.SHIFTLEFT}↑`]);
+  assert.equal(kb.handle(ev('keydown', 'MediaPlayPause')), false);
+  assert.equal(kb.handle(ev('keydown', '')), false);
+});
+
+await test('keyboard: a lost modifier keyup is repaired on the next key press', () => {
+  const { kb, out, ev } = keyboard();
+  kb.handle(ev('keydown', 'ShiftLeft', ['Shift']));
+  out.length = 0;
+  kb.handle(ev('keydown', 'KeyA', [])); // browser says Shift is up, but we still hold it
+  assert.deepEqual(out, [`${KEY.SHIFTLEFT}↑`, `${KEY.A}↓`]);
+});
+
+await test('keyboard: releaseAll lets go of everything held (blur) in press order, and is idempotent', () => {
+  const { kb, out, ev } = keyboard();
+  for (const c of ['ShiftLeft', 'AltLeft', 'F12']) kb.handle(ev('keydown', c, ['Shift', 'Alt']));
+  out.length = 0;
+  kb.releaseAll();
+  assert.deepEqual(out, [`${KEY.SHIFTLEFT}↑`, `${KEY.ALTLEFT}↑`, `${KEY.F12}↑`]);
+  assert.deepEqual(kb.held(), []);
+  out.length = 0; kb.releaseAll();
+  assert.deepEqual(out, []);
+});
+
+await test('keyboard: Alt+F12 is sent to the target as two plain keys (no local hotkey intercepts it)', () => {
+  const { kb, out, ev } = keyboard();
+  assert.equal(kb.handle(ev('keydown', 'AltLeft', ['Alt'])), true);
+  assert.equal(kb.handle(ev('keydown', 'F12', ['Alt'])), true); // true = caller preventDefault()s, so devtools etc. do not see it
+  assert.deepEqual(out, [`${KEY.ALTLEFT}↓`, `${KEY.F12}↓`]);
+});
+
+await test('keyboard: Ctrl is held back 30 ms; AltGr (Ctrl+AltRight) swallows it; a plain Ctrl still arrives', () => {
+  { // plain Ctrl, held longer than the window
+    const { kb, out, clock, ev } = keyboard();
+    kb.handle(ev('keydown', 'ControlLeft', ['Control']));
+    assert.deepEqual(out, []);
+    clock.advance(30);
+    assert.deepEqual(out, [`${KEY.CONTROLLEFT}↓`]);
+    kb.handle(ev('keyup', 'ControlLeft'));
+    assert.deepEqual(out, [`${KEY.CONTROLLEFT}↓`, `${KEY.CONTROLLEFT}↑`]);
+  }
+  { // AltGr chord as Windows browsers deliver it
+    const { kb, out, clock, ev } = keyboard();
+    kb.handle(ev('keydown', 'ControlLeft', ['Control', 'Alt', 'AltGraph']));
+    kb.handle(ev('keydown', 'AltRight', ['Control', 'Alt', 'AltGraph']));
+    clock.advance(100);
+    assert.deepEqual(out, [`${KEY.ALTRIGHT}↓`], 'only AltRight reaches the target');
+    kb.handle(ev('keyup', 'ControlLeft', ['AltGraph']));
+    assert.deepEqual(out, [`${KEY.ALTRIGHT}↓`, `${KEY.ALTRIGHT}↑`], 'releasing the companion Ctrl releases AltGr');
+    kb.handle(ev('keyup', 'AltRight'));
+    assert.equal(out.length, 2, 'the later AltRight keyup is a no-op');
+  }
+  { // a Ctrl tap shorter than the window is delivered as press + release, never left pending
+    const { kb, out, clock, ev } = keyboard();
+    kb.handle(ev('keydown', 'ControlLeft', ['Control']));
+    kb.handle(ev('keyup', 'ControlLeft'));
+    clock.advance(100);
+    assert.deepEqual(out, [`${KEY.CONTROLLEFT}↓`, `${KEY.CONTROLLEFT}↑`]);
+    assert.deepEqual(kb.held(), []);
+  }
+});
+
+await test('keyboard: macOS CapsLock is press+release per event; keys typed under Cmd are released at once', () => {
+  const { kb, out, ev } = keyboard({ isMac: true });
+  kb.handle(ev('keydown', 'CapsLock', []));
+  assert.deepEqual(out, [`${KEY.CAPSLOCK}↓`, `${KEY.CAPSLOCK}↑`]);
+  out.length = 0;
+  kb.handle(ev('keyup', 'CapsLock', []));
+  assert.deepEqual(out, [`${KEY.CAPSLOCK}↓`, `${KEY.CAPSLOCK}↑`]);
+  out.length = 0;
+  kb.handle(ev('keydown', 'MetaLeft', ['Meta']));
+  kb.handle(ev('keydown', 'KeyC', ['Meta']));
+  assert.deepEqual(out, [`${KEY.METALEFT}↓`, `${KEY.C}↓`, `${KEY.C}↑`]);
+  assert.deepEqual(kb.held(), [KEY.METALEFT]);
+});
+
+await test('keyboard: Safari on macOS swaps Backquote and IntlBackslash, other browsers do not', () => {
+  const safari = keyboard({ isMac: true, safariMac: true });
+  safari.kb.handle(safari.ev('keydown', 'Backquote', []));
+  assert.deepEqual(safari.out, [`${KEY.INTLBACKSLASH}↓`]);
+  const other = keyboard();
+  other.kb.handle(other.ev('keydown', 'Backquote', []));
+  assert.deepEqual(other.out, [`${KEY.BACKQUOTE}↓`]);
+});
+
+await test('mouse: canvas position is right at any CSS size (corners, centre, off-edge clamp)', () => {
+  const W = 1920, H = 1080;
+  for (const [cssW, cssH] of [[1920, 1080], [872, 490.5], [640, 360], [2560, 1440], [960, 1080]]) {
+    const rect = { left: 17, top: 107, width: cssW, height: cssH };
+    const at = (fx, fy) => pointerPosition({ clientX: rect.left + fx * cssW, clientY: rect.top + fy * cssH }, rect, W, H);
+    assert.deepEqual(at(0, 0), { x: 0, y: 0 });
+    assert.deepEqual(at(0.5, 0.5), { x: 960, y: 540 });
+    assert.deepEqual(at(0.999999, 0.999999), { x: 1919, y: 1079 });
+    assert.deepEqual(at(1, 1), { x: 1919, y: 1079 }, 'right/bottom edge clamps into the framebuffer');
+    assert.deepEqual(pointerPosition({ clientX: rect.left - 50, clientY: rect.top - 50 }, rect, W, H), { x: 0, y: 0 });
+  }
+});
+
+await test('mouse frames: absolute, relative (negative deltas wrap), sync, mode parameter', () => {
+  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  assert.equal(hex(write.pointer(1000, 800, 0, 0)), '05 00 03 e8 03 20 00 00');
+  assert.equal(hex(write.pointer(1000, 800, -1, 1)), '05 01 03 e8 03 20 ff ff');
+  assert.equal(hex(write.pointerRelative(-3, 5, 0, 0)), '93 00 ff fd 00 05 00 00');
+  assert.equal(hex(write.mouseSync()), '86 01');
+  assert.equal(hex(write.connectionParameter('current_mouse_mode', 'absolute')), '9b 12 08 ' + [...'current_mouse_mode'].map((c) => c.charCodeAt(0).toString(16)).join(' ') + ' ' + [...'absolute'].map((c) => c.charCodeAt(0).toString(16)).join(' '));
 });
 
 await test('input frames match what HKC sends', () => {

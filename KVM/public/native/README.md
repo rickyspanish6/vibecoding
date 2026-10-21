@@ -7,9 +7,12 @@ the video **decoder** is Raritan's, loaded from the KX at runtime through the da
 |------|-----------|
 | `rfbproto.js` | The e-RIC RFB protocol: byte stream, message parsing, frame builders, login proof, key table. No DOM, runs in Node too |
 | `kxclient.js` | `KxClient`: WebSocket + decoder worker + canvas + keyboard/mouse. `new KxClient({ canvas, portNo }).connect()` |
+| `keyboard.js` | Browser key events → KX key events with HKC's behaviour (no repeat, stuck-modifier repair, AltGr, macOS quirks, release-all). DOM-free |
 | `ycbcr.js` | YCbCr → RGB conversion of the decoder's output (port of HKC's renderer) |
 | `index.html` | Dev page at `/native/index.html` (target picker, connect, Ctrl-Alt-Del, log) |
 | `probe.mjs` | Node tool: handshake against the live KX, prints what it sends (`KX_PROBE_TRACE=1` for every message), never decodes |
+| `input-check.html` | Dev tool: `/native/input-check.html?port=10`. MAC01 only (the target approved for real input): Spotlight, typing with Shift/punctuation, blur-release check, clicks, wheel |
+| `pointer-check.html` | Dev tool: `/native/pointer-check.html?port=10`. Moves the pointer (never clicks) to known spots at several CSS sizes and finds the remote cursor in the decoded frame |
 | `hkc-capture.html` | Dev tool: runs Raritan's real HKC with a logging WebSocket so its exact bytes can be read (`/native/hkc-capture.html?port=9`, then `__capture()` in the console). Opens a real console |
 | `selftest.mjs` | Offline tests against a scripted server and the renderer: `node public/native/selftest.mjs` |
 | `PROTOCOL.md` | The wire format, with each part marked verified-live or read-from-source |
@@ -33,9 +36,11 @@ Through the dashboard proxy (same origin), all fetched by the decoder worker its
 - Clean disconnect (the KX lists the port as busy for about 30 s afterwards).
 
 **Not fully verified**
-- Absolute mouse accuracy: the KX reports `current_mouse_mode = absolute`, but a sweep to canvas (1000, 800) put the
-  remote cursor near (881, 676). HKC's mouse-mode parameter and mouse sync are not implemented yet.
-- Keyboard: key frames are built and sent, but no key was typed on the real target in testing (only mouse moves).
+- Absolute mouse accuracy: the KX reports `current_mouse_mode = absolute`, but one early sweep to canvas (1000, 800)
+  put the remote cursor near (881, 676) on a Windows target. HKC maps coordinates exactly as the client does
+  (canvas pixels via the CSS scale), so the cause is not the mapping; the follow-up measurement
+  (`pointer-check.html`, several CSS sizes, MAC01) could not be run: see "Pending live checks".
+- Keyboard on a real target (see "Pending live checks").
 - Mouse buttons and wheel, Ctrl-Alt-Del, video refresh button, resolution changes, the non-ICT (LRLE) path,
   4K targets, reconnect behaviour.
 - Port 1 (B25-CTL-XAG00) has no video signal; the KX sends `video = no` and no frames, so the canvas stays black
@@ -50,3 +55,20 @@ connect from `/native/index.html`. `node public/native/selftest.mjs` runs the of
 ## Server changes needed to ship it in the dashboard
 
 None to run the dev page: it uses `/api/ports`, `/api/session`, and the existing `/rfb` upgrade proxy.
+
+## Pending live checks (not run: the KX had two idle console sessions open on B25-CTL-XAG00 for 15+ minutes)
+
+Offline, with fake timers and byte fixtures, these pass (`node public/native/selftest.mjs`, 16 tests): the key
+table against all 119 codes in HKC's own table, press/release, no auto-repeat, stuck-modifier repair, release on
+blur, AltGr, macOS CapsLock/Cmd, Safari swap, pointer math at 5 CSS sizes (corners, centre, clamping), and the
+relative-pointer / mouse-sync / mouse-mode frames.
+
+What still needs the real KX (close every console, make sure no port is busy; `GET /api/ports` → `rfbOpen` 0):
+
+1. `/native/pointer-check.html?port=10` : cursor accuracy at three CSS widths. Result is in `window.__result`
+   (`fitX`/`fitY` should be a≈1, b≈0). If it is off, try `kx.setMouseMode('direct')` / `'auto'` (what HKC's Mouse menu
+   writes) and `kx.syncMouse()`, then restore `'absolute'`.
+2. `/native/input-check.html?port=10` : typing in Spotlight (capitals, punctuation), Shift not stuck after a blur,
+   left/right click, wheel.
+3. `/native/hkc-capture.html?port=10&drive=mac` then `__capture()` : HKC's own key/pointer frames for the same
+   sequence, to turn into fixtures in `selftest.mjs`.

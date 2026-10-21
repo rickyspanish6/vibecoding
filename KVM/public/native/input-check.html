@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KX input check (MAC01)</title>
+<style>
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: #111; color: #ddd; }
+  main { padding: 12px; display: grid; gap: 8px; }
+  canvas { background: #000; max-width: 100%; height: auto; outline: none; }
+  pre { margin: 0; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+<!--
+  Dev tool: /native/input-check.html?port=10
+  Drives the native client's REAL input path with synthetic events, on the Mac target only (port 10 = B25-CTL-MAC01,
+  explicitly approved for typing and clicking). It refuses any other port. It opens Spotlight, types a short
+  harmless string (capitals, digits, punctuation), checks that Shift is not stuck after a blur, clicks and
+  right-clicks on empty space, then clears the field and closes Spotlight. Look at the canvas after each step; the
+  log below says what was sent. No Cmd-Q/W, no system shortcuts other than Cmd+Space, no passwords.
+-->
+<pre id="log">starting…</pre>
+<canvas id="screen" width="640" height="360"></canvas>
+</main>
+<script type="module">
+import { KxClient } from './kxclient.js';
+
+const q = new URLSearchParams(location.search);
+const port = Number(q.get('port'));
+const log = document.getElementById('log'), canvas = document.getElementById('screen');
+const say = (s) => { log.textContent += `\n${s}`; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+window.__steps = [];
+const step = (name) => { window.__steps.push({ name, at: Math.round(performance.now()) }); say(`step: ${name}`); };
+
+// Characters on a US layout: [code, needsShift]
+const SHIFTED = { '!': ['Digit1'], '@': ['Digit2'], '#': ['Digit3'], '$': ['Digit4'], '%': ['Digit5'], '^': ['Digit6'], '&': ['Digit7'], '*': ['Digit8'], '(': ['Digit9'], ')': ['Digit0'],
+  '_': ['Minus'], '+': ['Equal'], '{': ['BracketLeft'], '}': ['BracketRight'], '|': ['Backslash'], ':': ['Semicolon'], '"': ['Quote'], '<': ['Comma'], '>': ['Period'], '?': ['Slash'], '~': ['Backquote'] };
+const PLAIN = { ' ': 'Space', '-': 'Minus', '=': 'Equal', '[': 'BracketLeft', ']': 'BracketRight', '\\': 'Backslash', ';': 'Semicolon', "'": 'Quote', ',': 'Comma', '.': 'Period', '/': 'Slash', '`': 'Backquote' };
+const keyFor = (ch) => {
+  if (/[a-z]/.test(ch)) return { code: `Key${ch.toUpperCase()}`, shift: false };
+  if (/[A-Z]/.test(ch)) return { code: `Key${ch}`, shift: true };
+  if (/[0-9]/.test(ch)) return { code: `Digit${ch}`, shift: false };
+  if (PLAIN[ch]) return { code: PLAIN[ch], shift: false };
+  if (SHIFTED[ch]) return { code: SHIFTED[ch][0], shift: true };
+  throw new Error(`no key for ${JSON.stringify(ch)}`);
+};
+
+try {
+  if (port !== 10) throw new Error('This tool only types on port 10 (B25-CTL-MAC01), the one target approved for real input.');
+  const kx = new KxClient({ canvas, portNo: port, onstatus: (s) => say(`status: ${s}`), onerror: (e) => say(`error: ${e.message}`) });
+  await kx.connect();
+  await sleep(4000);
+  canvas.focus();
+
+  const mods = { shiftKey: false, metaKey: false };
+  const fire = (type, code, over = {}) => canvas.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true, cancelable: true, ...mods, ...over }));
+  const tap = async (code, over) => { fire('keydown', code, over); await sleep(40); fire('keyup', code, over); await sleep(40); };
+  const type = async (text) => {
+    for (const ch of text) {
+      const { code, shift } = keyFor(ch);
+      if (shift) { mods.shiftKey = true; fire('keydown', 'ShiftLeft'); await sleep(30); }
+      await tap(code);
+      if (shift) { fire('keyup', 'ShiftLeft', { shiftKey: false }); mods.shiftKey = false; await sleep(30); }
+    }
+  };
+  const mouse = async (type, fx, fy, button = 0) => {
+    const r = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new MouseEvent(type, { clientX: r.left + fx * r.width, clientY: r.top + fy * r.height, button, bubbles: true, cancelable: true }));
+    await sleep(60);
+  };
+
+  step('open Spotlight (Cmd+Space)');
+  mods.metaKey = true; fire('keydown', 'MetaLeft'); await sleep(40);
+  await tap('Space'); fire('keyup', 'MetaLeft', { metaKey: false }); mods.metaKey = false;
+  await sleep(1500);
+
+  step('type: Hello, World! 123 (capitals, punctuation, digits)');
+  await type('Hello, World! 123');
+  await sleep(1500);
+  window.__typedAt = performance.now();
+
+  step('hold Shift, then blur the canvas: Shift must be released on the target');
+  mods.shiftKey = true; fire('keydown', 'ShiftLeft'); await sleep(100);
+  const heldBefore = kx.keyboard.held().length;
+  canvas.dispatchEvent(new FocusEvent('blur'));
+  mods.shiftKey = false; await sleep(300);
+  const heldAfter = kx.keyboard.held().length;
+  say(`held before blur: ${heldBefore}, after: ${heldAfter}`);
+  canvas.focus();
+  step('type lower-case x: it must appear lower-case');
+  await tap('KeyX');
+  await sleep(1200);
+
+  step('clear the field: Cmd+A then Backspace');
+  mods.metaKey = true; fire('keydown', 'MetaLeft'); await sleep(40);
+  await tap('KeyA'); fire('keyup', 'MetaLeft', { metaKey: false }); mods.metaKey = false; await sleep(100);
+  await tap('Backspace');
+  await sleep(800);
+
+  step('left click and right click on empty space in the middle of the Spotlight field area');
+  await mouse('mousemove', 0.5, 0.35);
+  await mouse('mousedown', 0.5, 0.35, 0); await mouse('mouseup', 0.5, 0.35, 0);
+  await sleep(600);
+
+  step('close Spotlight (Escape)');
+  await tap('Escape');
+  await sleep(800);
+
+  step('right click on the desktop, then Escape');
+  await mouse('mousemove', 0.8, 0.6);
+  await mouse('mousedown', 0.8, 0.6, 2); await mouse('mouseup', 0.8, 0.6, 2);
+  await sleep(1000);
+  window.__menuShownAt = performance.now();
+  await sleep(1500);
+  await tap('Escape');
+  await sleep(600);
+
+  step('wheel over the desktop');
+  await mouse('mousemove', 0.5, 0.5);
+  canvas.dispatchEvent(new WheelEvent('wheel', { clientX: canvas.getBoundingClientRect().left + 100, clientY: canvas.getBoundingClientRect().top + 100, deltaY: 120, bubbles: true, cancelable: true }));
+  await sleep(500);
+
+  window.__result = { held: kx.keyboard.held(), heldBefore, heldAfter };
+  kx.disconnect();
+  say(`done. held keys at end: ${JSON.stringify(window.__result)}`);
+} catch (e) { say(`FAILED: ${e.message}`); window.__result = { error: e.message }; }
+</script>
+</body>
+</html>

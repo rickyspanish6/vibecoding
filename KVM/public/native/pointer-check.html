@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>KX pointer accuracy check</title>
+<style>
+  body { margin: 0; font: 13px/1.4 system-ui, sans-serif; background: #111; color: #ddd; }
+  main { padding: 12px; }
+  canvas { display: block; background: #000; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+<!--
+  Dev tool: /native/pointer-check.html?port=10&sizes=800,560,400
+  Connects with the native client, then for each CSS width moves the pointer (mousemove only, never a click) to
+  known canvas positions through the real input path and finds the remote cursor in the decoded frame by
+  differencing snapshots. Result: window.__result and the table below.
+-->
+<pre id="out">starting…</pre>
+<canvas id="screen" width="640" height="360"></canvas>
+</main>
+<script type="module">
+import { KxClient } from './kxclient.js';
+
+const q = new URLSearchParams(location.search);
+const port = Number(q.get('port'));
+const sizes = (q.get('sizes') ?? '800,560,400').split(',').map(Number);
+const out = document.getElementById('out'), canvas = document.getElementById('screen'), ctx = canvas.getContext('2d');
+const say = (s) => { out.textContent += `\n${s}`; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+window.__result = null;
+
+const snap = () => new Uint8ClampedArray(ctx.getImageData(0, 0, canvas.width, canvas.height).data);
+
+// Connected groups of changed 8px cells between two snapshots -> bounding boxes in framebuffer pixels.
+function clusters(a, b) {
+  const W = canvas.width, H = canvas.height, C = 8, cw = Math.ceil(W / C), ch = Math.ceil(H / C);
+  const hit = new Uint8Array(cw * ch);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 90) hit[(y / C | 0) * cw + (x / C | 0)] = 1;
+  }
+  const seen = new Uint8Array(cw * ch), boxes = [];
+  for (let s = 0; s < hit.length; s++) {
+    if (!hit[s] || seen[s]) continue;
+    const stack = [s]; seen[s] = 1; let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+    while (stack.length) {
+      const c = stack.pop(), cx = c % cw, cy = c / cw | 0;
+      x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); y0 = Math.min(y0, cy); y1 = Math.max(y1, cy);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
+        const n = ny * cw + nx;
+        if (hit[n] && !seen[n]) { seen[n] = 1; stack.push(n); }
+      }
+    }
+    boxes.push({ x: x0 * C, y: y0 * C, w: (x1 - x0 + 1) * C, h: (y1 - y0 + 1) * C });
+  }
+  return boxes;
+}
+
+try {
+  if (!port) throw new Error('add ?port=<KX port number>');
+  const kx = new KxClient({ canvas, portNo: port, onstatus: (s) => say(`status: ${s}`), onerror: (e) => say(`error: ${e.message}`) });
+  await kx.connect();
+  await sleep(4000);
+
+  const W = canvas.width, H = canvas.height;
+  // Positions as fractions of the framebuffer; insets keep the corners inside the canvas.
+  const targets = [[0.02, 0.02], [0.98, 0.02], [0.02, 0.5], [0.5, 0.5], [0.98, 0.5], [0.3, 0.7], [0.7, 0.3], [0.5, 0.9]];
+  const results = [];
+  for (const cssW of sizes) {
+    canvas.style.width = `${cssW}px`; canvas.style.height = 'auto';
+    const rect = canvas.getBoundingClientRect();
+    const send = (fx, fy) => canvas.dispatchEvent(new MouseEvent('mousemove', { clientX: rect.left + fx * rect.width, clientY: rect.top + fy * rect.height, bubbles: true }));
+    send(0.9, 0.9); await sleep(900);                  // park somewhere known first
+    let prev = snap(), prevPos = { x: 0.9 * W, y: 0.9 * H };
+    for (const [fx, fy] of targets) {
+      const want = { x: Math.floor(fx * W), y: Math.floor(fy * H) };
+      send(fx, fy); await sleep(900);
+      const now = snap();
+      const boxes = clusters(prev, now);
+      // The cursor shows up twice (old and new spot); the new one is the box not around the previous position.
+      const small = boxes.filter((b) => b.w <= 48 && b.h <= 48);
+      const isOld = (b) => Math.abs(b.x - prevPos.x) < 40 && Math.abs(b.y - prevPos.y) < 40;
+      const fresh = small.filter((b) => !isOld(b));
+      const best = fresh.sort((a, b) => Math.hypot(a.x - want.x, a.y - want.y) - Math.hypot(b.x - want.x, b.y - want.y))[0];
+      results.push({ cssW, scale: +(rect.width / W).toFixed(3), want, seen: best ? { x: best.x, y: best.y } : null, clusters: boxes.length });
+      if (best) prevPos = { x: best.x, y: best.y }; else prevPos = want;
+      prev = now;
+    }
+  }
+  kx.disconnect();
+
+  // Per axis, fit seen = a * want + b; a perfect mapping is a = 1, b = 0 (cells are 8 px, so +/- 8 px is noise).
+  const fit = (pairs) => {
+    const n = pairs.length, sx = pairs.reduce((s, p) => s + p[0], 0), sy = pairs.reduce((s, p) => s + p[1], 0);
+    const sxx = pairs.reduce((s, p) => s + p[0] * p[0], 0), sxy = pairs.reduce((s, p) => s + p[0] * p[1], 0);
+    const a = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+    return { a: +a.toFixed(3), b: +((sy - a * sx) / n).toFixed(1), n };
+  };
+  const ok = results.filter((r) => r.seen);
+  const summary = { fitX: fit(ok.map((r) => [r.want.x, r.seen.x])), fitY: fit(ok.map((r) => [r.want.y, r.seen.y])), found: `${ok.length}/${results.length}` };
+  window.__result = { framebuffer: `${W}x${H}`, summary, results };
+  say(JSON.stringify(summary));
+  for (const r of results) say(`${String(r.cssW).padStart(5)}px  want ${r.want.x},${r.want.y}  seen ${r.seen ? r.seen.x + ',' + r.seen.y : '?'}  (clusters ${r.clusters})`);
+  say('done');
+} catch (e) { say(`FAILED: ${e.message}`); window.__result = { error: e.message }; }
+</script>
+</body>
+</html>

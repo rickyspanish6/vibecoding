@@ -17,7 +17,7 @@ export const MSG = {
 const C2S = {
   SET_PIXEL_FORMAT: 0, SET_ENCODINGS: 2, FB_UPDATE_REQUEST: 3, KEY_EVENT: 4, POINTER_EVENT: 5, CLIENT_INIT: 7,
   ASSOCIATED_TAG: 8, LOGIN: 32, CHALLENGE_RESPONSE: 33, VIDEO_SETTINGS_REQUEST: 145, VIDEO_REFRESH: 146,
-  KVM_SWITCH: 137, PING_REQUEST: 148, POWER_SWITCH: 156,
+  KVM_SWITCH: 137, PING_REQUEST: 148, POWER_SWITCH: 156, POINTER_RELATIVE: 147, MOUSE_SYNC: 134, SET_CONNECTION_PARAMETER: 155,
 };
 
 // HKC's wire value on this KX is 0xd081 = ICT | 13 << 12 (not the 9 in its source defaults).
@@ -156,6 +156,16 @@ export const write = {
     b[0] = C2S.POINTER_EVENT; b[1] = buttons; v.setUint16(2, Math.max(0, Math.floor(x))); v.setUint16(4, Math.max(0, Math.floor(y))); v.setUint16(6, wheel & 0xffff);
     return b;
   },
+  // Relative pointer (HKC's "single mouse" mode): signed deltas wrap into u16, wheel -1/0/1.
+  pointerRelative: (dx, dy, wheel, buttons) => {
+    const b = new Uint8Array(8), v = new DataView(b.buffer);
+    b[0] = C2S.POINTER_RELATIVE; b[1] = buttons; v.setUint16(2, Math.floor(dx) & 0xffff); v.setUint16(4, Math.floor(dy) & 0xffff); v.setUint16(6, wheel & 0xffff);
+    return b;
+  },
+  // "Synchronize mouse": type 134, mode 1 (hard). HKC then re-sends the last pointer event.
+  mouseSync: () => Uint8Array.of(C2S.MOUSE_SYNC, 1),
+  // Session parameter, e.g. ('current_mouse_mode', 'absolute'): type 155, u8 keyLen, u8 valueLen, key, value.
+  connectionParameter: (key, value) => { const k = te.encode(key), v = te.encode(value), b = new Uint8Array(3 + k.length + v.length); b[0] = C2S.SET_CONNECTION_PARAMETER; b[1] = k.length; b[2] = v.length; b.set(k, 3); b.set(v, 3 + k.length); return b; },
   ping: (n) => { const b = new Uint8Array(8); b[0] = C2S.PING_REQUEST; new DataView(b.buffer).setInt32(4, n); return b; },
   // 2 bytes, as captured from HKC. (A 5-byte version desyncs the KX's parser: it reads the extra bytes as a new message.)
   videoSettingsRequest: () => Uint8Array.of(C2S.VIDEO_SETTINGS_REQUEST, 1),

@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.6.0] - 2026-10-21
+
+### Added
+- **Console client selector** in the dashboard: Raritan client (default) or **Native (beta)**, remembered per browser,
+  with Ctrl-Alt-Del, Refresh video and an fps / bitrate readout for the native client.
+- **Scale Video on by default** in the embedded Raritan client (seeds `scaleMode` once; a choice made in Raritan's
+  Client Settings is kept).
+- Native client: keyboard translator (`keyboard.js`, reproduces HKC's key handling: repeat filtering, stuck-modifier
+  release, AltGr, macOS quirks, release on blur and disconnect), optional mouse modes and sync, relative-mouse
+  fallback, and input check pages (`pointer-check.html`, `input-check.html`).
+
+### Fixed
+- `/` search shortcut no longer steals keys typed into the remote console.
+
+### Verification status
+- Offline: 16 self-tests pass (key table vs HKC's, keyboard behaviours, pointer math at 5 sizes, new frames).
+- **Not yet verified live:** pointer accuracy (an earlier test landed the cursor off target; HKC maps coordinates the
+  same way, so the cause is still unknown), typing, clicks and wheel, and the dashboard's native mode. Raritan's client
+  stays the default until these are checked on a real target (B25-CTL-MAC01 is the approved test target).
+
 ## [1.5.0] - 2026-10-20
 
 ### Fixed (native client, experimental)
