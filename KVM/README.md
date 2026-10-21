@@ -19,6 +19,9 @@ connected to the switch.
 - **Power control:** each host's gear has Power on / off / cycle for its mapped outlets. They act on real power: you must
   type the host's exact name, a per-host lock refuses all commands, there is a cooldown, and every accepted request is
   appended to `.kx-power.log` (gitignored). Off and cycle are hard power cuts, not clean shutdowns.
+- **Speed:** over a high-latency link the console is latency-bound, so the native client asks for the next update as soon as one
+  arrives (two requests in flight), and has a quality selector (Auto / High / Medium / Low). The readout shows fps, bitrate,
+  update delay and quality. A still screen shows 0-1 fps because the KX only sends changes.
 - **Sessions panel:** the KX's own *Users By Port* page (per-session Disconnect / Log off, and Disconnect all); falls back to the CLI's `userlist` over SSH key login when no web login is configured (read-only then).
 - **Keep-alive / auto-reconnect:** the session is re-checked every minute while the page is open; if the console
   socket drops, the page reconnects (up to 3 times in 2 minutes).

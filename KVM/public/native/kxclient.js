@@ -7,6 +7,7 @@
 
 import { RfbSession, write, keyFromCode, MOUSE, DEFAULT_QUALITY } from './rfbproto.js';
 import { renderYCbCr } from './ycbcr.js';
+import { UpdatePacer, QualityGovernor, averageDelay } from './pacing.js';
 import { KeyboardTranslator, detectPlatform } from './keyboard.js';
 
 const WORKER_URL = '/js/js_decoding_worker.min.js'; // served by the KX through the proxy
@@ -30,11 +31,16 @@ export class KxClient {
    * @param {number} [o.portNo]     KX port number as shown in the KX UI (1-based, as in the port list)
    * @param {string} [o.portId]     or the KX's unique port id (P_<device>_<n>); resolved from the port list if omitted
    * @param {string} [o.sessionId]  KX web session id; defaults to the kvm_session_id cookie (set by /api/session)
-   * @param {number} [o.quality]    ICT quality (default 13, what HKC sends on this KX)
+   * @param {number|'auto'} [o.quality]  ICT quality 1-15 (default 13, what HKC sends on this KX), or 'auto': start at 13 and step down only when bandwidth-starved
+   * @param {'fast'|'classic'} [o.pacing]  'fast' (default) asks for the next update as soon as one arrives; 'classic' waits for it to be decoded, like HKC
+   * @param {number} [o.depth]      update requests kept in flight in 'fast' mode (default 2: measured 2-3x the frame rate of 'classic' over a ~130 ms VPN)
    * @param {boolean} [o.input]     attach keyboard/mouse handlers to the canvas (default true)
    */
-  constructor({ canvas, portNo, portId, sessionId, appId, quality = DEFAULT_QUALITY, input = true, onstatus = () => {}, onerror = () => {}, onresolution = () => {}, onstats = () => {}, onmouse = () => {} }) {
-    Object.assign(this, { canvas, portNo, portId, sessionId, quality, input, onstatus, onerror, onresolution, onstats, onmouse });
+  constructor({ canvas, portNo, portId, sessionId, appId, quality = DEFAULT_QUALITY, pacing = 'fast', depth = 2, input = true, onstatus = () => {}, onerror = () => {}, onresolution = () => {}, onstats = () => {}, onmouse = () => {} }) {
+    Object.assign(this, { canvas, portNo, portId, sessionId, quality, input, onstatus, onerror, onresolution, onstats, onmouse, pacing, depth });
+    this.auto = quality === 'auto';
+    if (this.auto) this.quality = DEFAULT_QUALITY;
+    this.delays = []; this.lastRequestAt = 0; this.lastFrameAt = 0;
     this.appId = appId ?? `${Date.now()}_${Math.floor(Math.random() * 1e15)}`;
     this.ctx = canvas.getContext('2d');
     this.image = null; this.session = null; this.ws = null; this.worker = null;
@@ -61,8 +67,18 @@ export class KxClient {
     this.ws.onclose = (e) => { this.session?.close(new Error(`socket closed (${e.code})`)); }; // disconnect() may have cleared it already
     this.ws.onerror = () => this.onerror(new Error('WebSocket error'));
     await new Promise((resolve, reject) => { this.ws.onopen = resolve; this.ws.addEventListener('error', () => reject(new Error('Could not open /rfb')), { once: true }); });
+    this.#resetPacer();
+    this.governor = new QualityGovernor({ start: this.quality });
     this.session.start();
-    this.statsTimer = setInterval(() => { this.onstats({ fps: this.frames, kbps: Math.round(this.bytes * 8 / 1000) }); this.frames = 0; this.bytes = 0; }, 1000);
+    this.statsTimer = setInterval(() => {
+      // Watchdog: if nothing was asked or received for 5 s, our idea of what is outstanding may be wrong (a lost request, a stuck
+      // decode). Start over with a fresh request; an idle screen simply makes the KX hold it, which costs nothing.
+      if (this.session && !this.session.inInit && performance.now() - Math.max(this.lastFrameAt, this.lastRequestAt) > 5000) { this.#resetPacer(); this.#request(); }
+      const s = { fps: this.frames, kbps: Math.round(this.bytes * 8 / 1000), delay: averageDelay(this.delays) };
+      this.frames = 0; this.bytes = 0; this.delays = [];
+      if (this.auto) { const q = this.governor.update(s); if (q !== null) this.#applyQuality(q); }
+      this.onstats({ ...s, quality: this.quality, auto: this.auto });
+    }, 1000);
     if (this.input) this.#attachInput();
   }
 
@@ -91,6 +107,37 @@ export class KxClient {
   }
 
   refreshVideo() { this.session?.send(write.videoRefresh()); }
+
+  /** 'fast' asks for the next update as soon as one arrives (depth = requests kept in flight); 'classic' waits for decoding, like HKC. */
+  setPacing(mode, depth = this.depth) {
+    this.pacing = mode; this.depth = depth;
+    this.#resetPacer();
+    if (this.session && !this.session.inInit) this.#request();
+  }
+
+  #resetPacer() {
+    this.pacer = new UpdatePacer({ requests: this.depth, undecoded: 2 });
+    this.pacer.markRequested(); // the caller sends one request right after
+  }
+
+  /** A number 1-15 sets the video quality; 'auto' lets the client lower it on a slow link and raise it again. */
+  setQuality(q) {
+    if (q === 'auto') { this.auto = true; this.#applyQuality(DEFAULT_QUALITY); this.governor?.reset(this.quality); return; } // Auto starts from High
+    this.auto = false;
+    this.#applyQuality(q);
+    this.governor?.reset(this.quality);
+  }
+
+  #applyQuality(q) {
+    this.quality = Math.max(1, Math.min(15, Math.round(q)));
+    if (!this.session || this.session.inInit) return;
+    this.session.quality = this.quality;
+    this.session.send(write.setEncodings(this.session.encoding())); // HKC then asks for a full refresh at the new quality
+    this.session.requestUpdate(false);
+    this.pacer?.markRequested();
+  }
+
+  #request() { this.lastRequestAt = performance.now(); this.session?.requestUpdate(true); }
 
   /** HKC's "Synchronize mouse": a hard sync message, then the last pointer position again. */
   syncMouse() {
@@ -159,6 +206,11 @@ export class KxClient {
   }
 
   #decode(rect) {
+    const now = performance.now();
+    // Time from our request to its update, counted only while updates are flowing (an idle screen makes it meaningless).
+    if (this.lastRequestAt && now - this.lastFrameAt < 500) this.delays.push(now - this.lastRequestAt);
+    this.lastFrameAt = now;
+    if (this.pacing === 'fast') for (let n = this.pacer.onReceived(); n > 0; n--) this.#request();
     const fb = this.session.fb;
     this.worker.postMessage({
       command: 'decode', isWebGL: false, data: rect.data.buffer, bitstreamVersion: this.session.bitstreamVersion,
@@ -169,7 +221,8 @@ export class KxClient {
 
   #onDecoded(u) {
     if (!this.session || !this.image) return;
-    this.session.requestUpdate(true); // ask for the next change straight away, as HKC does
+    if (this.pacing === 'fast') { for (let n = this.pacer.onDecoded(); n > 0; n--) this.#request(); } // held-back requests
+    else this.#request(); // classic: only now, like HKC
     renderYCbCr(this.image.data, this.image.width, u);
     this.ctx.putImageData(this.image, 0, 0, u.x, u.y, u.w, u.h);
     this.frames++;

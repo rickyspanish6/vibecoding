@@ -143,6 +143,9 @@
     <select id="clientMode" class="sel" aria-label="Console client" title="Console client. Native is the default; switch to the Raritan client if something doesn't work.">
       <option value="native">Native client</option><option value="raritan">Raritan client (classic)</option>
     </select>
+    <select id="quality" class="sel" hidden aria-label="Video quality" title="Video quality. Auto lowers it on a slow link and raises it again when the link recovers.">
+      <option value="auto">Quality: Auto</option><option value="13">Quality: High</option><option value="9">Quality: Medium</option><option value="5">Quality: Low</option>
+    </select>
     <span class="stat" id="chint"></span><span class="stat" id="nstat"></span>
     <button class="btn stop" id="cad" hidden title="Send Ctrl-Alt-Del to the target">Ctrl-Alt-Del</button>
     <button class="btn stop" id="refreshVideo" hidden title="Ask the KX for a fresh video frame">Refresh video</button>
@@ -196,7 +199,7 @@ function renderDetail(keepScreen = false) {
   const btn = $('connect'), live = connected === p.id;
   btn.disabled = !p.up && !live; btn.textContent = live ? 'Disconnect' : 'Connect'; btn.classList.toggle('stop', live);
   const nativeLive = Boolean(nativeClient) && live;
-  $('cad').hidden = $('refreshVideo').hidden = !nativeLive;
+  $('cad').hidden = $('refreshVideo').hidden = $('quality').hidden = !nativeLive;
   if (live || keepScreen || connecting) return; // keep the running session / status text; polling must not rebuild them
   const s = $('screen'); s.className = 'screen'; s.replaceChildren(); const d = el('div');
   d.append(el('strong', null, p.up ? 'Ready to connect' : 'Target is offline'),
@@ -259,10 +262,11 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
         const { KxClient } = await import('/native/kxclient.js');
         const kx = new KxClient({
           canvas, portNo: p.id, // same numbering as the KX port list
+          quality: qualityMode(), pacing: pref('kxc-pacing', 'fast'), depth: Number(pref('kxc-depth', '2')),
           onstatus: (st) => { if (nativeClient === kx) $('nstat').textContent = st; },
           onerror: (e) => { failure = e; },
           onresolution: ({ width, height }) => { nativeRes = `${width}×${height}`; },
-          onstats: ({ fps, kbps }) => { $('nstat').textContent = `${nativeRes} · ${fps} fps · ${kbps} kbit/s`; },
+          onstats: ({ fps, kbps, delay, quality, auto }) => { if (nativeClient === kx) $('nstat').textContent = `${nativeRes} · ${fps} fps · ${kbps} kbit/s${delay === null ? '' : ` · ${delay} ms`} · Q${quality}${auto ? ' auto' : ''}`; },
         });
         nativeClient = kx; // set before connecting so disconnect() can always tear it down
         try { await kx.connect(); } catch (e) { failure = e; }
@@ -355,10 +359,14 @@ async function loadSessions() {
 
 // Which console client to use: our native client (default) or Raritan's embedded HKC as the classic fallback.
 const clientMode = () => $('clientMode').value;
+const qualityMode = () => ($('quality').value === 'auto' ? 'auto' : Number($('quality').value));
+const pref = (key, fallback) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } }; // dev switches: kxc-pacing, kxc-depth
 function closeNative() { const kx = nativeClient; nativeClient = null; kx?.disconnect(); $('nstat').textContent = ''; }
 
 function disconnect() { attempt++; closeNative(); connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
 
+try { const v = localStorage.getItem('kxc-quality'); if (v && [...$('quality').options].some((o) => o.value === v)) $('quality').value = v; } catch { /* no storage */ }
+$('quality').onchange = () => { try { localStorage.setItem('kxc-quality', $('quality').value); } catch { /* no storage */ } nativeClient?.setQuality(qualityMode()); };
 $('cfgBtn').onclick = () => openSettings();
 $('connect').onclick = () => (connected != null ? disconnect() : connect());
 try { const v = localStorage.getItem('kxc-client'); if (['raritan', 'native'].includes(v)) $('clientMode').value = v; } catch { /* no storage */ }

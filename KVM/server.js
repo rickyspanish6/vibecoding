@@ -32,6 +32,9 @@ const SSH_USER = process.env.KX_SSH_USER ?? USER ?? 'mofa';
 const SSH_KEY = process.env.KX_SSH_KEY ?? join(homedir(), '.ssh', 'kx3_rsa');
 const PORT = Number(process.env.PORT ?? 3000);
 const MOCK = process.env.KX_MOCK === '1';
+// Test aid, off unless KX_SIM_LATENCY_MS is set: delay /rfb traffic by this much each way (RTT = 2x). POST /api/dev/latency {ms} changes it live.
+const SIM_ENABLED = process.env.KX_SIM_LATENCY_MS !== undefined;
+let simLatency = Number(process.env.KX_SIM_LATENCY_MS ?? 0);
 
 // Dashboard access control. By default we listen on loopback only and need no login. To listen elsewhere
 // (BIND=0.0.0.0) a DASH_PASSWORD is mandatory, because this server holds a logged-in KX admin session.
@@ -329,8 +332,15 @@ function proxyUpgrade(req, socket, head) {
     if (jar.size) lines.push(`Cookie: ${cookieHeader()}`);
     up.write(`${lines.join('\r\n')}\r\n\r\n`);
     if (head.length) up.write(head);
-    up.pipe(socket);
-    socket.pipe(up);
+    if (SIM_ENABLED) { // test aid: delay each direction through an ordered line, so a changing delay never reorders bytes
+      const line = (write) => { let last = 0; return (chunk) => { const due = Math.max(Date.now() + simLatency, last); last = due; setTimeout(() => write(chunk), due - Date.now()); }; };
+      const toClient = line((d) => socket.writable && socket.write(d)), toKx = line((d) => up.writable && up.write(d));
+      up.on('data', toClient);
+      socket.on('data', toKx);
+    } else {
+      up.pipe(socket);
+      socket.pipe(up);
+    }
   });
 }
 
@@ -444,6 +454,12 @@ const server = createServer(async (req, res) => {
     }
     // PDU config, outlet status and host-to-outlet mappings (netBooters, read-only)
     if ((pathname.startsWith('/api/config') || pathname.startsWith('/api/power')) && await powerRoutes(req, res, pathname, { readJson, json, readPorts })) return;
+    if (SIM_ENABLED && pathname === '/api/dev/latency' && req.method === 'POST') {
+      const { ms } = await readJson(req);
+      if (!Number.isFinite(ms) || ms < 0 || ms > 2000) return json(res, 400, { error: 'ms must be 0-2000' });
+      simLatency = ms;
+      return json(res, 200, { latencyEachWayMs: simLatency });
+    }
     if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, { sessions: await readSessions() });
     if (pathname === '/api/sessions/disconnect' && req.method === 'POST') {
       const { id, mode } = await readJson(req);

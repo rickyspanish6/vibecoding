@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.10.0] - 2026-10-21
+
+### Changed (native client speed)
+- **The native client now asks for the next video update as soon as one arrives, with two requests in flight**, instead
+  of after the previous one is received and decoded (which is what Raritan's client does). Over this setup's VPN (about
+  130 ms average round trip, spikes to 440 ms) the KX's updates are latency-bound, so this helps: dragging a window on
+  MAC01 averaged about **1.5 to 2 fps with Raritan-style pacing, about 3.5 fps asking on arrival and about 4.5 fps with
+  two in flight** (several runs, noisy because the VPN's latency jitters).
+- A watchdog re-requests when nothing has been asked or received for 5 s, so a lost request can no longer stall the
+  stream for good (found while testing: switching modes left the client waiting for an update that never came).
+
+### Added
+- **Quality selector** (native client): Auto, High (13), Medium (9), Low (5), remembered per browser, changeable
+  while connected. Auto starts at High and only steps down when the link is short of bandwidth (heavy traffic, few
+  frames); measured here, quality barely changes the frame rate on a latency-bound link, so a high delay alone does not
+  lower it.
+- The readout shows the average update delay and the quality, for example `1920x1080 · 4 fps · 264 kbit/s · 181 ms · Q13`.
+- Dev switches (browser storage): `kxc-pacing` = `classic` or `fast`, `kxc-depth` = 1 or 2.
+- Test aid: `KX_SIM_LATENCY_MS` adds a delay each way to the console traffic (and `/api/dev/latency` changes it live).
+  Off unless the variable is set.
+
+### Not verified / limits
+- At rest the readout shows 0 to 1 fps: the KX only sends changes, so a still screen is not slow.
+- The KX itself answers an update in roughly 200 to 400 ms here, so a few fps is the realistic ceiling over this
+  VPN even now. A faster path to the KX (no VPN, or a closer network) would help more than any client change.
+- Pointer-only motion barely differs between modes (tiny updates); the gain shows with real content moving.
+
 ## [1.9.0] - 2026-10-21
 
 Power control, now verified on a real unit (see below). The notes of the release candidate follow.
