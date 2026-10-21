@@ -178,12 +178,15 @@ function upstream({ method = 'GET', path, headers = {} }, body) {
   });
 }
 
-const toLogin = (res) => /auth\.asp/.test(res.headers.location ?? '');
+// A dead session isn't always bounced to auth.asp: the KX also redirects to its client-check page (/akc...).
+// So only a plain 200 that isn't the login form counts as signed in; any redirect means "not authenticated".
+const authedPage = (res, body) => res.statusCode === 200 && !body.includes('action_login');
+const toLogin = (res) => res.statusCode >= 300 && res.statusCode < 400;
 
 async function isAuthed() {
   if (!jar.size) return false;
-  const { res } = await upstream({ path: '/home.asp', headers: { cookie: cookieHeader() } });
-  return res.statusCode < 400 && !toLogin(res);
+  const { res, body } = await upstream({ path: '/home.asp', headers: { cookie: cookieHeader() } });
+  return authedPage(res, body.toString('utf8'));
 }
 
 async function login() {
@@ -227,7 +230,7 @@ async function ensureSession() {
 async function kxPage(path) {
   for (let i = 0; i < 2; i++) {
     const { res, body } = await upstream({ path, headers: jar.size ? { cookie: cookieHeader() } : {} });
-    if (res.statusCode < 400 && !toLogin(res)) return body.toString('utf8');
+    if (authedPage(res, body.toString('utf8'))) return body.toString('utf8');
     await ensureSession();
   }
   throw new Error('The KX session could not be refreshed');
@@ -270,7 +273,7 @@ async function kick(ids, mode) {
     path: '/um_users_port.asp',
     headers: { 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(body), cookie: cookieHeader() },
   }, body);
-  if (res.statusCode >= 400 || toLogin(res)) throw new Error(`The KX refused the request (${res.statusCode})`);
+  if (res.statusCode >= 400) throw new Error(`The KX refused the request (${res.statusCode})`); // a redirect after submit is normal
   sessionsCache.at = 0;
   portsCache.at = 0;
   return (await readUsersByPort()).sessions;
@@ -452,7 +455,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/api/session') {
       if (!MOCK) await ensureSession();
       res.setHeader('set-cookie', [...jar].map(([k, v]) => `${k}=${v}; Path=/; SameSite=Lax`));
-      return json(res, 200, { ok: true, cookies: [...jar.keys()], hasKvmSessionId: jar.has('kvm_session_id') });
+      return json(res, 200, { ok: true, cookies: [...jar.keys()], hasKvmSessionId: jar.has('kvm_session_id') || jar.has('pp_session_id') }); // firmware 3.10 names the cookie pp_session_id
     }
 
     // Fallback if the embedded client misbehaves: Raritan's own client via Direct Port Access.

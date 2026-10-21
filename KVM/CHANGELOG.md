@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.3.1] - 2026-10-20
+
+### Fixed
+- A dead KX web session was mistaken for a live one: the KX redirects an unauthenticated request to its client-check
+  page (`/akc...`), not only to `auth.asp`, and the session check accepted any redirect. The app then kept using an
+  expired cookie, so the sessions panel was empty and console logins could be refused. Only a plain 200 page that
+  is not the login form now counts as signed in.
+- A redirect after the Disconnect / Log off submit is no longer reported as a failure.
+- `/api/session` reports the session cookie correctly (`pp_session_id` on firmware 3.10).
+
 ## [1.3.0] - 2026-10-20
 
 ### Added
