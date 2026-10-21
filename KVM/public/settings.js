@@ -90,7 +90,12 @@ function confirmPower(p, action) {
       result.className = 'dlg-note ok';
       result.textContent = `${verb} sent. ` + r.results.map((x) => `${shortName(x.deviceName)} #${x.outlet}: ${x.on ? 'ON' : 'OFF'}`).join(', ') + (r.cycling ? '. Cycling: the outlet comes back on shortly.' : '');
       go.textContent = 'Sent'; cancel.textContent = 'Close';
-      loadPower(true); if (r.cycling) setTimeout(() => loadPower(true), 9000);
+      loadPower(true);
+      if (r.cycling) setTimeout(async () => { // the outlet comes back on a few seconds later: replace the stale "OFF"
+        await loadPower(true);
+        const now = power.byPort?.[p.id];
+        if (now && document.getElementById('pwrDlg').open) result.textContent = `Cycle finished. Now: ${now.map((x) => `${shortName(x.deviceName)} #${x.outlet}: ${x.on === null ? 'unknown' : x.on ? 'ON' : 'OFF'}`).join(', ')}. The host is starting up.`;
+      }, 9000);
     } catch (e) { result.className = 'dlg-note bad'; result.textContent = e.message; go.textContent = verb; typed.disabled = false; sync(); }
   });
   const cancel = button('Cancel', '', () => document.getElementById('pwrDlg').close());

@@ -4,10 +4,23 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
-## [1.9.0-rc.1] - 2026-10-21
+## [1.9.0] - 2026-10-21
 
-Release candidate: written and tested against a fake netBooter, **not yet run against a real unit** (1.9.0 follows
-once it has been).
+Power control, now verified on a real unit (see below). The notes of the release candidate follow.
+
+### Verified live (B25-CTL-MAC01, PDN04 outlet 2, Synaccess NPB20DU)
+- **Power on** (outlet already on): sent through the real dialog with the typed host name; the unit reported
+  `PDN04 #2: ON`, the Mac was undisturbed and the audit log recorded it.
+- **Cycle:** the unit reported the outlet OFF straight after the command; the native console showed "no video signal"
+  about 7 s later, "video unstable" at 14 s as the Mac started, a streaming desktop at about 75 s, and the outlet was
+  back ON on a fresh read. Both requests are in the audit log.
+- Not run live: Power off (it differs from Cycle only in the `pset n 0` command, which the fake-unit tests verify), and
+  the lock (verified in the UI and the API, not against the unit, since a locked host sends nothing).
+
+### Changed
+- After a cycle, the dialog replaces the stale "OFF" with the outlet's state once it has come back.
+
+### Release candidate notes (1.9.0-rc.1)
 
 ### Added
 - **Power control per host: Power on, Power off and Cycle** (host gear, "Power control"). Commands use the saved outlet
