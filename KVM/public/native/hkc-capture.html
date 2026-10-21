@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>HKC wire capture</title>
+<script>
+// Dev tool: runs Raritan's own HKC with a logging WebSocket so we can see exactly which bytes it sends and
+// receives on /rfb. Open /native/hkc-capture.html?port=9 (KX UI port number); read the result with
+// window.__capture() in the console. It opens a real console, so only use it when nothing else is connected.
+(async () => {
+  const port = Number(new URLSearchParams(location.search).get('port') || 1);
+  const [{ ports, device }] = [await (await fetch('/api/ports')).json()];
+  const p = ports.find((x) => x.id === port);
+  await fetch('/api/session');
+
+  const t0 = performance.now(), log = [];
+  const hex = (u8, n = 48) => [...u8.subarray(0, n)].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  const Native = window.WebSocket;
+  window.WebSocket = class extends Native {
+    constructor(...a) {
+      super(...a);
+      log.push({ t: 0, dir: 'open', url: String(a[0]) });
+      this.addEventListener('message', (e) => { const u = new Uint8Array(e.data); log.push({ t: Math.round(performance.now() - t0), dir: 'rx', len: u.length, head: hex(u, 24) }); });
+      this.addEventListener('close', (e) => log.push({ t: Math.round(performance.now() - t0), dir: 'close', code: e.code, reason: e.reason }));
+    }
+    send(d) {
+      const u = d instanceof ArrayBuffer ? new Uint8Array(d) : new Uint8Array(d.buffer, d.byteOffset, d.byteLength);
+      log.push({ t: Math.round(performance.now() - t0), dir: 'tx', len: u.length, head: hex(u) });
+      super.send(d);
+    }
+  };
+  window.__capture = () => log;
+
+  const n = port - 1; // HKC numbers ports from 0
+  history.replaceState(null, '', `${location.pathname}${location.search}#${new URLSearchParams({
+    portId: `P_${device.deviceId}_${n}`, portNo: n, channelName: p.name, portType: p.type, portPermission: 'CCC',
+    appId: `${Date.now()}_${Math.floor(Math.random() * 1e15)}`, embedded: 'true', numberOfTargets: '1',
+  })}`);
+  // Load HKC's own page into this window so the patched WebSocket is the one it uses.
+  const html = await (await fetch('/jsclient/Client.asp')).text();
+  document.open(); document.write(html); document.close();
+})();
+</script>
+</head>
+<body>capturing…</body>
+</html>

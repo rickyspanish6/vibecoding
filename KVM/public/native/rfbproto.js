@@ -20,6 +20,8 @@ const C2S = {
   KVM_SWITCH: 137, PING_REQUEST: 148, POWER_SWITCH: 156,
 };
 
+// HKC's wire value on this KX is 0xd081 = ICT | 13 << 12 (not the 9 in its source defaults).
+export const DEFAULT_QUALITY = 13;
 export const ENCODING = { LRLE_HARD: 128, ICT: 129, ICT_4K_420: 131 };
 export const MOUSE = { LEFT: 1, MIDDLE: 2, RIGHT: 4 };
 export const AUTH_HTTP_SESSION_ID = 1;
@@ -66,12 +68,12 @@ export const NOTIFICATIONS = {
 
 /** Byte queue that readers can await. Chunk boundaries of the transport are irrelevant to the protocol. */
 export class ByteStream {
-  constructor() { this.chunks = []; this.length = 0; this.waiters = []; this.failure = null; }
+  constructor() { this.chunks = []; this.length = 0; this.waiters = []; this.failure = null; this.received = 0; this.consumed = 0; }
 
   push(data) {
     const u8 = data instanceof Uint8Array ? data : new Uint8Array(data);
     if (!u8.length) return;
-    this.chunks.push(u8); this.length += u8.length; this.#wake();
+    this.chunks.push(u8); this.length += u8.length; this.received += u8.length; this.#wake();
   }
 
   fail(err) { this.failure = err; this.#wake(); }
@@ -90,7 +92,7 @@ export class ByteStream {
       out.set(c.subarray(0, k), o); o += k;
       if (k === c.length) this.chunks.shift(); else this.chunks[0] = c.subarray(k);
     }
-    this.length -= n;
+    this.length -= n; this.consumed += n;
     return out;
   }
 
@@ -107,7 +109,7 @@ export class ByteStream {
     const n = this.length, out = new Uint8Array(n);
     let o = 0;
     for (const c of this.chunks) { out.set(c, o); o += c.length; }
-    this.chunks = []; this.length = 0;
+    this.chunks = []; this.length = 0; this.consumed += n;
     return out;
   }
 
@@ -155,7 +157,8 @@ export const write = {
     return b;
   },
   ping: (n) => { const b = new Uint8Array(8); b[0] = C2S.PING_REQUEST; new DataView(b.buffer).setInt32(4, n); return b; },
-  videoSettingsRequest: () => { const b = new Uint8Array(5); b[0] = C2S.VIDEO_SETTINGS_REQUEST; b[4] = 1; return b; },
+  // 2 bytes, as captured from HKC. (A 5-byte version desyncs the KX's parser: it reads the extra bytes as a new message.)
+  videoSettingsRequest: () => Uint8Array.of(C2S.VIDEO_SETTINGS_REQUEST, 1),
   videoRefresh: () => Uint8Array.of(C2S.VIDEO_REFRESH),
 };
 
@@ -168,6 +171,7 @@ export async function challengeProof(challenge, sessionId) {
   return hex(await crypto.subtle.digest('SHA-256', te.encode(text.substring(1, 65) + sessionId)));
 }
 
+const PORT_SWITCH_COMPLETED = 0x1202000b;
 const VERSION_RE = /^e-RIC RFB 01\.(\d\d)\n?$/;
 const SUPPORTED_MINOR = new Set([29, 30, 31, 32, 33, 34]);
 
@@ -176,7 +180,7 @@ const SUPPORTED_MINOR = new Set([29, 30, 31, 32, 33, 34]);
  *   status, version, params, ports, fbformat, frame, notification, ready, message, closed.
  */
 export class RfbSession {
-  constructor({ send, sessionId, portNo, portId, appId, quality = 9, on = () => {} }) {
+  constructor({ send, sessionId, portNo, portId, appId, quality = DEFAULT_QUALITY, on = () => {} }) {
     Object.assign(this, { send, sessionId, portNo, portId, appId, quality, on });
     this.stream = new ByteStream();
     this.inInit = true;
@@ -188,11 +192,15 @@ export class RfbSession {
 
   start() { this.send(te.encode('e-RIC AUTH=')); return this.run(); }
   feed(data) { this.stream.push(data); }
-  close(err) { clearInterval(this.pingTimer); this.stream.fail(err ?? new Error('closed')); }
+  close(err) { this.closed = true; clearInterval(this.pingTimer); this.stream.fail(err ?? new Error('closed')); }
 
   async run() {
     try {
-      for (;;) await this.#dispatch(await this.stream.u8());
+      for (;;) {
+        const type = await this.stream.u8(), before = this.stream.consumed - 1;
+        await this.#dispatch(type);
+        this.on('trace', { type, bytes: this.stream.consumed - before });
+      }
     } catch (err) {
       clearInterval(this.pingTimer);
       this.on('closed', err);
@@ -269,12 +277,13 @@ export class RfbSession {
       case MSG.USER_NOTIFICATION: {
         const v = await s.view(7);
         const code = v.getUint32(3), flags = v.getInt8(0);
+        if (code === PORT_SWITCH_COMPLETED) setTimeout(() => { if (!this.inInit && !this.closed) this.send(write.videoRefresh()); }, 500);
         return this.on('notification', { code, flags, quit: !!(flags & 1), severity: (code >> 24) & 15, text: NOTIFICATIONS[code] ?? `KX notification 0x${code.toString(16)}` });
       }
       case MSG.VIDEO_SETTINGS: await s.read(27); return;
       case MSG.OSD_STATE: { await s.read(1); await s.u16(); await s.read(await s.u16()); return; }
       case MSG.KEYBOARD_LAYOUT: { await s.read(1); await s.read(await s.s16()); return; }
-      case MSG.SERVER_COMMAND: { await s.read(1); const kl = await s.u16(), vl = await s.u16(); await s.read(kl + vl); return; }
+      case MSG.SERVER_COMMAND: { await s.read(1); const kl = await s.u16(), vl = await s.u16(); const key = await s.str(kl), value = await s.str(vl); return this.on('command', { key, value }); }
       case MSG.SERVER_RC_MESSAGE: { await s.read(3); const n = await s.s32(); const text = await s.str(n); return this.on('message', text); }
       case MSG.PING_REPLY: await s.read(7); return;
       case MSG.VM_MOUNTS_RESPONSE: await s.read(7); return;

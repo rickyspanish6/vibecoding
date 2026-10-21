@@ -78,10 +78,10 @@ await test('full handshake against a scripted KX, fed in 1-byte and random chunk
     await stage(cat(Uint8Array.of(5), z(7)));
     // 128: supported=1, width 1920, height 1080, pixel format, 3 pad
     await stage(cat(Uint8Array.of(128, 1), u16(1920), u16(1080), Uint8Array.of(16, 16, 1, 1), u16(31), u16(63), u16(31), Uint8Array.of(11, 5, 0), z(3)));
-    assert.deepEqual([...sent[7]], [2, 0, 0, 4, 0, 0, 0x90, 0x81, ...z(12)], 'ICT quality 9');
+    assert.deepEqual([...sent[7]], [2, 0, 0, 4, 0, 0, 0xd0, 0x81, ...z(12)], 'ICT quality 13, as HKC sends (0xd081)');
     assert.deepEqual([...sent[8]], [0, 0, 0, 0, 16, 16, 1, 1, 0, 31, 0, 63, 0, 31, 11, 5, 0, 0, 0, 0]);
     assert.deepEqual([...sent[9]], [3, 0, 0, 0, 0, 0, 7, 128, 4, 56]);
-    assert.deepEqual([...sent[10]], [145, 0, 0, 0, 1]);
+    assert.deepEqual([...sent[10]], [145, 1], 'video settings request is 2 bytes (5 bytes desyncs the KX)');
     assert.ok(events.some(([e, d]) => e === 'ready' && d.ict && !d.is4k));
     // one ICT chunk: flags 2, 1 rect, size; [pad][u24 total][x y w h enc][data]
     const total = 12 + rectData.length;
@@ -98,8 +98,12 @@ await test('full handshake against a scripted KX, fed in 1-byte and random chunk
     await stage(cat(Uint8Array.of(8, 0), z(26)));                      // video settings: 27 bytes
     await stage(cat(Uint8Array.of(132, 0), u16(3), u16(2), str('abc'), str('de'))); // server command
     await stage(cat(Uint8Array.of(170), u16(1), Uint8Array.of(2), u16(3), Uint8Array.of(0), u16(9), str('ab'), str('xyz'))); // usb profiles
+    const before = sent.length;
     await stage(cat(Uint8Array.of(3, 0, 0, 0), u32(0x1202000b)));
     assert.equal(events.filter(([e]) => e === 'notification').length, 2, 'stream still in sync after skipped messages');
+    assert.equal(sent.length, before, 'no refresh before the 500 ms delay');
+    await new Promise((r) => setTimeout(r, 600));
+    assert.deepEqual([...sent[before]], [146], 'video refresh 500 ms after "port switch completed", as HKC does');
     session.close();
     await new Promise((r) => setTimeout(r, 5));
   }
@@ -113,6 +117,22 @@ await test('unsupported protocol versions and unknown messages fail loudly', asy
     await new Promise((r) => setTimeout(r, 5));
     assert.ok(closed instanceof Error, 'expected an error');
   }
+});
+
+await test('client frames equal the bytes captured from HKC (hkc-capture.html, 2026-10-20)', () => {
+  const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, '0')).join(' ');
+  assert.equal(hex(write.login(1)), '20 01 01 00 00 00 00 00 00');
+  assert.equal(hex(write.clientInit(true)), '07 00 00 0c');
+  assert.equal(hex(write.kvmSwitch('P_000d5d11da6a_8')), '89 00 00 10 50 5f 30 30 30 64 35 64 31 31 64 61 36 61 5f 38');
+  assert.equal(hex(write.setEncodings(0xd081)), '02 00 00 04 00 00 d0 81 00 00 00 00 00 00 00 00 00 00 00 00');
+  assert.equal(hex(write.setPixelFormat({ bitsPerPixel: 16, depth: 16, bigEndian: true, trueColor: true, redMax: 31, greenMax: 63, blueMax: 31, redShift: 11, greenShift: 5, blueShift: 0 })),
+    '00 00 00 00 10 10 01 01 00 1f 00 3f 00 1f 0b 05 00 00 00 00');
+  assert.equal(hex(write.fbUpdateRequest(false, 1920, 1080)), '03 00 00 00 00 00 07 80 04 38');
+  assert.equal(hex(write.fbUpdateRequest(true, 1920, 1080)), '03 01 00 00 00 00 07 80 04 38');
+  assert.equal(hex(write.videoSettingsRequest()), '91 01');
+  assert.equal(hex(write.videoRefresh()), '92');
+  assert.equal(hex(write.ping(0)), '94 00 00 00 00 00 00 00');
+  assert.equal(hex(write.ping(2)), '94 00 00 00 00 00 00 02');
 });
 
 await test('input frames match what HKC sends', () => {

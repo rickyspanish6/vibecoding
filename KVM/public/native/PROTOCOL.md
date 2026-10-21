@@ -4,7 +4,8 @@ What the HKC (`/jsclient/Client.asp`, `js_kvm_client.*.min.js`) does on firmware
 reading its source. Implemented in [`rfbproto.js`](rfbproto.js). Status of each part is marked:
 
 - **[src]** read from the HKC source only, not yet seen on the wire
-- **[live]** confirmed against a real KX (firmware 3.10.0.5.4237, 2026-10-20) with `probe.mjs`
+- **[live]** confirmed against a real KX (firmware 3.10.0.5.4237, 2026-10-20) with `probe.mjs`, or by capturing real HKC with `hkc-capture.html`
+- **[capture]** bytes copied from a capture of real HKC talking to this KX (these are also fixtures in `selftest.mjs`)
 
 ## Transport
 
@@ -32,9 +33,18 @@ reading its source. Implemented in [`rfbproto.js`](rfbproto.js). Status of each 
 | 7 | C→S | `33`, length u8 (=65), 64 lowercase hex chars of `SHA256(utf8(body[1..65]) + utf8(sessionId))`, `0`. **[live]** The KX accepted this proof, so the "take what is buffered" challenge handling worked |
 | 8 | S→C | type `34` + 7 bytes (auth successful) **[live]** |
 | 9 | S→C | type `18` connection parameters (see below), then the port list (type `4`, or `172` extended), then type `7` (the user name). **[live]** all three parsed; which port-list type 3.10 sends was not recorded |
-| 10 | C→S | on receiving type `7` during init, **in this order**: client init (`7`, `0`, u16 flags: `4` if appId, `\|8` extended port list), associated tag (`8`, `0`, u16 len, appId), KVM switch (`137`, `0`, u16 len, portId). **[live]** Sending the tag *before* the client init made the KX stay silent for 25 s (no server init, no error). The corrected order is **[src]** only: the follow-up probes were refused (see below) |
-| 11 | S→C | `5` server init (7 bytes), `128` framebuffer format |
-| 12 | C→S | on the first `128`: set encodings, set pixel format, update request (non-incremental), then video-settings request; ping every 20 s |
+| 10 | C→S | on receiving type `7` during init, **in this order**: client init (`07 00 00 0c`: flags `4` if appId, `\|8` extended port list), associated tag (`08 00 <u16 len> <appId>`), KVM switch (`89 00 <u16 len> <portId>`). **[capture]** |
+| 11 | S→C | `5` server init (8 bytes), `16` OSD, `9` keyboard layout, `132` commands, then the first `128` framebuffer format (22 bytes) **[live]** |
+| 12 | C→S | on the first `128`, about 340 ms after the switch **[capture]**: set encodings (`02 00 00 04 00 00 d0 81` + 12 zero bytes, i.e. ICT with quality 13), set pixel format (`00 00 00 00 10 10 01 01 00 1f 00 3f 00 1f 0b 05 00 00 00 00`), update request non-incremental (`03 00 00 00 00 00 07 80 04 38`), **video settings request, exactly 2 bytes: `91 01`**. Then a ping every 20 s (`94 00 00 00 00 00 00 <n>`) |
+| 13 | S→C | more `132` commands, a second `128`, `167`, `168`, `170` (about 10 KB of USB profiles), notification `0x1202000b` "port switch completed", then `19` (ack of the pixel format) **[live]** |
+| 14 | C→S | **500 ms after "port switch completed": video refresh, 1 byte `92`** **[capture]**. HKC then sends a non-incremental update request on the second `128`, and an incremental one (`03 01 …`) after every decoded frame |
+| 15 | S→C | OSD (`16`) and `132` status messages while the target's video locks; then framebuffer updates (about 1.4–2 s after connecting on a target with a signal) **[live]** |
+
+**Gotcha, found the hard way:** the video settings request is 2 bytes. Sending it as 5 bytes (`91 00 00 00 01`) makes the
+KX's parser read the 3 extra bytes as the start of a new message (`00` = set pixel format, which wants 19 more
+bytes), so it swallows the following requests. Symptoms: no frames at all, and the KX drops the socket as soon
+as the next update request arrives. The KX parses the stream strictly by message type, so every client message
+must have exactly the length HKC uses.
 
 `portId` is the KX's unique port id, e.g. `P_<device mac>_<n>` where n is **0-based** (the KX UI's port 8 is `…_7`).
 HKC takes it from its URL hash; otherwise it looks it up in the port list by `portNo`. The port list's `portNo` is
@@ -48,7 +58,7 @@ not use for matching when a portId is given.
 | 0 | framebuffer update | s8 flags, u16 rectCount, u32 imageSize, +8 bytes timestamp if `flags & 1`; then the image data below |
 | 3 | user notification | s8 flags (`&1` = the server is about to quit), skip 2, u32 code. Severity = `code >> 24 & 15` (0 error, 1 warn, 2 info) |
 | 4 | port list | skip 1, u16 n; per port: u8 kvmPerm, u8 vmPerm, u16 portNo, u16 idLen, u16 nameLen, id, name. HKC uses this layout when minor ≤ 31 |
-| 5 | server init | skip 3, s32 serverId |
+| 5 | server init | skip 3, s32 serverId (7 bytes after the type byte) |
 | 7 | string | skip 1, u16 len, text (the user name during init) |
 | 8 | video settings | skip 1, 8×s8, 9×s16 (27 bytes) |
 | 9 | keyboard layout | skip 1, s16 len, text |
@@ -57,7 +67,7 @@ not use for matching when a portId is given.
 | 19 | ack pixel format | skip 3, 4×u8, 3×u16, 3×u8, skip 3 (19 bytes) |
 | 128 | framebuffer format | s8 supported, u16 width, u16 height, then pixel format (bpp, depth, bigEndian, trueColor, r/g/b max u16, r/g/b shift u8), skip 3 (21 bytes) |
 | 131 | server RC message | skip 3, s32 len, text |
-| 132 | server command | skip 1, u16 keyLen, u16 valLen, key, value |
+| 132 | server command | skip 1, u16 keyLen, u16 valLen, key, value. Seen live: `video` = `no` / `unstable` / `stable` (the target's signal; `unstable` then `stable` about 1.1 s after connecting, frames follow), `current_mouse_mode` = `absolute`, `support_mouse_absolute` / `_auto` / `_direct` = `yes`, `rc_users`, `PowerCtrl` = `disable`, `CapsLockLED` / `NumLockLED` / `ScrollLockLED`, `HideToolMenuBar`, `audio` |
 | 149 | ping reply | skip 3, s32 |
 | 166 | VM mount response | u8, u8, skip 1, s32 (7 bytes) |
 | 167 | VM share table | u8 n; per entry: s8 hostLen, s8 imageLen, host, image |
@@ -74,7 +84,7 @@ Notification codes seen/known: `0x10020005` all KVM links busy ("Maximum number 
 
 ### Image data
 
-With `ict_enc` ≠ `no` (the usual case for the DVM CIMs), each update carries **one chunk**:
+With `ict_enc` ≠ `no` (the usual case for the DVM CIMs), each update carries **one chunk** **[live]** (HKC receives the 8-byte update header and the chunk as two WebSocket messages; 1920×1080 arrives as a 1920×1088 rect, about 120 KB at quality 13, roughly 10 updates per second on a desktop):
 
 ```
 skip 1 · u24 total (includes the 12-byte header) · x u16 · y u16 · w u16 · h u16 · encoding i32 · data (total-12 bytes)
@@ -91,14 +101,14 @@ quality. The data is not interpretable on the main thread: HKC posts it to the d
 | Type | Name | Layout |
 |------|------|--------|
 | 0 | set pixel format | 20 bytes: type, 3 pad, bpp, depth, bigEndian, trueColor, u16 r/g/b max, u8 r/g/b shift, 3 pad. HKC sends 16 bpp BE 565 |
-| 2 | set encodings | type, pad, u16 `4`, then four u32 (only the first is used): ICT = `129 \| quality<<12` (HKC default quality 9); 4K = `131 \| quality<<12`; non-ICT = `128 \| q<<12` |
+| 2 | set encodings | type, pad, u16 `4`, then four u32 (only the first is used): ICT = `129 \| quality<<12`; 4K = `131 \| quality<<12`; non-ICT = `128 \| q<<12`. **[capture]** HKC sends `0xd081`, i.e. quality **13** (the 9 in its source is overridden), and the KX answers with frames whose encoding word is `0xd081` too |
 | 3 | framebuffer update request | type, incremental u8, u32 `0` (x, y), u16 width, u16 height |
 | 4 | key event | type, `0`, u16 `(key & 0x7fff) \| (down ? 0x8000 : 0)`. `key` is the physical-key number from the table in `rfbproto.js` (`KEY`), derived from `KeyboardEvent.code` |
 | 5 | pointer event (absolute) | type, u8 buttons (1 left, 2 middle, 4 right), u16 x, u16 y, u16 wheel (-1/0/1). `147` is the relative variant |
 | 7 | client init | see handshake |
 | 8 | associated tag | type, `0`, u16 len, bytes |
 | 137 | KVM switch | type, `0`, u16 len, portId |
-| 145 | video settings request | type, s32 `1` |
+| 145 | video settings request | **2 bytes**: `91 01` **[capture]** (a 5-byte form exists in HKC's writer but is not what it sends) |
 | 146 | video refresh | type only |
 | 148 | ping request | type, 3 pad, s32 counter |
 | 156 | power switch | type, u8 (0 on, 1 off, 2 cycle) (not wired up) |
@@ -123,21 +133,20 @@ loaded from the KX at runtime.
 Files loaded from the KX through the proxy: `/js/js_decoding_worker.min.js`, `/js/wasm/wasm_decoder.js`,
 `/js/wasm/wasm_decoder_bg.wasm`. Nothing else from Raritan is loaded.
 
-## Open questions (resolve with a live capture)
+## Open questions
 
-1. Is the port list sent as type `4` or `172` on 3.10? (Both parse paths exist.)
-2. Server init (`5`) and the first format (`128`) after the corrected client-init order: **never seen live**.
-3. The framebuffer update chunk layout, the decoder worker round trip and `ycbcr.js` output: **never seen live**.
-4. Non-ICT path padding rule.
-5. After a few successful logins, the KX answered every further RFB login with notification `0x10000001`
-   (`PP_ERR_RFB_NO_PERM`, quit flag) straight after the login message, even though the same dashboard session id
-   was still valid for the web UI, and its web pages then became slow (`ETIMEDOUT` in the dashboard's keep-alive).
-   Cause unknown: a session already bound to a console, a per-session limit, or the KX being stressed by repeated
-   probe connections. Re-run `probe.mjs` once the switch is idle and settled.
-
-## Addendum (parent session)
-
-The `0x10000001` / `PP_ERR_RFB_NO_PERM` refusals above are most likely explained by the dashboard reusing an expired
-KX web session, not by a KX limit or load problem: its session check accepted the `/akc` redirect the KX sends for a
-dead session (fixed in v1.3.1). The KX web interface was responsive when checked afterwards. The cookie that carries
-the session id on firmware 3.10 is `pp_session_id`.
+1. Is the port list sent as type `4` or `172` on 3.10? (Both parse paths exist; the data parsed correctly.)
+2. The non-ICT (LRLE) path, including its padding rule, is untested.
+3. Whether the KX needs the 500 ms refresh after the switch: it is sent (as HKC does), but frames also flowed
+   without it in earlier probes once the desync was fixed.
+4. A target with no video signal (port 1, B25-CTL-XAG00) sends no framebuffer update at all; the `video`
+   server command (`no`) says so, and `kxclient.js` reports it as the status "no video signal".
+   (The first server messages on a port with signal were `video = no`, `unstable`, `stable`.)
+7. Mouse: the KX reports `current_mouse_mode = absolute`, and absolute pointer events move the remote cursor, but
+   the final position was off (sent canvas 1000,800, remote cursor near 881,676). HKC also writes a
+   `current_mouse_mode` connection parameter (type 155) and offers mouse sync (type 134); neither is implemented,
+   and the coordinate mapping HKC uses in this mode has not been checked.
+5. Earlier `0x10000001` (`PP_ERR_RFB_NO_PERM`) refusals were the dashboard reusing a dead KX web session, not a
+   protocol issue (fixed in the dashboard).
+6. The KX keeps a console session on its books for about 30 s after the socket closes, so the port shows as busy
+   (SNMP status 3) and a quick reconnect can be refused. Plan reconnect delays accordingly.

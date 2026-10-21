@@ -5,7 +5,7 @@
 //   const kx = new KxClient({ canvas, portNo: 8, onstatus: console.log, onerror: console.error });
 //   await kx.connect();   ...   kx.disconnect();
 
-import { RfbSession, write, keyFromCode, MOUSE } from './rfbproto.js';
+import { RfbSession, write, keyFromCode, MOUSE, DEFAULT_QUALITY } from './rfbproto.js';
 import { renderYCbCr } from './ycbcr.js';
 
 const WORKER_URL = '/js/js_decoding_worker.min.js'; // served by the KX through the proxy
@@ -19,10 +19,10 @@ export class KxClient {
    * @param {number} [o.portNo]     KX port number as shown in the KX UI (1-based, as in the port list)
    * @param {string} [o.portId]     or the KX's unique port id (P_<device>_<n>); resolved from the port list if omitted
    * @param {string} [o.sessionId]  KX web session id; defaults to the kvm_session_id cookie (set by /api/session)
-   * @param {number} [o.quality]    ICT quality 0-9 (default 9)
+   * @param {number} [o.quality]    ICT quality (default 13, what HKC sends on this KX)
    * @param {boolean} [o.input]     attach keyboard/mouse handlers to the canvas (default true)
    */
-  constructor({ canvas, portNo, portId, sessionId, appId, quality = 9, input = true, onstatus = () => {}, onerror = () => {}, onresolution = () => {}, onstats = () => {} }) {
+  constructor({ canvas, portNo, portId, sessionId, appId, quality = DEFAULT_QUALITY, input = true, onstatus = () => {}, onerror = () => {}, onresolution = () => {}, onstats = () => {} }) {
     Object.assign(this, { canvas, portNo, portId, sessionId, quality, input, onstatus, onerror, onresolution, onstats });
     this.appId = appId ?? `${Date.now()}_${Math.floor(Math.random() * 1e15)}`;
     this.ctx = canvas.getContext('2d');
@@ -111,6 +111,9 @@ export class KxClient {
         break;
       }
       case 'ready': this.onstatus('streaming'); break;
+      case 'command': // the KX reports the target's signal state: video = no | unstable | stable
+        if (data.key === 'video') { this.video = data.value; this.onstatus(data.value === 'no' ? 'no video signal' : `video ${data.value}`); }
+        break;
       case 'frame': this.#decode(data); break;
       case 'notification':
         if (data.severity === 0 || data.quit) { this.onerror(Object.assign(new Error(data.text), { code: data.code })); }

@@ -6,7 +6,7 @@
 // It only connects if nothing is using a console (no proxied console socket, no busy port), and disconnects
 // after a few frames. The session id comes from the dashboard server's own login (/api/session) and is never printed.
 
-import { RfbSession } from './rfbproto.js';
+import { RfbSession, write } from './rfbproto.js';
 
 const base = process.env.KX_DASHBOARD ?? 'http://127.0.0.1:3000';
 const port = Number(process.argv[2]);
@@ -40,12 +40,18 @@ const session = new RfbSession({
   send: (b) => ws.readyState === 1 && ws.send(b),
   sessionId, portNo: port, appId: `probe_${Date.now()}`,
   on: (event, data) => {
-    if (event === 'frame') {
+    if (event === 'trace') { if (process.env.KX_PROBE_TRACE) log(`  msg type ${data.type} (${data.bytes} bytes)`); }
+    else if (event === 'frame') {
       frames++;
       log(`frame #${frames}: ${data.w}x${data.h} at ${data.x},${data.y}, encoding 0x${(data.encoding >>> 0).toString(16)} (quality ${(data.encoding >> 12) & 15}), ${data.data.length} bytes`);
-      session.requestUpdate(true);
+      if (!process.env.KX_PROBE_NOREQ) setTimeout(() => {
+        const incremental = process.env.KX_PROBE_FULL !== '1';
+        if (process.env.KX_PROBE_DIMS) { const [w, h] = process.env.KX_PROBE_DIMS.split('x').map(Number); session.send(write.fbUpdateRequest(incremental, w, h)); }
+        else session.requestUpdate(incremental);
+      }, Number(process.env.KX_PROBE_DELAY ?? 0));
       if (frames >= 5) finish(0);
     } else if (event === 'closed') { log('closed:', data?.message); finish(frames ? 0 : 1); }
+    else if (event === 'command') log(`command ${data.key} = ${data.value}`)
     else if (event === 'ports') log('ports:', data.map((p) => `${p.portNo}=${p.portName}`).join(', '));
     else if (event === 'params') log('params:', JSON.stringify(data));
     else log(event, typeof data === 'object' ? JSON.stringify(data) : data);
@@ -55,5 +61,5 @@ const session = new RfbSession({
 ws.onopen = () => { log('websocket open'); session.start(); };
 ws.onmessage = (e) => { bytes += e.data.byteLength; session.feed(e.data); };
 ws.onclose = (e) => { log(`socket closed (${e.code}); received ${bytes} bytes`); session.close(new Error('socket closed')); };
-ws.onerror = () => log('websocket error');
+ws.onerror = (e) => log('websocket error', e?.message ?? '', e?.error?.message ?? '');
 setTimeout(() => { log('timeout'); finish(frames ? 0 : 1); }, 25000);

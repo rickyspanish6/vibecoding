@@ -1,4 +1,4 @@
-# Native console client (work in progress)
+# Native console client
 
 Our own client for the KX III console, to replace the embedded Raritan HKC iframe. No Raritan UI code runs; only
 the video **decoder** is Raritan's, loaded from the KX at runtime through the dashboard's proxy.
@@ -9,7 +9,8 @@ the video **decoder** is Raritan's, loaded from the KX at runtime through the da
 | `kxclient.js` | `KxClient`: WebSocket + decoder worker + canvas + keyboard/mouse. `new KxClient({ canvas, portNo }).connect()` |
 | `ycbcr.js` | YCbCr → RGB conversion of the decoder's output (port of HKC's renderer) |
 | `index.html` | Dev page at `/native/index.html` (target picker, connect, Ctrl-Alt-Del, log) |
-| `probe.mjs` | Node tool: handshake against the live KX, prints what it sends, never decodes |
+| `probe.mjs` | Node tool: handshake against the live KX, prints what it sends (`KX_PROBE_TRACE=1` for every message), never decodes |
+| `hkc-capture.html` | Dev tool: runs Raritan's real HKC with a logging WebSocket so its exact bytes can be read (`/native/hkc-capture.html?port=9`, then `__capture()` in the console). Opens a real console |
 | `selftest.mjs` | Offline tests against a scripted server and the renderer: `node public/native/selftest.mjs` |
 | `PROTOCOL.md` | The wire format, with each part marked verified-live or read-from-source |
 
@@ -22,17 +23,29 @@ Through the dashboard proxy (same origin), all fetched by the decoder worker its
 
 ## Verification (2026-10-20, firmware 3.10.0.5.4237)
 
-Verified live: WebSocket through the proxy, version `01.31`, session-id login and challenge proof (accepted by the
-KX), connection parameters, port list, the user-name message, the decoder worker starting with WASM, the dev page
-loading. **Not verified live: server init, framebuffer format, any video frame, decoding, rendering, input.**
-After the first successful probes the KX answered every RFB login with `PP_ERR_RFB_NO_PERM` and the proxied web
-pages timed out, so live testing was stopped (details at the end of `PROTOCOL.md`). **Likely cause, found afterwards:**
-the dashboard was reusing a dead KX web session (its session check wrongly accepted the KX's `/akc` redirect, fixed
-in v1.3.1), and a dead session cookie explains "no permission". The KX itself was healthy (login page in 0.25 s,
-SNMP fine). Re-run the probe on v1.3.1 or later before concluding anything about the KX.
+**Verified live**
+- Handshake through the proxy: version `01.31`, session-id login and challenge proof, parameters, port list, init.
+- **Video**: `/native/index.html` streams port 9 (B25-CTL-OPC02, DVM-DP) at 1920×1080, 11–13 fps, about 6 Mbit/s,
+  decoded by the KX's own WASM worker and drawn with `ycbcr.js`: the canvas shows the correct Windows desktop
+  (readable text, right colours). `probe.mjs` gets 5 frames in 0.3 s and the connection stays up.
+- The client's frames equal the bytes captured from real HKC (fixtures in `selftest.mjs`).
+- Pointer events are accepted and the remote cursor follows.
+- Clean disconnect (the KX lists the port as busy for about 30 s afterwards).
 
-To pick this up: make sure no console is open, then run `node public/native/probe.mjs <port>` (it refuses to run
-while a console socket or busy port exists), and once frames arrive open `/native/index.html` and connect.
+**Not fully verified**
+- Absolute mouse accuracy: the KX reports `current_mouse_mode = absolute`, but a sweep to canvas (1000, 800) put the
+  remote cursor near (881, 676). HKC's mouse-mode parameter and mouse sync are not implemented yet.
+- Keyboard: key frames are built and sent, but no key was typed on the real target in testing (only mouse moves).
+- Mouse buttons and wheel, Ctrl-Alt-Del, video refresh button, resolution changes, the non-ICT (LRLE) path,
+  4K targets, reconnect behaviour.
+- Port 1 (B25-CTL-XAG00) has no video signal; the KX sends `video = no` and no frames, so the canvas stays black
+  (the client reports "no video signal"; that status text was added after the live runs, so it is only covered by the protocol trace).
+
+The earlier "black canvas, 0 fps" on port 1 was two things: no signal on that target, and a client bug that
+desynced the KX's parser (the video settings request was 5 bytes instead of HKC's 2; see `PROTOCOL.md`).
+
+To re-verify after a firmware update: close every console, run `node public/native/probe.mjs <port>`, then
+connect from `/native/index.html`. `node public/native/selftest.mjs` runs the offline tests.
 
 ## Server changes needed to ship it in the dashboard
 
