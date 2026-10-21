@@ -278,7 +278,7 @@ function renderSessions(sessions) {
     const li = el('li'), top = el('div', 'row');
     const name = s.portId ? (s.portName ?? `Port ${s.port}`) : 'Web login';
     top.append(el('span', s.portId ? 'tag live' : 'tag', s.self ? `${name} · this dashboard` : name));
-    if (!s.self && (s.portId || s.id)) {
+    if (s.portId || (!s.self && s.id)) {
       const btn = el('button', 'mini', s.portId ? 'Disconnect' : 'Log off');
       btn.title = s.portId ? 'End this console session' : 'Force this web login off the KX';
       btn.onclick = async () => {

@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.6.1] - 2026-10-21
+
+### Fixed
+- Console sessions that use this app's own web login can now be disconnected from their ports (Disconnect, Disconnect
+  all). They were skipped because they share the login's session id; the login itself is still never logged off.
+  Port-mode disconnect now takes every console row of a login, not just the first.
+
+### Verified live on B25-CTL-MAC01 (native client, firmware 3.10.0.5.4237)
+- Pointer: 24 of 24 positions found at three display sizes (800, 560 and 400 px wide); fit slope 0.994 (x) and
+  1.004 (y); a constant offset of about 8 px across and 12 px down, within one video tile. The earlier miss was
+  specific to the Windows target it was measured on.
+- Keyboard: Cmd+Space opened Spotlight on the target; a held Shift is released on blur (held 1 before, 0 after); no
+  keys held at the end; Escape, Cmd+A and Backspace sequences ran without errors.
+- Clicks, right click and wheel were sent without errors.
+
+### Not verified
+- The typed text itself was not captured on screen, and the effect of clicks and wheel was not inspected.
+- The dashboard's Native (beta) mode has not been run against a live console. Raritan's client stays the default.
+- Auto-reconnect can fight another dashboard tab for the KX's single channel (each reconnect first ends other
+  consoles); it gives up after 3 tries in 2 minutes.
+
 ## [1.6.0] - 2026-10-21
 
 ### Added

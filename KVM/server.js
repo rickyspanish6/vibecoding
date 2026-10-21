@@ -258,7 +258,11 @@ async function readSessions() {
 async function kick(ids, mode) {
   if (MOCK) return [];
   const { nonce, sessions } = await readUsersByPort();
-  const targets = ids.map((id) => sessions.find((s) => s.id === id)).filter((s) => s && !s.self && (mode === 'logoff' || s.portId));
+  // Never log this app's own web login off, but its console sessions (they share that login's id) can be
+  // disconnected from their ports like anyone else's.
+  // Port mode takes every console row of the named logins (one login can hold several); logoff takes one row per login.
+  const rows = sessions.filter((s) => ids.includes(s.id) && (mode === 'logoff' ? !s.self : s.portId));
+  const targets = mode === 'logoff' ? rows.filter((s, i) => rows.findIndex((r) => r.id === s.id) === i) : rows;
   if (!targets.length) return sessions;
   const form = new URLSearchParams({ one_time_nonce: nonce, __templates__: ' umusersport', selected_num: String(targets.length) });
   form.set(mode === 'port' ? 'action_disconnect_multiple_ports' : 'action_logoff_multiple_users', '1');
@@ -446,7 +450,7 @@ const server = createServer(async (req, res) => {
     // Everyone else's console sessions, so the single remote channel is free. Never this app's own session.
     if (pathname === '/api/sessions/disconnect-all' && req.method === 'POST') {
       await readJson(req);
-      const others = (await readSessions()).filter((s) => !s.self && s.portId).map((s) => s.id);
+      const others = [...new Set((await readSessions()).filter((s) => s.portId).map((s) => s.id))];
       return json(res, 200, { disconnected: others.length, sessions: others.length ? await kick(others, 'port') : await readSessions() });
     }
 
