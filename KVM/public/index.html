@@ -98,8 +98,8 @@
     <h2 id="title">Select a target</h2><span class="chip" id="state" hidden></span><span class="chip" id="type" hidden></span>
     <span class="spacer"></span>
     <a class="link" id="raritan" target="_blank" rel="noopener" hidden>Open in Raritan’s client</a>
-    <select id="clientMode" class="sel" aria-label="Console client" title="Console client. Native is a beta: pointer and keyboard are still being verified.">
-      <option value="raritan">Raritan client</option><option value="native">Native (beta)</option>
+    <select id="clientMode" class="sel" aria-label="Console client" title="Console client. Native is the default; switch to the Raritan client if something doesn't work.">
+      <option value="native">Native client</option><option value="raritan">Raritan client (classic)</option>
     </select>
     <span class="stat" id="nstat"></span>
     <button class="btn stop" id="cad" hidden title="Send Ctrl-Alt-Del to the target">Ctrl-Alt-Del</button>
@@ -242,7 +242,7 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
       if (!busy) { connecting = false; return; }
       closeNative(); connected = null; renderList(); s.replaceChildren(); // drop the failed client so the KX releases the channel
     }
-    throw new Error('The KX still reports its remote channel as in use. Another client may be connected (see its Connected Users list).');
+    throw new Error('The KX still reports its remote channel as in use. Another client may be connected (see the list at the bottom left).' + (native ? ' If native connections keep failing, try the Raritan client in the selector.' : ''));
   } catch (e) {
     if (mine === attempt) { connecting = false; connected = null; message('Could not connect', e.message); renderList(); renderDetail(true); }
   }
@@ -303,7 +303,7 @@ async function loadSessions() {
   } catch { $('sessions').hidden = true; } // no KX login or SSH set up: the panel just stays hidden
 }
 
-// Which console client to use: Raritan's embedded HKC (default) or our native client (beta).
+// Which console client to use: our native client (default) or Raritan's embedded HKC as the classic fallback.
 const clientMode = () => $('clientMode').value;
 function closeNative() { nativeClient?.disconnect(); nativeClient = null; $('nstat').textContent = ''; }
 

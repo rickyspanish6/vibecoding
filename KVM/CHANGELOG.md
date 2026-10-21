@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.7.0] - 2026-10-21
+
+### Changed
+- **The native client is now the default console.** Raritan's embedded client remains available as "Raritan client
+  (classic)" in the selector, and a saved choice in the browser is kept. A failed native connect suggests switching.
+
+### Verified live through the dashboard (B25-CTL-MAC01 and B25-CTL-OPC02, firmware 3.10.0.5.4237)
+- Click a target and the native console connects: 1920x1080, scaled to fit the window, about 20 fps, blue LED,
+  Connected chip, Ctrl-Alt-Del and Refresh video buttons, sessions panel entry.
+- Typing on the Mac: Cmd+Space opened Spotlight and "Hello, World! 123" appeared exactly (capitals, comma,
+  exclamation mark, digits) using real key sequences with Shift; the field was cleared and Spotlight closed.
+- Pointer: a real right-click on the desktop opened the Mac's context menu with its corner on the click point.
+- Switching MAC01 to OPC02 connected in about 5 s; Disconnect closed the console and the proxy showed no open socket.
+
+### Not verified
+- Wheel, left click effects, Ctrl-Alt-Del, Refresh video, resolution changes, 4K, and keyboard on the Windows targets.
+- Keys sent as a shifted press without a separate Shift key event (some automation tools) arrive unshifted; real
+  keyboards always send the Shift event, and this matches Raritan's client.
+
 ## [1.6.1] - 2026-10-21
 
 ### Fixed
