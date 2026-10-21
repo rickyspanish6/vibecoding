@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.4.0] - 2026-10-20
+
+### Added
+- **Experimental** native console client (`public/native/`, dev page at `/native/index.html`): our own implementation of
+  the KX's `e-RIC RFB` protocol (handshake, session-id login, input frames) that renders to a canvas. Only Raritan's
+  video decoder is reused, loaded from the KX at runtime. It is not wired into the dashboard yet.
+- `PROTOCOL.md` documenting the wire format, and an offline self-test (`node public/native/selftest.mjs`).
+
+### Known limits
+- Verified live: handshake, login proof, parameters and decoder start. **Not yet seen live: video frames, rendering,
+  keyboard and mouse.** The embedded Raritan client remains the way to open a console.
+
 ## [1.3.1] - 2026-10-20
 
 ### Fixed

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KX Native Client</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f7f9; --panel: #fff; --line: #e3e6eb; --text: #14181f; --muted: #667085; --accent: #2563eb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0d1016; --panel: #151921; --line: #252b36; --text: #e8ebf0; --muted: #8b95a7; --accent: #5b8cff; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 12px; }
+  h1 { margin: 0; font-size: 18px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  select, button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  button.primary { background: var(--accent); color: #fff; border-color: transparent; font-weight: 600; }
+  button:disabled { opacity: .45; }
+  .stat { color: var(--muted); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .stage { background: #000; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: grid; place-items: center; min-height: 240px; }
+  canvas { max-width: 100%; height: auto; outline: none; cursor: default; }
+  pre { margin: 0; padding: 10px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--muted); font-size: 12px; max-height: 180px; overflow: auto; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>KX native client <span style="color:var(--muted);font-weight:400;font-size:13px">(dev page: our own /rfb client, no Raritan UI)</span></h1>
+  <div class="bar">
+    <select id="port" aria-label="Target"></select>
+    <button class="primary" id="connect">Connect</button>
+    <button id="disconnect" disabled>Disconnect</button>
+    <button id="cad" disabled>Ctrl-Alt-Del</button>
+    <button id="refresh" disabled>Refresh video</button>
+    <span class="stat" id="stat">idle</span>
+  </div>
+  <div class="stage"><canvas id="screen" width="640" height="360"></canvas></div>
+  <pre id="log" aria-live="polite"></pre>
+</main>
+<script type="module">
+import { KxClient } from './kxclient.js';
+
+const $ = (id) => document.getElementById(id);
+let kx = null, res = '';
+
+const log = (line) => { $('log').textContent += `${new Date().toLocaleTimeString()}  ${line}\n`; $('log').scrollTop = 1e9; };
+const busy = (on) => { $('connect').disabled = on; for (const id of ['disconnect', 'cad', 'refresh']) $(id).disabled = !on; $('port').disabled = on; };
+
+const ports = (await (await fetch('/api/ports')).json()).ports.filter((p) => p.up);
+$('port').replaceChildren(...ports.map((p) => Object.assign(document.createElement('option'), { value: p.id, textContent: `${p.id} · ${p.name}${p.busy ? ' (in use)' : ''}` })));
+
+$('connect').onclick = async () => {
+  busy(true);
+  kx = new KxClient({
+    canvas: $('screen'), portNo: Number($('port').value), // same numbering as the KX port list / SNMP index
+    onstatus: (s) => { log(`status: ${s}`); $('stat').textContent = s; },
+    onerror: (e) => { log(`error: ${e.message}`); $('stat').textContent = 'error'; if (!kx?.ws) busy(false); },
+    onresolution: ({ width, height }) => { res = `${width}×${height}`; log(`framebuffer ${res}`); },
+    onstats: ({ fps, kbps }) => { if (kx?.ws) $('stat').textContent = `${res} · ${fps} fps · ${kbps} kbit/s`; },
+  });
+  try { await kx.connect(); } catch (e) { log(`connect failed: ${e.message}`); kx = null; busy(false); }
+};
+$('disconnect').onclick = () => { kx?.disconnect(); kx = null; busy(false); $('stat').textContent = 'idle'; };
+$('cad').onclick = () => kx?.sendCtrlAltDel();
+$('refresh').onclick = () => kx?.refreshVideo();
+</script>
+</body>
+</html>
