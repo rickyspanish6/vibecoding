@@ -58,6 +58,48 @@ function updatePowerChip() {
   chip.title = s.text;
 }
 
+// --- Power command confirmation -----------------------------------------------------------------------------------------
+
+const ACTION_TEXT = {
+  on: ['Power on', 'Switches the outlets on.'],
+  off: ['Power off', 'Cuts power at once. The host is NOT shut down cleanly and can lose unsaved work or corrupt data.'],
+  cycle: ['Cycle power', 'Cuts power at once and turns it back on after the unit\'s reboot delay. The host is NOT shut down cleanly.'],
+};
+
+function confirmPower(p, action) {
+  const mapped = (cfg.mappings[p.id] ?? []).map((m) => ({ ...m }));
+  const [verb, warning] = ACTION_TEXT[action];
+  const picked = new Set(mapped.map((m) => `${m.device}:${m.outlet}`));
+  const typed = input('text', '', { placeholder: p.name, autocomplete: 'off', spellcheck: false });
+  const body = el('div', 'dlg-body');
+  body.append(el('p', `dlg-note ${action === 'on' ? '' : 'bad'}`, warning), el('h3', null, `Outlets for ${p.name}`));
+  const list = el('ul', 'devs');
+  for (const m of mapped) {
+    const dev = cfg.devices.find((d) => d.id === m.device), o = power.devices.find((d) => d.id === m.device)?.outlets.find((x) => x.n === m.outlet);
+    const li = el('li'), cb = input('checkbox'); cb.checked = true;
+    cb.onchange = () => { cb.checked ? picked.add(`${m.device}:${m.outlet}`) : picked.delete(`${m.device}:${m.outlet}`); sync(); };
+    const info = el('div', 'dev-info'); info.append(el('strong', null, `${dev?.name ?? m.device} · outlet ${m.outlet}`), el('span', 'meta', o ? `${o.name} · currently ${o.on ? 'ON' : 'OFF'}` : 'state unavailable'));
+    const lab = el('label', 'check'); lab.append(cb, info); li.append(lab); list.append(li);
+  }
+  body.append(list, field(`Type ${p.name} to confirm`, typed));
+  const result = note(''); body.append(result);
+  const go = button(verb, 'primary danger-fill', async () => {
+    go.disabled = true; typed.disabled = true; go.textContent = 'Sending…';
+    try {
+      const r = await api('POST', `/api/power/hosts/${p.id}/${action}`, { confirm: typed.value, outlets: mapped.filter((m) => picked.has(`${m.device}:${m.outlet}`)) });
+      result.className = 'dlg-note ok';
+      result.textContent = `${verb} sent. ` + r.results.map((x) => `${shortName(x.deviceName)} #${x.outlet}: ${x.on ? 'ON' : 'OFF'}`).join(', ') + (r.cycling ? '. Cycling: the outlet comes back on shortly.' : '');
+      go.textContent = 'Sent'; cancel.textContent = 'Close';
+      loadPower(true); if (r.cycling) setTimeout(() => loadPower(true), 9000);
+    } catch (e) { result.className = 'dlg-note bad'; result.textContent = e.message; go.textContent = verb; typed.disabled = false; sync(); }
+  });
+  const cancel = button('Cancel', '', () => document.getElementById('pwrDlg').close());
+  const sync = () => { go.disabled = typed.value !== p.name || picked.size === 0; };
+  typed.oninput = sync; sync();
+  dialogShell('pwrDlg', `${verb}: ${p.name}?`, body, [go, cancel]);
+  typed.focus();
+}
+
 // A host with its own client choice differs from the selector, so say so next to it.
 function updateClientHint() {
   const hint = document.getElementById('chint'), c = typeof selected !== 'undefined' && selected != null ? cfg.hosts?.[selected]?.client : '';
@@ -190,6 +232,7 @@ function renderDeviceForm(dev) {
 async function openHostSettings(p) {
   let draft = (cfg.mappings[p.id] ?? []).map((x) => ({ ...x }));
   let client = cfg.hosts?.[p.id]?.client ?? '';
+  let lockDraft = Boolean(cfg.hosts?.[p.id]?.locked);
 
   const usedBy = (device, outlet) => {
     for (const [port, list] of Object.entries(cfg.mappings)) {
@@ -237,15 +280,32 @@ async function openHostSettings(p) {
       body.append(note('Add a power device in Settings first.'));
     }
 
+    // Power control: acts on the SAVED mapping and only when it is not locked
+    const saved = cfg.mappings[p.id] ?? [], dirty = JSON.stringify(draft) !== JSON.stringify(saved), locked = Boolean(cfg.hosts?.[p.id]?.locked);
+    body.append(el('h3', null, 'Power control'));
+    if (!saved.length) body.append(el('p', 'dlg-help', 'Map and save an outlet above to enable power control.'));
+    else {
+      body.append(el('p', 'dlg-help', locked ? 'Locked: untick "Lock power controls" below and save to use these.' : dirty ? 'Save the outlet mapping first; power commands use the saved mapping.' : 'Switches real power. Every command asks you to type this host\'s name first, and is written to the audit log.'));
+      const row = el('div', 'pwr-row');
+      for (const [action, label, cls] of [['on', 'Power on', ''], ['off', 'Power off', 'danger'], ['cycle', 'Cycle', 'danger']]) {
+        const b = button(label, cls, () => confirmPower(p, action));
+        b.disabled = locked || dirty; row.append(b);
+      }
+      body.append(row);
+    }
+
     const csel = el('select');
     for (const [v, t] of [['', 'Use the global choice'], ['native', 'Native client'], ['raritan', 'Raritan client (classic)']]) csel.append(Object.assign(el('option', null, t), { value: v, selected: v === client }));
     csel.onchange = () => { client = csel.value; };
     body.append(el('h3', null, 'Console client'), el('p', 'dlg-help', 'Override the console client for this host only.'), csel);
+    const lockBox = input('checkbox'); lockBox.checked = lockDraft; lockBox.onchange = () => { lockDraft = lockBox.checked; };
+    const lockLab = el('label', 'check'); lockLab.append(lockBox, document.createTextNode(' Lock power controls for this host (on / off / cycle are refused until unlocked)'));
+    body.append(lockLab);
     if (message) body.append(note(message, kind));
 
     const save = button('Save', 'primary', async (e) => {
       e.target.disabled = true;
-      try { await api('PUT', `/api/config/hosts/${p.id}`, { outlets: draft, client }); await loadConfig(); document.getElementById('hostDlg').close(); loadPower(true); }
+      try { await api('PUT', `/api/config/hosts/${p.id}`, { outlets: draft, client, locked: lockDraft }); await loadConfig(); document.getElementById('hostDlg').close(); loadPower(true); }
       catch (err) { render(err.message, 'bad'); }
     });
     dialogShell('hostDlg', `${p.name} settings`, body, [save, button('Cancel', '', () => document.getElementById('hostDlg').close())]);

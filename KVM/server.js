@@ -472,6 +472,7 @@ const server = createServer(async (req, res) => {
       return res.end();
     }
 
+    if (pathname.startsWith('/api/')) return json(res, 404, { error: 'not found' }); // never forward our own API namespace to the KX
     const file = req.method === 'GET' ? await publicFile(pathname) : null;
     if (file) {
       res.writeHead(200, { 'content-type': mime[extname(file)] ?? 'application/octet-stream' });

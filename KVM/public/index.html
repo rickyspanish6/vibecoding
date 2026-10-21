@@ -88,6 +88,10 @@
   .fld { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
   dialog input:not([type=checkbox]), dialog select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; width: 100%; }
   dialog input:focus, dialog select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .pwr-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dbtn.danger-fill { background: #e5484d; color: #fff; }
+  .dbtn.danger-fill:disabled { background: var(--line); color: var(--muted); }
+  .devs .check { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 13px; }
   .add-row { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; }
   .match-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .check { font-size: 12px; color: var(--muted); }
   .num { color: var(--muted); font-variant-numeric: tabular-nums; width: 22px; flex: none; font-size: 12px; }
@@ -147,7 +151,7 @@
   </header>
   <section class="screen" id="screen"><div><strong>No target selected</strong><span>Pick a port on the left.</span></div></section>
 </main>
-<dialog id="cfgDlg"></dialog><dialog id="hostDlg"></dialog>
+<dialog id="cfgDlg"></dialog><dialog id="hostDlg"></dialog><dialog id="pwrDlg"></dialog>
 <script src="/settings.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);

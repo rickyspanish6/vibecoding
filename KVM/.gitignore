@@ -2,3 +2,4 @@
 node_modules/
 .kx-session.json
 .kx-config.json
+.kx-power.log

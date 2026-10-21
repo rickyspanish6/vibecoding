@@ -4,6 +4,25 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.9.0-rc.1] - 2026-10-21
+
+Release candidate: written and tested against a fake netBooter, **not yet run against a real unit** (1.9.0 follows
+once it has been).
+
+### Added
+- **Power control per host: Power on, Power off and Cycle** (host gear, "Power control"). Commands use the saved outlet
+  mapping and go to every mapped outlet, or just the ticked ones for hosts with redundant supplies (`pset n 1|0`,
+  `rb n`), then read the state back.
+- Safeguards: the request must carry the host's **exact name** (the dialog makes you type it, and the server checks
+  it again); a **per-host lock** refuses all commands (HTTP 423); a second command is refused while one runs and for
+  5 s afterwards; commands need the saved mapping; every accepted request is appended to `.kx-power.log`
+  (time, host, outlets, action, result; never a password); the dashboard login and Origin checks apply as before.
+- Unknown `/api/...` paths now return 404 instead of being forwarded to the KX.
+- Tests with a fake Synaccess Telnet server (exact commands, refusals, cooldown, redundant outlets, audit log).
+
+### Fixed
+- A cooldown that started when a request began could be bypassed by a slow PDU; it now starts when the request ends.
+
 ## [1.8.0] - 2026-10-21
 
 ### Added

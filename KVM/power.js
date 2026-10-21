@@ -1,16 +1,17 @@
-// Power mapping for Synaccess netBooter PDUs: device config, outlet reading (read-only, via netbooter.js) and the
-// matching of outlets to KX hosts. Nothing here switches an outlet.
+// Power mapping and control for Synaccess netBooter PDUs: device config, outlet reading via netbooter.js, the matching
+// of outlets to KX hosts, and (behind an exact-name confirmation, a per-host lock and a cooldown) on / off / cycle.
 //
 // Config lives in .kx-config.json (owner-only, gitignored, plain text: it holds the PDU logins):
 //   { devices: [{ id, name, host, port, user, password }],
 //     mappings: { "<KX port number>": [{ device, outlet }] },     // a host can draw power from several outlets
-//     hosts:    { "<KX port number>": { client: "native" | "raritan" } } }   // per-host settings
+//     hosts:    { "<KX port number>": { client: "native" | "raritan", locked: true } } }   // per-host settings
 import { readFileSync } from 'node:fs';
-import { writeFile, chmod } from 'node:fs/promises';
+import { writeFile, chmod, appendFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { netbooterRun } from './netbooter.js';
 
 const CONFIG_PATH = process.env.KX_CONFIG_PATH ?? fileURLToPath(new URL('./.kx-config.json', import.meta.url));
+const AUDIT_PATH = process.env.KX_POWER_LOG ?? fileURLToPath(new URL('./.kx-power.log', import.meta.url));
 
 let config = { devices: [], mappings: {}, hosts: {} };
 try { config = { ...config, ...JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) }; } catch { /* first run */ }
@@ -147,6 +148,58 @@ function cleanOutlets(list) {
   });
 }
 
+// --- power control ------------------------------------------------------------------------------------------------------
+
+// Synaccess commands: `pset n 1|0` switches outlet n; `rb n` reboots (off, then on after the unit's reboot delay).
+const COMMANDS = { on: (n) => `pset ${n} 1`, off: (n) => `pset ${n} 0`, cycle: (n) => `rb ${n}` };
+const COOLDOWN_MS = Number(process.env.KX_POWER_COOLDOWN_MS ?? 5000);
+const lastAction = new Map(); // port -> when the last control request finished
+const inFlight = new Set();   // ports with a control request still running
+
+/**
+ * Switch the outlets that feed one host. Refuses unless the caller typed the host's exact name, the host is mapped,
+ * not locked, and not acted on in the last few seconds. Every accepted request is appended to the audit log.
+ * @param {{port: string|number, hostName: string, action: 'on'|'off'|'cycle', confirm: string, outlets?: {device: string, outlet: number}[]}} req
+ */
+export async function controlHost({ port, hostName, action, confirm, outlets }) {
+  const key = portKey(port);
+  if (!COMMANDS[action]) throw fail(400, 'action must be on, off or cycle');
+  if (!hostName) throw fail(404, 'Unknown host');
+  if (confirm !== hostName) throw fail(400, `Confirmation does not match the host name (${hostName})`);
+  if (config.hosts[key]?.locked) throw fail(423, `Power control is locked for ${hostName}. Unlock it in the host settings first.`);
+  const mapped = config.mappings[key] ?? [];
+  if (!mapped.length) throw fail(400, `${hostName} has no outlet mapped`);
+  const targets = outlets === undefined ? mapped : cleanOutlets(outlets);
+  if (!targets.length) throw fail(400, 'Choose at least one outlet');
+  for (const t of targets) if (!mapped.some((m) => m.device === t.device && m.outlet === t.outlet)) throw fail(400, 'That outlet is not mapped to this host');
+  if (inFlight.has(key)) throw fail(429, `A power command for ${hostName} is already running`);
+  const wait = COOLDOWN_MS - (Date.now() - (lastAction.get(key) ?? 0));
+  if (wait > 0) throw fail(429, `Wait ${Math.ceil(wait / 1000)} s before sending another power command to ${hostName}`);
+  inFlight.add(key);
+
+  const entry = { at: new Date().toISOString(), port: Number(key), host: hostName, action, outlets: targets };
+  const results = [];
+  try {
+    // one login per device, all of its outlets in one go, then read the state back
+    for (const id of [...new Set(targets.map((t) => t.device))]) {
+      const dev = config.devices.find((d) => d.id === id);
+      const mine = targets.filter((t) => t.device === id);
+      const r = await serial(id, () => netbooterRun(dev, [...mine.map((t) => COMMANDS[action](t.outlet)), 'pshow'], { timeout: 30000, idle: 900 }));
+      const replies = r.results.slice(0, mine.length).join('\n');
+      if (/invalid|error|unknown|not supported|fail/i.test(replies)) throw fail(502, `${dev.name} rejected the command: ${replies.replace(/\s+/g, ' ').trim().slice(0, 120)}`);
+      const state = { ok: true, ...parsePshow(r.results[mine.length]) };
+      cache.set(id, { at: Date.now(), value: state });
+      for (const t of mine) {
+        const o = state.outlets.find((x) => x.n === t.outlet);
+        results.push({ device: id, deviceName: dev.name, outlet: t.outlet, name: o?.name ?? null, on: o?.on ?? null });
+      }
+    }
+    entry.result = 'sent';
+    return { action, host: hostName, results, cycling: action === 'cycle' };
+  } catch (e) { entry.result = `failed: ${e.message}`; throw e; }
+  finally { inFlight.delete(key); lastAction.set(key, Date.now()); await appendFile(AUDIT_PATH, JSON.stringify(entry) + '\n', { mode: 0o600 }).catch(() => {}); }
+}
+
 // --- HTTP routes ---------------------------------------------------------------------------------------------------
 
 /** Returns true if it handled the request. `readPorts()` supplies the KX host list for auto-matching. */
@@ -215,6 +268,14 @@ export async function powerRoutes(req, res, pathname, { readJson, json, readPort
     return true;
   }
 
+  m = pathname.match(/^\/api\/power\/hosts\/(\d+)\/(on|off|cycle)$/);
+  if (m && req.method === 'POST') {
+    const body = await readJson(req);
+    const hostName = (await readPorts()).find((p) => String(p.id) === m[1])?.name;
+    json(res, 200, await controlHost({ port: m[1], hostName, action: m[2], confirm: body.confirm, outlets: body.outlets }));
+    return true;
+  }
+
   m = pathname.match(/^\/api\/config\/hosts\/(\d+)$/);
   if (m) {
     const port = portKey(m[1]);
@@ -228,6 +289,11 @@ export async function powerRoutes(req, res, pathname, { readJson, json, readPort
         if (!['native', 'raritan', ''].includes(body.client)) throw fail(400, 'client must be native, raritan or empty');
         if (body.client) config.hosts[port] = { ...config.hosts[port], client: body.client };
         else if (config.hosts[port]) { delete config.hosts[port].client; if (!Object.keys(config.hosts[port]).length) delete config.hosts[port]; }
+      }
+      if (body.locked !== undefined) {
+        if (typeof body.locked !== 'boolean') throw fail(400, 'locked must be true or false');
+        if (body.locked) config.hosts[port] = { ...config.hosts[port], locked: true };
+        else if (config.hosts[port]) { delete config.hosts[port].locked; if (!Object.keys(config.hosts[port]).length) delete config.hosts[port]; }
       }
       await save();
       json(res, 200, { mappings: config.mappings, hosts: config.hosts });

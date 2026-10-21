@@ -14,8 +14,11 @@ connected to the switch.
   the KX). Raritan's own client (`/jsclient/Client.asp` in an iframe, themed to match) is the classic fallback in the selector.
 - **Power mapping:** the settings dialog manages Synaccess netBooter PDUs. The backend reads each over Telnet
   (`pshow`) and maps outlets to hosts by name (`XAG01`, `CTL-MAC01` and `NAS01-02` all match their KX host). It only reads;
-  no outlet is ever switched. Device logins live in `.kx-config.json` (owner-only, gitignored). Per-host settings (the
+  the settings dialog never switches anything. Device logins live in `.kx-config.json` (owner-only, gitignored). Per-host settings (the
   gear on each host) edit the outlet mapping and an optional console client override.
+- **Power control:** each host's gear has Power on / off / cycle for its mapped outlets. They act on real power: you must
+  type the host's exact name, a per-host lock refuses all commands, there is a cooldown, and every accepted request is
+  appended to `.kx-power.log` (gitignored). Off and cycle are hard power cuts, not clean shutdowns.
 - **Sessions panel:** the KX's own *Users By Port* page (per-session Disconnect / Log off, and Disconnect all); falls back to the CLI's `userlist` over SSH key login when no web login is configured (read-only then).
 - **Keep-alive / auto-reconnect:** the session is re-checked every minute while the page is open; if the console
   socket drops, the page reconnects (up to 3 times in 2 minutes).
@@ -70,4 +73,4 @@ git tag -a vX.Y.Z -m "KX Console vX.Y.Z"
 
 - The native client reuses Raritan's WASM video decoder (loaded from your KX at runtime); the protocol around it is ours.
 - Native client: wheel, Ctrl-Alt-Del, Refresh video and resolution changes are not yet verified live.
-- Power is read-only: outlets are shown and mapped, never switched. PDU logins are stored in plain text in `.kx-config.json` and sent over unencrypted Telnet.
+- PDU logins are stored in plain text in `.kx-config.json` and sent over unencrypted Telnet. Power off and cycle are hard cuts.
