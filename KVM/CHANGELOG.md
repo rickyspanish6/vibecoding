@@ -4,6 +4,38 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.8.0] - 2026-10-21
+
+### Added
+- **Power mapping for Synaccess netBooter PDUs (read-only).** The backend reads each unit over Telnet (`pshow`: outlet
+  names and state, plus current draw and temperature) and maps outlets to KX hosts. It never switches an outlet.
+- **Settings dialog** (gear at the top of the sidebar): add, edit, test and remove PDUs (name, IP, port, user,
+  password), and "Auto-match outlets to hosts". Device logins are stored in `.kx-config.json` (owner-only, gitignored)
+  and are never sent to the browser.
+- **Per-host settings** (gear on every host row): the outlets that feed the host (several for redundant supplies),
+  and an optional console client override for that host.
+- Power indicators: a coloured bolt on each mapped host (green on, red off, amber partly on) and a header chip with the
+  outlets and their state.
+- Outlet-name matching handles short names (`XAG01`), area prefixes (`CTL-MAC01`) and PSU suffixes (`NAS01-02`).
+- Unit tests for the matching and parsing (`npm test`).
+
+### Fixed
+- Switching console client, or reconnecting, now closes the previous native console first; before, it could keep
+  holding the KX's single channel and leave stale native buttons showing.
+- The native client no longer throws when its socket closes after `disconnect()`.
+
+### Verified live (firmware 3.10.0.5.4237; four NPB20DU units running Synaccess Telnet V7.1)
+- All four units read over Telnet (20 outlets each); auto-match mapped all 12 named hosts correctly.
+- Native client on B25-CTL-MAC01: left click (opened a System Settings page), Refresh video (full-frame resend),
+  Spotlight and Cmd+W shortcuts, switching to and from the Raritan client.
+- Per-host client override opened the Raritan client for one host while the global choice was Native.
+
+### Not verified
+- Mouse wheel: frames are byte-identical to Raritan's client and reach the target, but no scrolling was observed with
+  the native or the Raritan client in these tests, so it is unconfirmed on this Mac and CIM.
+- Ctrl-Alt-Del (no effect on a Mac), resolution changes and 4K.
+- Telnet is not encrypted: keep the PDUs on a trusted network.
+
 ## [1.7.0] - 2026-10-21
 
 ### Changed

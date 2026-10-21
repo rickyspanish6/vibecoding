@@ -58,7 +58,7 @@ export class KxClient {
       on: (event, data) => this.#onSession(event, data),
     });
     this.ws.onmessage = (e) => { this.bytes += e.data.byteLength; this.session.feed(e.data); };
-    this.ws.onclose = (e) => { this.session.close(new Error(`socket closed (${e.code})`)); };
+    this.ws.onclose = (e) => { this.session?.close(new Error(`socket closed (${e.code})`)); }; // disconnect() may have cleared it already
     this.ws.onerror = () => this.onerror(new Error('WebSocket error'));
     await new Promise((resolve, reject) => { this.ws.onopen = resolve; this.ws.addEventListener('error', () => reject(new Error('Could not open /rfb')), { once: true }); });
     this.session.start();

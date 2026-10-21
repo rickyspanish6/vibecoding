@@ -53,6 +53,43 @@
   .mini:hover:not(:disabled) { color: var(--text); background: var(--hover); }
   .mini:disabled { opacity: .5; cursor: default; }
   .sessions .tag.live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--warn); margin-right: 6px; }
+  .brand { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .icon { background: none; border: 0; color: var(--muted); font: inherit; font-size: 17px; line-height: 1; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+  .icon:hover, .gear:hover { background: var(--hover); color: var(--text); }
+  .rowwrap { display: flex; align-items: center; gap: 2px; }
+  .rowwrap .main { flex: 1; min-width: 0; width: auto; }
+  .gear { flex: none; width: auto; display: block; background: none; border: 0; color: var(--muted); font: inherit; font-size: 15px; padding: 7px 8px; border-radius: 8px; cursor: pointer; opacity: .55; }
+  .rowwrap:hover .gear, .gear:focus-visible { opacity: 1; }
+  .gear:focus-visible, .icon:focus-visible { outline: 2px solid var(--accent); }
+  .pw { font-size: 12px; flex: none; }
+  .pw.on { color: var(--ok); } .pw.off { color: #e5484d; } .pw.partial { color: var(--warn); } .pw.unknown { color: var(--off); }
+  .chip.pwr.on { color: var(--ok); } .chip.pwr.off { color: #e5484d; border-color: #e5484d; } .chip.pwr.partial { color: var(--warn); }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(580px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  .dlg-head h2 { margin: 0; font-size: 16px; }
+  .dlg-body { padding: 14px 18px; display: grid; gap: 10px; }
+  .dlg-body h3 { margin: 6px 0 0; font-size: 13px; }
+  .dlg-help { margin: 0; color: var(--muted); font-size: 12px; }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); }
+  .dlg-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--hover); font-size: 12px; } .dlg-note:empty { display: none; }
+  .dlg-note.ok { color: var(--ok); } .dlg-note.bad { color: #e5484d; }
+  .devs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; overflow: visible; }
+  .devs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+  .devs li.empty { color: var(--muted); justify-content: center; border-style: dashed; }
+  .dev-info { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
+  .dev-info .meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dev-info .meta.ok { color: var(--ok); } .dev-info .meta.bad { color: #e5484d; }
+  .dev-actions { display: flex; gap: 6px; flex: none; }
+  .dbtn { width: auto; display: inline-block; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+  .dbtn:hover:not(:disabled) { background: var(--hover); } .dbtn:disabled { opacity: .5; }
+  .dbtn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
+  .dbtn.danger { color: #e5484d; }
+  .fld { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  dialog input:not([type=checkbox]), dialog select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; width: 100%; }
+  dialog input:focus, dialog select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .add-row { display: grid; grid-template-columns: 1fr 1.6fr auto; gap: 8px; }
+  .match-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; } .check { font-size: 12px; color: var(--muted); }
   .num { color: var(--muted); font-variant-numeric: tabular-nums; width: 22px; flex: none; font-size: 12px; }
   .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .down .nm { color: var(--muted); }
@@ -84,7 +121,8 @@
 </head>
 <body>
 <aside>
-  <div class="brand"><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p><a class="link" id="signout" href="/login" hidden>Sign out</a></p></div>
+  <div class="brand"><div><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p><a class="link" id="signout" href="/login" hidden>Sign out</a></p></div>
+    <button class="icon" id="cfgBtn" title="Settings: power devices and outlet mapping" aria-label="Settings">⚙︎</button></div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search targets  ( / )" aria-label="Search targets">
     <label class="check"><input type="checkbox" id="all"> Show unused ports</label>
@@ -95,13 +133,13 @@
 <main>
   <div class="err" id="err" role="alert"></div>
   <header class="top">
-    <h2 id="title">Select a target</h2><span class="chip" id="state" hidden></span><span class="chip" id="type" hidden></span>
+    <h2 id="title">Select a target</h2><span class="chip" id="state" hidden></span><span class="chip" id="type" hidden></span><span class="chip pwr" id="pwr" hidden></span>
     <span class="spacer"></span>
     <a class="link" id="raritan" target="_blank" rel="noopener" hidden>Open in Raritan’s client</a>
     <select id="clientMode" class="sel" aria-label="Console client" title="Console client. Native is the default; switch to the Raritan client if something doesn't work.">
       <option value="native">Native client</option><option value="raritan">Raritan client (classic)</option>
     </select>
-    <span class="stat" id="nstat"></span>
+    <span class="stat" id="chint"></span><span class="stat" id="nstat"></span>
     <button class="btn stop" id="cad" hidden title="Send Ctrl-Alt-Del to the target">Ctrl-Alt-Del</button>
     <button class="btn stop" id="refreshVideo" hidden title="Ask the KX for a fresh video frame">Refresh video</button>
     <button class="btn stop" id="disconnectAll" title="End this page's console and every other client's console session on the KX">Disconnect all</button>
@@ -109,6 +147,8 @@
   </header>
   <section class="screen" id="screen"><div><strong>No target selected</strong><span>Pick a port on the left.</span></div></section>
 </main>
+<dialog id="cfgDlg"></dialog><dialog id="hostDlg"></dialog>
+<script src="/settings.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let ports = [], selected = null, device = null, connected = null, connecting = false;
@@ -126,17 +166,22 @@ function renderList() {
     if (!group.length) continue;
     list.append(Object.assign(el('li', 'group', `${label} · ${group.length}`)));
     for (const p of group) {
-      const li = el('li'), b = el('button', `${p.up ? 'up' : 'down'}${p.busy ? ' busy' : ''}${connected === p.id ? ' mine' : ''}`);
+      const li = el('li', 'rowwrap'), b = el('button', `main ${p.up ? 'up' : 'down'}${p.busy ? ' busy' : ''}${connected === p.id ? ' mine' : ''}`);
       b.title = connected === p.id ? 'You are connected to this target' : p.busy ? 'In use by another client' : '';
       b.append(el('span', 'dot'), el('span', 'num', p.id), el('span', 'nm', p.name));
+      const pw = typeof powerBadge === 'function' ? powerBadge(p) : null; // from settings.js
+      if (pw) b.append(pw);
       if (selected === p.id) b.setAttribute('aria-current', 'true');
       b.onclick = () => select(p);
-      li.append(b); list.append(li);
+      const gear = el('button', 'gear', '⚙︎'); gear.title = 'Host settings'; gear.setAttribute('aria-label', `Settings for ${p.name}`);
+      gear.onclick = (e) => { e.stopPropagation(); openHostSettings(p); };
+      li.append(b, gear); list.append(li);
     }
   }
 }
 
 function renderDetail(keepScreen = false) {
+  if (typeof updatePowerChip === 'function') { updatePowerChip(); updateClientHint(); }
   const p = ports.find((x) => x.id === selected);
   if (!p) return;
   $('title').textContent = p.name;
@@ -187,6 +232,7 @@ function themeClient(frame) {
 async function connect(p = ports.find((x) => x.id === selected), reason) {
   if (!p) return;
   const mine = ++attempt;
+  closeNative(); // a previous native console must close first, or it keeps holding the KX's single channel
   connecting = true; connected = null; $('screen').replaceChildren(); renderDetail(true);
   const btn = $('connect'); btn.disabled = true; btn.textContent = 'Connecting…';
   try {
@@ -194,7 +240,7 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
     if (!r.ok) throw new Error(data.error);
     // The KX has one remote channel: end whoever else holds a console so ours can take it.
     try { await post('/api/sessions/disconnect-all'); } catch { /* fall back to the retry loop below */ }
-    const native = clientMode() === 'native';
+    const native = (cfg.hosts?.[p.id]?.client || clientMode()) === 'native'; // per-host override from settings.js
     const tries = native ? 12 : 6; // the KX keeps a port marked busy for ~30 s after a disconnect
     for (let i = 0; i < tries; i++) {
       message('Connecting to ' + p.name, i ? `Waiting for the KX to free its channel (try ${i + 1}/${tries})…` : reason ?? 'Releasing the previous session…');
@@ -209,7 +255,7 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
         const { KxClient } = await import('/native/kxclient.js');
         const kx = new KxClient({
           canvas, portNo: p.id, // same numbering as the KX port list
-          onstatus: (st) => { $('nstat').textContent = st; },
+          onstatus: (st) => { if (nativeClient === kx) $('nstat').textContent = st; },
           onerror: (e) => { failure = e; },
           onresolution: ({ width, height }) => { nativeRes = `${width}×${height}`; },
           onstats: ({ fps, kbps }) => { $('nstat').textContent = `${nativeRes} · ${fps} fps · ${kbps} kbit/s`; },
@@ -305,10 +351,11 @@ async function loadSessions() {
 
 // Which console client to use: our native client (default) or Raritan's embedded HKC as the classic fallback.
 const clientMode = () => $('clientMode').value;
-function closeNative() { nativeClient?.disconnect(); nativeClient = null; $('nstat').textContent = ''; }
+function closeNative() { const kx = nativeClient; nativeClient = null; kx?.disconnect(); $('nstat').textContent = ''; }
 
 function disconnect() { attempt++; closeNative(); connecting = false; connected = null; $('screen').replaceChildren(); renderList(); renderDetail(); }
 
+$('cfgBtn').onclick = () => openSettings();
 $('connect').onclick = () => (connected != null ? disconnect() : connect());
 try { const v = localStorage.getItem('kxc-client'); if (['raritan', 'native'].includes(v)) $('clientMode').value = v; } catch { /* no storage */ }
 $('clientMode').onchange = () => {

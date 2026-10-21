@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { request as httpsRequest, Agent } from 'node:https';
 import { connect as tlsConnect } from 'node:tls';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { powerRoutes } from './power.js';
 import { readFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
@@ -441,6 +442,8 @@ const server = createServer(async (req, res) => {
       lastActivity = Date.now();
       return json(res, 200, { version: VERSION, auth: Boolean(DASH_PASSWORD), device: await readDevice(), ports: await readPorts(), rfbOpen });
     }
+    // PDU config, outlet status and host-to-outlet mappings (netBooters, read-only)
+    if ((pathname.startsWith('/api/config') || pathname.startsWith('/api/power')) && await powerRoutes(req, res, pathname, { readJson, json, readPorts })) return;
     if (pathname === '/api/sessions' && req.method === 'GET') return json(res, 200, { sessions: await readSessions() });
     if (pathname === '/api/sessions/disconnect' && req.method === 'POST') {
       const { id, mode } = await readJson(req);

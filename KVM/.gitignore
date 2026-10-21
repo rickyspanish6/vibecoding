@@ -1,3 +1,4 @@
 .env
 node_modules/
 .kx-session.json
+.kx-config.json
