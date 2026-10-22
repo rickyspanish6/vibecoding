@@ -8,8 +8,8 @@
 import { createServer } from 'node:http';
 import { request as httpsRequest, Agent } from 'node:https';
 import { connect as tlsConnect } from 'node:tls';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { powerRoutes } from './power.js';
+import * as auth from './auth.js';
 import { readFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { execFile, spawn } from 'node:child_process';
@@ -36,16 +36,11 @@ const MOCK = process.env.KX_MOCK === '1';
 const SIM_ENABLED = process.env.KX_SIM_LATENCY_MS !== undefined;
 let simLatency = Number(process.env.KX_SIM_LATENCY_MS ?? 0);
 
-// Dashboard access control. By default we listen on loopback only and need no login. To listen elsewhere
-// (BIND=0.0.0.0) a DASH_PASSWORD is mandatory, because this server holds a logged-in KX admin session.
+// Where the dashboard listens, and which Host names it answers to (DNS-rebinding protection). Accounts are always required
+// (see auth.js); to serve other machines set BIND=0.0.0.0 and ALLOWED_HOSTS to the name you browse to, and put HTTPS in front.
 const BIND = process.env.BIND ?? '127.0.0.1';
-const DASH_PASSWORD = process.env.DASH_PASSWORD;
 const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1'];
-if (!LOOPBACK.includes(BIND) && !DASH_PASSWORD) {
-  console.error(`Refusing to listen on ${BIND} without DASH_PASSWORD: it would expose the KX admin session.`);
-  process.exit(1);
-}
 
 // --- SNMP port list --------------------------------------------------------------------------
 
@@ -155,7 +150,7 @@ let lastActivity = 0; // last time the dashboard polled; keep-alive only runs wh
 let rfbOpen = 0;      // console WebSockets currently open through the proxy
 
 // Reuse the session across restarts: every fresh login leaves another web session on the KX.
-const SESSION_FILE = fileURLToPath(new URL('./.kx-session.json', import.meta.url));
+const SESSION_FILE = process.env.KX_SESSION_FILE ?? fileURLToPath(new URL('./.kx-session.json', import.meta.url));
 try { for (const [k, v] of Object.entries(JSON.parse(readFileSync(SESSION_FILE, 'utf8')))) jar.set(k, v); } catch { /* no saved session */ }
 const saveJar = () => writeFile(SESSION_FILE, JSON.stringify(Object.fromEntries(jar)), { mode: 0o600 }).catch(() => {});
 
@@ -317,7 +312,7 @@ function proxy(req, res) {
 
 // HKC opens wss://<host>/rfb. Pipe the upgrade straight through to the KX with the session cookie attached.
 function proxyUpgrade(req, socket, head) {
-  if (!req.url.startsWith('/rfb') || !sameOrigin(req) || !dashAuthed(req)) return socket.destroy();
+  if (!req.url.startsWith('/rfb') || !sameOrigin(req) || !auth.can(currentUser(req), 'console')) return socket.destroy();
   const up = tlsConnect({ host: HOST, port: 443, rejectUnauthorized: false });
   let counted = false;
   const close = () => { if (counted) { counted = false; rfbOpen--; } up.destroy(); socket.destroy(); };
@@ -360,8 +355,8 @@ async function publicFile(pathname) {
   try { return (await stat(file)).isFile() ? file : null; } catch { return null; }
 }
 
-// This server holds a logged-in KX admin session and proxies every path to it, so refuse anything that
-// isn't the dashboard talking to itself: a wrong Host (DNS rebinding) or a cross-site Origin.
+// This server holds a logged-in KX admin session, so refuse anything that isn't the dashboard talking to itself:
+// a wrong Host (DNS rebinding) or a cross-site Origin.
 function sameOrigin(req) {
   const host = req.headers.host ?? '';
   const name = host.replace(/:\d+$/, '').replace(/^\[|\]$/g, '').toLowerCase();
@@ -371,89 +366,195 @@ function sameOrigin(req) {
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
-// --- Dashboard login (only when DASH_PASSWORD is set) ----------------------------------------------
+// --- Accounts and rights (see auth.js) ------------------------------------------------------------------------------
 
-const AUTH_COOKIE = 'kxc_session';
-const AUTH_TTL = 12 * 3600 * 1000;
-const authSessions = new Map(); // token -> expiry (ms)
-const failures = new Map();     // ip -> { n, until }
-const digest = (s) => createHash('sha256').update(s).digest();
-const passwordOk = (p) => timingSafeEqual(digest(String(p)), digest(DASH_PASSWORD));
+const SESSION_COOKIE = 'kxc_session';
+const SESSION_MAX_AGE = 8 * 3600;
+const attempts = new Map(); // "ip:<addr>" / "user:<name>" -> { n, until }: five wrong passwords lock that key for a minute
 
-function cookieOf(req, name) {
-  return req.headers.cookie?.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`))?.slice(name.length + 1);
+const cookieOf = (req, name) => req.headers.cookie?.split(';').map((c) => c.trim()).find((c) => c.startsWith(`${name}=`))?.slice(name.length + 1);
+const currentUser = (req) => auth.sessionUser(cookieOf(req, SESSION_COOKIE));
+const clientIp = (req) => req.socket.remoteAddress ?? '';
+// First-run setup only from the machine itself; a request relayed by a reverse proxy (X-Forwarded-For) is not local.
+const isLocal = (req) => !req.headers['x-forwarded-for'] && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(clientIp(req));
+const setSessionCookie = (res, token) => res.setHeader('set-cookie', `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${token ? SESSION_MAX_AGE : 0}`);
+
+function lockedFor(keys) {
+  const now = Date.now();
+  return Math.ceil(Math.max(0, ...keys.map((k) => (attempts.get(k)?.until ?? 0) - now)) / 1000);
 }
-
-function dashAuthed(req) {
-  if (!DASH_PASSWORD) return true;
-  const token = cookieOf(req, AUTH_COOKIE);
-  const expiry = token && authSessions.get(token);
-  if (!expiry) return false;
-  if (expiry < Date.now()) { authSessions.delete(token); return false; }
-  return true;
-}
-
-function dashLogin(req, res, password) {
-  const ip = req.socket.remoteAddress;
-  const f = failures.get(ip) ?? { n: 0, until: 0 };
-  if (f.until > Date.now()) return json(res, 429, { error: `Too many attempts. Try again in ${Math.ceil((f.until - Date.now()) / 1000)}s.` });
-  if (!passwordOk(password)) {
-    f.n += 1;
-    if (f.n >= 5) { f.until = Date.now() + 60_000; f.n = 0; }
-    failures.set(ip, f);
-    return json(res, 401, { error: 'Wrong password' });
+function noteFailure(keys) {
+  for (const k of keys) {
+    const a = attempts.get(k) ?? { n: 0, until: 0 };
+    if (++a.n >= 5) { a.until = Date.now() + 60_000; a.n = 0; }
+    attempts.set(k, a);
   }
-  failures.delete(ip);
-  const token = randomBytes(32).toString('hex');
-  authSessions.set(token, Date.now() + AUTH_TTL);
-  res.setHeader('set-cookie', `${AUTH_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${AUTH_TTL / 1000}`);
-  return json(res, 200, { ok: true });
 }
 
-const loginPage = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KX Console · Sign in</title><style>
+async function handleLogin(req, res) {
+  const { username = '', password = '' } = await readJson(req);
+  const keys = [`ip:${clientIp(req)}`, `user:${String(username).toLowerCase()}`];
+  const wait = lockedFor(keys);
+  if (wait) return json(res, 429, { error: `Too many attempts. Try again in ${wait}s.` });
+  let user;
+  try { user = auth.verifyLogin(username, password); }
+  catch (e) { noteFailure(keys); auth.audit({ event: 'login-failed', user: String(username).slice(0, 40), ip: clientIp(req) }); throw e; }
+  keys.forEach((k) => attempts.delete(k));
+  setSessionCookie(res, auth.startSession(user));
+  auth.audit({ event: 'login', user: user.username, ip: clientIp(req) });
+  json(res, 200, { ok: true, mustChange: Boolean(user.mustChange) });
+}
+
+/** What a route needs: null (any signed-in user), a permission, a list of permissions (any of them) or 'admin'. */
+function needs(method, pathname) {
+  const write = method !== 'GET';
+  if (/^\/api\/(me|logout|ports)(\/password)?$/.test(pathname)) return null;
+  if (pathname === '/api/session') return 'console';
+  if (/^\/api\/ports\/\d+\/console$/.test(pathname)) return 'console';
+  if (pathname === '/api/sessions') return ['console', 'sessions'];
+  if (pathname === '/api/sessions/disconnect-all') return ['console', 'sessions'];
+  if (pathname.startsWith('/api/sessions/')) return 'sessions';
+  if (/^\/api\/power\/hosts\//.test(pathname)) return 'power';
+  if (pathname === '/api/power' && !write) return null;
+  if (pathname.startsWith('/api/power/')) return 'configure';
+  if (pathname === '/api/config' && !write) return null;
+  if (pathname.startsWith('/api/config')) return 'configure';
+  if (pathname.startsWith('/api/users')) return 'users';
+  if (pathname.startsWith('/api/dev/')) return 'admin';
+  return null;
+}
+const allowed = (user, need) => need === null || (need === 'admin' ? auth.isAdmin(user) : Array.isArray(need) ? need.some((p) => auth.can(user, p)) : auth.can(user, need));
+
+// What the embedded Raritan client needs from the KX. Anyone with the console right may fetch these; the rest of the KX's
+// web interface (its own user and device administration) is reachable through this proxy by administrators only.
+const KX_CLIENT_PATHS = /^\/(jsclient|js|css|fonts?|images?|img|lang|locales?|assets)\/|^\/favicon\.ico$/;
+
+const roleTable = () => Object.fromEntries(Object.entries(auth.ROLES).map(([k, v]) => [k, { label: v.label, permissions: v.permissions }]));
+const me = (user) => ({ user: auth.describe(user), roles: roleTable(), permissionLabels: auth.PERMISSIONS });
+
+async function usersRoutes(req, res, pathname, actor) {
+  const m = pathname.match(/^\/api\/users(?:\/([0-9a-f]+))?$/);
+  if (!m) return json(res, 404, { error: 'not found' });
+  const id = m[1];
+  const self = (target) => target === actor.id;
+  if (!id && req.method === 'GET') return json(res, 200, { users: auth.listUsers(), roles: roleTable(), permissionLabels: auth.PERMISSIONS });
+  if (!id && req.method === 'POST') {
+    const b = await readJson(req);
+    const u = auth.createUser({ username: b.username, password: b.password, role: b.role, permissions: b.permissions, mustChange: true });
+    auth.audit({ event: 'user-created', by: actor.username, user: u.username, role: u.role, permissions: u.permissions });
+    return json(res, 200, { user: u });
+  }
+  if (id && req.method === 'PUT') {
+    const b = await readJson(req);
+    if (self(id) && (b.role !== undefined || b.permissions !== undefined || b.disabled !== undefined)) throw Object.assign(new Error('You cannot change your own role or disable yourself; ask another administrator.'), { status: 409 });
+    const u = auth.updateUser(id, { role: b.role, permissions: b.permissions, disabled: b.disabled, password: b.password, mustChange: b.password !== undefined ? true : undefined });
+    auth.audit({ event: 'user-updated', by: actor.username, user: u.username, role: u.role, permissions: u.permissions, disabled: u.disabled, passwordReset: b.password !== undefined });
+    return json(res, 200, { user: u });
+  }
+  if (id && req.method === 'DELETE') {
+    if (self(id)) throw Object.assign(new Error('You cannot remove your own account.'), { status: 409 });
+    const name = auth.listUsers().find((u) => u.id === id)?.username;
+    auth.deleteUser(id);
+    auth.audit({ event: 'user-deleted', by: actor.username, user: name });
+    return json(res, 200, { ok: true });
+  }
+  return json(res, 405, { error: 'method not allowed' });
+}
+
+// --- Sign-in and first-run pages ------------------------------------------------------------------------------------------
+
+const authPage = ({ intro, fields, button, endpoint, script = '', extra = '' }) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KX Console</title><style>
 :root{--bg:#f6f7f9;--panel:#fff;--line:#e3e6eb;--text:#14181f;--muted:#667085;--accent:#2563eb;--accent-text:#fff}
 @media (prefers-color-scheme:dark){:root{--bg:#0d1016;--panel:#151921;--line:#252b36;--text:#e8ebf0;--muted:#8b95a7;--accent:#5b8cff;--accent-text:#0b1020}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif}
-form{width:min(340px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;gap:12px}
-h1{margin:0;font-size:18px}p{margin:0;color:var(--muted);font-size:12px}
+form{width:min(360px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;display:grid;gap:12px}
+h1{margin:0;font-size:18px}p{margin:0;color:var(--muted);font-size:12px}code{background:var(--bg);padding:1px 5px;border-radius:5px;font-size:11px}
 input{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 button{padding:10px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.5}
 #e{color:#b42318;min-height:1.2em;font-size:13px}</style></head><body>
-<form id="f"><h1>KX Console</h1><p>Sign in to continue.</p>
-<input id="p" type="password" placeholder="Password" autocomplete="current-password" autofocus required>
-<div id="e" role="alert"></div><button id="b">Sign in</button></form>
-<script>f.onsubmit=async(ev)=>{ev.preventDefault();b.disabled=true;e.textContent='';
-try{const r=await fetch('/api/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({password:p.value})});
-const d=await r.json();if(!r.ok)throw new Error(d.error);location.href='/'}catch(x){e.textContent=x.message;b.disabled=false;p.select()}};</script></body></html>`;
+<form id="f"><h1>KX Console</h1><p>${intro}</p>${fields}<div id="e" role="alert"></div><button id="b">${button}</button>${extra}</form>
+<script>f.onsubmit=async(ev)=>{ev.preventDefault();b.disabled=true;e.textContent='';try{${script}
+const r=await fetch('${endpoint}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+const d=await r.json();if(!r.ok)throw new Error(d.error);location.href='/'}catch(x){e.textContent=x.message;b.disabled=false}};</script></body></html>`;
+
+const loginPage = authPage({
+  intro: 'Sign in to continue.', button: 'Sign in', endpoint: '/api/login',
+  fields: '<input id="u" placeholder="User name" autocomplete="username" autofocus required><input id="p" type="password" placeholder="Password" autocomplete="current-password" required>',
+  script: 'const body={username:u.value,password:p.value};',
+  extra: '<p>Forgot your password? On the machine running this server, run <code>node auth-cli.js reset &lt;user&gt;</code>.</p>',
+});
+const setupPage = authPage({
+  intro: 'Welcome. Create the administrator account for this dashboard. You can add other users, with their own rights, afterwards.',
+  button: 'Create account', endpoint: '/api/setup',
+  fields: `<input id="u" placeholder="User name" autocomplete="username" autofocus required><input id="p" type="password" placeholder="Password (at least ${auth.MIN_PASSWORD} characters)" autocomplete="new-password" minlength="${auth.MIN_PASSWORD}" required><input id="c" type="password" placeholder="Repeat the password" autocomplete="new-password" required>`,
+  script: "if(p.value!==c.value)throw new Error('The passwords do not match');const body={username:u.value,password:p.value};",
+});
+const setupElsewhere = authPage({
+  intro: 'This dashboard has no account yet. The first administrator can only be created from the machine it runs on: open it there, or run <code>node auth-cli.js create-admin &lt;user&gt;</code> in the project folder.',
+  button: 'Check again', endpoint: '/api/login', fields: '', script: "location.reload();return;const body={};",
+});
 
 const server = createServer(async (req, res) => {
   if (!sameOrigin(req)) return json(res, 403, { error: 'forbidden' });
   const { pathname } = new URL(req.url, 'http://localhost');
+  const wantsHtml = req.method === 'GET' && (req.headers.accept ?? '').includes('text/html');
+  const html = (body) => { res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' }); res.end(body); };
+  const redirect = (to) => { res.writeHead(302, { location: to }); res.end(); };
   try {
-    if (DASH_PASSWORD) {
-      if (pathname === '/login' && req.method === 'GET') {
-        if (dashAuthed(req)) { res.writeHead(302, { location: '/' }); return res.end(); }
-        res.writeHead(200, { 'content-type': 'text/html', 'cache-control': 'no-store' });
-        return res.end(loginPage);
-      }
-      if (pathname === '/api/login' && req.method === 'POST') return dashLogin(req, res, (await readJson(req)).password ?? '');
-      if (pathname === '/api/logout' && req.method === 'POST') {
-        authSessions.delete(cookieOf(req, AUTH_COOKIE));
-        res.setHeader('set-cookie', `${AUTH_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
-        return json(res, 200, { ok: true });
-      }
-      if (!dashAuthed(req)) {
-        if (req.method === 'GET' && (req.headers.accept ?? '').includes('text/html')) { res.writeHead(302, { location: '/login' }); return res.end(); }
-        return json(res, 401, { error: 'Sign in required' });
-      }
+    // Reachable without an account: first-run setup (from this machine only) and sign-in.
+    if (pathname === '/setup' && req.method === 'GET') {
+      if (auth.hasUsers()) return redirect('/login');
+      return html(isLocal(req) ? setupPage : setupElsewhere);
     }
+    if (pathname === '/api/setup' && req.method === 'POST') {
+      if (auth.hasUsers()) return json(res, 409, { error: 'Setup is already done' });
+      if (!isLocal(req)) return json(res, 403, { error: 'The first administrator can only be created from the machine the dashboard runs on' });
+      const { username, password } = await readJson(req);
+      const user = auth.createFirstAdmin(username, password);
+      auth.audit({ event: 'setup', user: user.username, ip: clientIp(req) });
+      setSessionCookie(res, auth.startSession(auth.verifyLogin(username, password)));
+      return json(res, 200, { ok: true });
+    }
+    if (pathname === '/login' && req.method === 'GET') {
+      if (!auth.hasUsers()) return redirect('/setup');
+      if (currentUser(req)) return redirect('/');
+      return html(loginPage);
+    }
+    if (pathname === '/api/login' && req.method === 'POST') return await handleLogin(req, res); // await: a rejection must land in the catch below, not crash the process
+
+    const user = currentUser(req);
+    if (!user) {
+      if (wantsHtml) return redirect(auth.hasUsers() ? '/login' : '/setup');
+      return json(res, 401, { error: 'Sign in required' });
+    }
+    if (pathname === '/api/logout' && req.method === 'POST') {
+      auth.endSession(cookieOf(req, SESSION_COOKIE));
+      setSessionCookie(res, '');
+      return json(res, 200, { ok: true });
+    }
+    // A user whose password was reset must choose a new one before anything else.
+    if (user.mustChange && pathname.startsWith('/api/') && pathname !== '/api/me' && pathname !== '/api/me/password') {
+      return json(res, 403, { error: 'Choose a new password first', code: 'must_change' });
+    }
+    if (!allowed(user, needs(req.method, pathname))) return json(res, 403, { error: 'You do not have permission to do that' });
+
+    if (pathname === '/api/me' && req.method === 'GET') return json(res, 200, me(user));
+    if (pathname === '/api/me/password' && req.method === 'POST') {
+      const { current, next } = await readJson(req);
+      const changed = auth.changeOwnPassword(user.id, current, next);
+      auth.audit({ event: 'password-changed', user: user.username, ip: clientIp(req) });
+      setSessionCookie(res, auth.startSession(changed)); // the old session ended with the old password
+      return json(res, 200, { ok: true });
+    }
+    if (pathname.startsWith('/api/users')) return await usersRoutes(req, res, pathname, user);
+
     if (pathname === '/api/ports') {
       lastActivity = Date.now();
-      return json(res, 200, { version: VERSION, auth: Boolean(DASH_PASSWORD), device: await readDevice(), ports: await readPorts(), rfbOpen });
+      return json(res, 200, { version: VERSION, device: await readDevice(), ports: await readPorts(), rfbOpen });
     }
-    // PDU config, outlet status and host-to-outlet mappings (netBooters, read-only)
-    if ((pathname.startsWith('/api/config') || pathname.startsWith('/api/power')) && await powerRoutes(req, res, pathname, { readJson, json, readPorts })) return;
+    // PDU config, outlet status, host-to-outlet mappings and power control
+    if ((pathname.startsWith('/api/config') || pathname.startsWith('/api/power')) && await powerRoutes(req, res, pathname, { readJson, json, readPorts, canConfigure: auth.can(user, 'configure'), by: user.username })) return;
     if (SIM_ENABLED && pathname === '/api/dev/latency' && req.method === 'POST') {
       const { ms } = await readJson(req);
       if (!Number.isFinite(ms) || ms < 0 || ms > 2000) return json(res, 400, { error: 'ms must be 0-2000' });
@@ -464,6 +565,7 @@ const server = createServer(async (req, res) => {
     if (pathname === '/api/sessions/disconnect' && req.method === 'POST') {
       const { id, mode } = await readJson(req);
       if (typeof id !== 'string' || !['port', 'logoff'].includes(mode)) return json(res, 400, { error: 'id and mode (port|logoff) required' });
+      auth.audit({ event: 'kx-session-ended', by: user.username, mode });
       return json(res, 200, { sessions: await kick([id], mode) });
     }
     // Everyone else's console sessions, so the single remote channel is free. Never this app's own session.
@@ -495,6 +597,8 @@ const server = createServer(async (req, res) => {
       return res.end(await readFile(file));
     }
     if (MOCK) return json(res, 404, { error: 'not found' });
+    // The rest of the KX web interface: the client's own files for the console right, anything else for administrators.
+    if (!auth.isAdmin(user) && !(auth.can(user, 'console') && KX_CLIENT_PATHS.test(pathname))) return json(res, 403, { error: 'You do not have permission to open that part of the KX' });
     proxy(req, res);
   } catch (err) {
     json(res, err.status ?? 502, { error: err.status ? err.message : `KX unreachable: ${err.message.split('\n')[0]}` });
@@ -508,4 +612,8 @@ setInterval(async () => {
 }, 60_000).unref();
 
 server.on('upgrade', proxyUpgrade);
-server.listen(PORT, BIND, () => console.log(`KX Console v${VERSION} on http://${BIND}:${PORT}${DASH_PASSWORD ? ' (login required)' : ''}${MOCK ? ' (mock data)' : ''}`));
+server.listen(PORT, BIND, () => {
+  console.log(`KX Console v${VERSION} on http://${BIND}:${PORT}${MOCK ? ' (mock data)' : ''}`);
+  if (!auth.hasUsers()) console.log(`No accounts yet: open http://127.0.0.1:${PORT}/setup on this machine to create the administrator (or run: node auth-cli.js create-admin <user>).`);
+  if (!LOOPBACK.includes(BIND)) console.log(`Listening beyond this machine (${BIND}): put HTTPS in front, and set ALLOWED_HOSTS to the name people browse to.`);
+});

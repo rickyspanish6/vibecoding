@@ -1,5 +1,5 @@
 // Power mapping and control for Synaccess netBooter PDUs: device config, outlet reading via netbooter.js, the matching
-// of outlets to KX hosts, and (behind an exact-name confirmation, a per-host lock and a cooldown) on / off / cycle.
+// of outlets to KX hosts, and (behind an explicit confirmation, a per-host lock and a cooldown) on / off / cycle.
 //
 // Config lives in .kx-config.json (owner-only, gitignored, plain text: it holds the PDU logins):
 //   { devices: [{ id, name, host, port, user, password }],
@@ -159,13 +159,13 @@ const inFlight = new Set();   // ports with a control request still running
 /**
  * Switch the outlets that feed one host. Refuses unless the caller typed the host's exact name, the host is mapped,
  * not locked, and not acted on in the last few seconds. Every accepted request is appended to the audit log.
- * @param {{port: string|number, hostName: string, action: 'on'|'off'|'cycle', confirm: string, outlets?: {device: string, outlet: number}[]}} req
+ * @param {{port: string|number, hostName: string, action: 'on'|'off'|'cycle', confirmed: boolean, by?: string, outlets?: {device: string, outlet: number}[]}} req
  */
-export async function controlHost({ port, hostName, action, confirm, outlets }) {
+export async function controlHost({ port, hostName, action, confirmed, by = null, outlets }) {
   const key = portKey(port);
   if (!COMMANDS[action]) throw fail(400, 'action must be on, off or cycle');
   if (!hostName) throw fail(404, 'Unknown host');
-  if (confirm !== hostName) throw fail(400, `Confirmation does not match the host name (${hostName})`);
+  if (confirmed !== true) throw fail(400, 'This needs an explicit confirmation (confirmed: true)');
   if (config.hosts[key]?.locked) throw fail(423, `Power control is locked for ${hostName}. Unlock it in the host settings first.`);
   const mapped = config.mappings[key] ?? [];
   if (!mapped.length) throw fail(400, `${hostName} has no outlet mapped`);
@@ -177,7 +177,7 @@ export async function controlHost({ port, hostName, action, confirm, outlets }) 
   if (wait > 0) throw fail(429, `Wait ${Math.ceil(wait / 1000)} s before sending another power command to ${hostName}`);
   inFlight.add(key);
 
-  const entry = { at: new Date().toISOString(), port: Number(key), host: hostName, action, outlets: targets };
+  const entry = { at: new Date().toISOString(), by, port: Number(key), host: hostName, action, outlets: targets };
   const results = [];
   try {
     // one login per device, all of its outlets in one go, then read the state back
@@ -203,14 +203,15 @@ export async function controlHost({ port, hostName, action, confirm, outlets }) 
 // --- HTTP routes ---------------------------------------------------------------------------------------------------
 
 /** Returns true if it handled the request. `readPorts()` supplies the KX host list for auto-matching. */
-export async function powerRoutes(req, res, pathname, { readJson, json, readPorts }) {
+export async function powerRoutes(req, res, pathname, { readJson, json, readPorts, canConfigure = true, by = null }) {
   if (pathname === '/api/config' && req.method === 'GET') {
-    json(res, 200, { devices: config.devices.map(publicDevice), mappings: config.mappings, hosts: config.hosts });
+    json(res, 200, { devices: config.devices.map((d) => (canConfigure ? publicDevice(d) : { id: d.id, name: d.name })), mappings: config.mappings, hosts: config.hosts });
     return true;
   }
   if (pathname === '/api/power' && req.method === 'GET') {
     const refresh = new URL(req.url, 'http://x').searchParams.get('refresh') === '1';
-    json(res, 200, await powerState({ refresh }));
+    const state = await powerState({ refresh });
+    json(res, 200, canConfigure ? state : { ...state, devices: state.devices.map(({ host, ...rest }) => rest) });
     return true;
   }
 
@@ -272,7 +273,7 @@ export async function powerRoutes(req, res, pathname, { readJson, json, readPort
   if (m && req.method === 'POST') {
     const body = await readJson(req);
     const hostName = (await readPorts()).find((p) => String(p.id) === m[1])?.name;
-    json(res, 200, await controlHost({ port: m[1], hostName, action: m[2], confirm: body.confirm, outlets: body.outlets }));
+    json(res, 200, await controlHost({ port: m[1], hostName, action: m[2], confirmed: body.confirmed, by, outlets: body.outlets }));
     return true;
   }
 

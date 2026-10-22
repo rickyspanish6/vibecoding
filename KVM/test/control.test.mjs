@@ -47,22 +47,22 @@ process.env.KX_POWER_LOG = audit;
 process.env.KX_POWER_COOLDOWN_MS = '400';
 const { controlHost } = await import('../power.js');
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const MAC = { port: 10, hostName: 'B25-CTL-MAC01', confirm: 'B25-CTL-MAC01' };
+const MAC = { port: 10, hostName: 'B25-CTL-MAC01', confirmed: true, by: 'tester' };
 
 test.after(() => pdu.server.close());
 
-test('refuses without the exact host name, and sends nothing', async () => {
-  for (const confirm of ['', 'MAC01', 'b25-ctl-mac01', undefined]) {
-    await assert.rejects(() => controlHost({ ...MAC, action: 'off', confirm }), (e) => e.status === 400);
+test('refuses without an explicit confirmation, and sends nothing', async () => {
+  for (const confirmed of [false, undefined, 'true', 1, 'B25-CTL-MAC01']) {
+    await assert.rejects(() => controlHost({ ...MAC, action: 'off', confirmed }), (e) => e.status === 400 && /confirmation/i.test(e.message));
   }
   assert.equal(pdu.received.length, 0, 'no command may reach the PDU');
 });
 
 test('refuses unknown actions, unmapped hosts, foreign outlets and locked hosts', async () => {
   await assert.rejects(() => controlHost({ ...MAC, action: 'explode' }), (e) => e.status === 400);
-  await assert.rejects(() => controlHost({ port: 3, hostName: 'B25-CTL-XAG02', confirm: 'B25-CTL-XAG02', action: 'off' }), (e) => e.status === 400 && /no outlet mapped/.test(e.message));
+  await assert.rejects(() => controlHost({ port: 3, hostName: 'B25-CTL-XAG02', confirmed: true, action: 'off' }), (e) => e.status === 400 && /no outlet mapped/.test(e.message));
   await assert.rejects(() => controlHost({ ...MAC, action: 'off', outlets: [{ device: 'pdn04', outlet: 5 }] }), (e) => e.status === 400 && /not mapped to this host/.test(e.message));
-  await assert.rejects(() => controlHost({ port: 9, hostName: 'B25-CTL-OPC02', confirm: 'B25-CTL-OPC02', action: 'off' }), (e) => e.status === 423);
+  await assert.rejects(() => controlHost({ port: 9, hostName: 'B25-CTL-OPC02', confirmed: true, action: 'off' }), (e) => e.status === 423);
   assert.equal(pdu.received.length, 0);
 });
 
@@ -95,11 +95,11 @@ test('a second command is refused while one is running and during the cooldown a
 
 test('a host with two outlets (redundant supplies) switches both, or just the one chosen', async () => {
   pdu.received.length = 0; await wait(450);
-  const both = await controlHost({ port: 6, hostName: 'B25-CTL-XAG05', confirm: 'B25-CTL-XAG05', action: 'off' });
+  const both = await controlHost({ port: 6, hostName: 'B25-CTL-XAG05', confirmed: true, action: 'off' });
   assert.deepEqual(pdu.received, ['pset 6 0', 'pset 7 0', 'pshow']);
   assert.deepEqual(both.results.map((x) => [x.outlet, x.on]), [[6, false], [7, false]]);
   await wait(450); pdu.received.length = 0;
-  await controlHost({ port: 6, hostName: 'B25-CTL-XAG05', confirm: 'B25-CTL-XAG05', action: 'on', outlets: [{ device: 'pdn04', outlet: 7 }] });
+  await controlHost({ port: 6, hostName: 'B25-CTL-XAG05', confirmed: true, action: 'on', outlets: [{ device: 'pdn04', outlet: 7 }] });
   assert.deepEqual(pdu.received, ['pset 7 1', 'pshow']);
   assert.equal(pdu.outlets[5].on, false, 'the other outlet is left alone');
 });
@@ -108,7 +108,7 @@ test('a rejected login is reported and every accepted request is in the audit lo
   const lines = readFileSync(audit, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(lines.length >= 5);
   assert.ok(lines.every((l) => l.at && l.host && l.action && l.result));
-  assert.ok(lines.some((l) => l.action === 'cycle' && l.host === 'B25-CTL-MAC01' && l.result === 'sent'));
+  assert.ok(lines.some((l) => l.action === 'cycle' && l.host === 'B25-CTL-MAC01' && l.result === 'sent' && l.by === 'tester'), 'the audit entry names who did it');
   assert.ok(!lines.some((l) => l.host === 'B25-CTL-OPC02'), 'refused requests are not logged as sent');
   assert.ok(existsSync(audit));
   assert.ok(!JSON.stringify(lines).includes('secret'), 'the audit log never holds a password');
