@@ -4,6 +4,50 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [2.0.0] - 2026-10-22
+
+**Breaking:** accounts are now mandatory. The old optional single `DASH_PASSWORD` is gone (remove it from `.env`), and the
+power API takes `{ "confirmed": true }` instead of the host's name. On first launch the dashboard shows a setup page.
+
+### Added
+- **Accounts, created at first launch.** Setup creates the administrator (from the server's own machine only). Passwords are salted
+  scrypt hashes in `.kx-users.json` (owner-only, gitignored); 5 wrong passwords lock the account and the sender for a minute;
+  sessions end after 8 idle hours, when the password changes, or when the account is disabled or removed.
+- **Multiple users with rights:** console, power, sessions, configure and users, with presets (Administrator, Operator,
+  Console only, Viewer) or custom. Settings > Users adds, edits, disables, removes and resets users; a temporary password
+  must be replaced at first sign-in (a dialog that cannot be skipped). There is always an active administrator, and nobody can
+  demote, disable or remove themselves. Everyone can change their own password under Account.
+- **Password recovery from the command line**, for anyone with shell access to the server: `node auth-cli.js reset <user>`,
+  `create-admin <user>` and `list`. A running server picks it up at once.
+- **Audit log** (`.kx-audit.log`): setup, sign-ins and failures, user changes, password changes, KX session actions and CLI
+  recoveries (never passwords). The power log (`.kx-power.log`) now records who sent each command.
+- The interface follows the rights: no controls for what you cannot do, and the server refuses it anyway (403).
+- Tests: accounts and recovery (11), the real server's permission matrix, setup and lockout (11), and the proxy gate.
+
+### Changed
+- **The power confirmation is a short dialog**, not a typed challenge: the warning, the outlets, Cancel (the default) and a
+  red confirm button. The server still requires an explicit `confirmed: true`, plus the lock, cooldown and audit log.
+- **The redundant Connect button is gone.** Clicking a host connects; a Disconnect (or Cancel while connecting) button
+  appears only when there is something to stop. Clicking the host you are already on does nothing.
+- PDU addresses, ports and logins are only sent to users with the configure right.
+- The KX proxy now serves only what Raritan's client needs (`/jsclient`, `/js`, `/css`, fonts, images) to users with the console
+  right; the rest of the KX's own web interface is reachable by administrators only.
+
+### Fixed
+- A wrong password or an invalid user name could have crashed the server (an unawaited promise); found by the new tests
+  before release.
+
+### Verified
+- 39 automated tests plus the 16 native-client tests pass.
+- Live, on isolated instances (temporary accounts file, mock KX, fake netBooter): first-launch setup, sign-in, adding an operator and
+  a viewer, the forced password change (including Escape), the operator's reduced UI, the viewer's read-only UI, a power cycle
+  by the operator (the fake unit received `rb 5`; the audit log says `"by":"olivia"`).
+- Live, on the real KX: an operator opens Raritan's client through the restricted proxy (all `/jsclient`, `/js`, `/css` requests 200).
+
+### Not verified
+- Running behind an HTTPS reverse proxy, and many people signed in at once.
+- The KX's own session list shows the dashboard's login, not the individual user.
+
 ## [1.10.0] - 2026-10-21
 
 ### Changed (native client speed)

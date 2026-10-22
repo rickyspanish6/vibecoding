@@ -64,7 +64,7 @@
   .pw { font-size: 12px; flex: none; }
   .pw.on { color: var(--ok); } .pw.off { color: #e5484d; } .pw.partial { color: var(--warn); } .pw.unknown { color: var(--off); }
   .chip.pwr.on { color: var(--ok); } .chip.pwr.off { color: #e5484d; border-color: #e5484d; } .chip.pwr.partial { color: var(--warn); }
-  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(580px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(660px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
   dialog::backdrop { background: rgba(0,0,0,.5); }
   .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--line); }
   .dlg-head h2 { margin: 0; font-size: 16px; }
@@ -75,12 +75,13 @@
   .dlg-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--hover); font-size: 12px; } .dlg-note:empty { display: none; }
   .dlg-note.ok { color: var(--ok); } .dlg-note.bad { color: #e5484d; }
   .devs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; overflow: visible; }
-  .devs li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+  .devs li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
   .devs li.empty { color: var(--muted); justify-content: center; border-style: dashed; }
-  .dev-info { display: flex; flex-direction: column; min-width: 0; font-size: 13px; }
-  .dev-info .meta { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dev-info { display: flex; flex-direction: column; flex: 1 1 240px; min-width: 0; font-size: 13px; }
+  .dev-info .meta { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   .dev-info .meta.ok { color: var(--ok); } .dev-info .meta.bad { color: #e5484d; }
-  .dev-actions { display: flex; gap: 6px; flex: none; }
+  .dev-actions { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 1 auto; }
+  .dlg-body > * { min-width: 0; } .dlg-help, .dlg-note { overflow-wrap: anywhere; }
   .dbtn { width: auto; display: inline-block; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: none; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
   .dbtn:hover:not(:disabled) { background: var(--hover); } .dbtn:disabled { opacity: .5; }
   .dbtn.primary { background: var(--accent); color: var(--accent-text); border-color: transparent; font-weight: 600; }
@@ -88,6 +89,10 @@
   .fld { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
   dialog input:not([type=checkbox]), dialog select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; font-size: 14px; width: 100%; }
   dialog input:focus, dialog select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .tabs { display: flex; gap: 4px; padding: 3px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; width: fit-content; }
+  .dbtn.tab { border: 0; padding: 5px 14px; color: var(--muted); } .dbtn.tab.on { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--line); }
+  .perm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; } .perm-grid .check { color: var(--text); font-size: 13px; }
+  .pw-row { grid-template-columns: 1fr auto; }
   .pwr-row { display: flex; gap: 8px; flex-wrap: wrap; }
   .dbtn.danger-fill { background: #e5484d; color: #fff; }
   .dbtn.danger-fill:disabled { background: var(--line); color: var(--muted); }
@@ -125,8 +130,8 @@
 </head>
 <body>
 <aside>
-  <div class="brand"><div><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p><a class="link" id="signout" href="/login" hidden>Sign out</a></p></div>
-    <button class="icon" id="cfgBtn" title="Settings: power devices and outlet mapping" aria-label="Settings">⚙︎</button></div>
+  <div class="brand"><div><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p id="who" hidden><a class="link" id="account" href="#">Account</a> · <a class="link" id="signout" href="/login">Sign out</a></p></div>
+    <button class="icon" id="cfgBtn" title="Settings: power devices, users and rights" aria-label="Settings">⚙︎</button></div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search targets  ( / )" aria-label="Search targets">
     <label class="check"><input type="checkbox" id="all"> Show unused ports</label>
@@ -150,16 +155,16 @@
     <button class="btn stop" id="cad" hidden title="Send Ctrl-Alt-Del to the target">Ctrl-Alt-Del</button>
     <button class="btn stop" id="refreshVideo" hidden title="Ask the KX for a fresh video frame">Refresh video</button>
     <button class="btn stop" id="disconnectAll" title="End this page's console and every other client's console session on the KX">Disconnect all</button>
-    <button class="btn" id="connect" disabled>Connect</button>
+    <button class="btn stop" id="disconnect" hidden>Disconnect</button>
   </header>
   <section class="screen" id="screen"><div><strong>No target selected</strong><span>Pick a port on the left.</span></div></section>
 </main>
-<dialog id="cfgDlg"></dialog><dialog id="hostDlg"></dialog><dialog id="pwrDlg"></dialog>
+<dialog id="cfgDlg"></dialog><dialog id="hostDlg"></dialog><dialog id="pwrDlg"></dialog><dialog id="accDlg"></dialog>
 <script src="/settings.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 let ports = [], selected = null, device = null, connected = null, connecting = false;
-let nativeClient = null, nativeRes = '';
+let nativeClient = null, nativeRes = '', connectingTo = null;
 let missed = 0, reconnects = []; // polls without an open console socket / recent auto-reconnect times
 
 function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
@@ -182,7 +187,8 @@ function renderList() {
       b.onclick = () => select(p);
       const gear = el('button', 'gear', '⚙︎'); gear.title = 'Host settings'; gear.setAttribute('aria-label', `Settings for ${p.name}`);
       gear.onclick = (e) => { e.stopPropagation(); openHostSettings(p); };
-      li.append(b, gear); list.append(li);
+      if (can('configure') || can('power')) li.append(b, gear); else li.append(b); // rights come from settings.js
+      list.append(li);
     }
   }
 }
@@ -195,15 +201,16 @@ function renderDetail(keepScreen = false) {
   const st = $('state'); st.hidden = false; st.className = 'chip' + (p.up ? ' ok' : '');
   st.textContent = connected === p.id ? 'Connected' : p.busy ? 'In use' : p.up ? 'Online' : 'Offline';
   const ty = $('type'); ty.hidden = false; ty.textContent = p.type;
-  const link = $('raritan'); link.hidden = !p.up; link.href = `/api/ports/${p.id}/console`;
-  const btn = $('connect'), live = connected === p.id;
-  btn.disabled = !p.up && !live; btn.textContent = live ? 'Disconnect' : 'Connect'; btn.classList.toggle('stop', live);
+  const link = $('raritan'); link.hidden = !p.up || !can('console'); link.href = `/api/ports/${p.id}/console`;
+  const live = connected === p.id, trying = connecting && connectingTo === p.id;
+  const stopBtn = $('disconnect'); stopBtn.hidden = !(live || trying); stopBtn.textContent = live ? 'Disconnect' : 'Cancel';
   const nativeLive = Boolean(nativeClient) && live;
   $('cad').hidden = $('refreshVideo').hidden = $('quality').hidden = !nativeLive;
   if (live || keepScreen || connecting) return; // keep the running session / status text; polling must not rebuild them
   const s = $('screen'); s.className = 'screen'; s.replaceChildren(); const d = el('div');
-  d.append(el('strong', null, p.up ? 'Ready to connect' : 'Target is offline'),
-    el('span', null, p.up ? 'The KX allows one remote channel at a time.' : 'No video signal on this port.'));
+  if (!p.up) d.append(el('strong', null, 'Target is offline'), el('span', null, 'No video signal on this port.'));
+  else if (!can('console')) d.append(el('strong', null, 'No console access'), el('span', null, 'Your account can see this host but not open its console.'));
+  else d.append(el('strong', null, 'Not connected'), el('span', null, 'Click the host in the list to open its console. The KX allows one remote channel at a time.'));
   s.append(d);
 }
 
@@ -219,7 +226,9 @@ let attempt = 0; // bumped on every connect/disconnect so a stale connect() stop
 // Clicking a host connects to it and drops whatever was connected before.
 function select(p) {
   selected = p.id; renderList();
-  if (p.up) connect(p); else { disconnect(); renderDetail(); }
+  if (p.up && can('console') && (connected === p.id || (connecting && connectingTo === p.id))) { renderDetail(true); return; } // already on it
+  if (p.up && can('console')) { connect(p); return; }
+  disconnect(); renderDetail();
 }
 
 // Restyle Raritan's client to match the dashboard. The iframe is same-origin, so we can add our stylesheet.
@@ -240,8 +249,7 @@ async function connect(p = ports.find((x) => x.id === selected), reason) {
   if (!p) return;
   const mine = ++attempt;
   closeNative(); // a previous native console must close first, or it keeps holding the KX's single channel
-  connecting = true; connected = null; $('screen').replaceChildren(); renderDetail(true);
-  const btn = $('connect'); btn.disabled = true; btn.textContent = 'Connecting…';
+  connecting = true; connectingTo = p.id; connected = null; $('screen').replaceChildren(); renderDetail(true);
   try {
     const r = await fetch('/api/session'); const data = await r.json();
     if (!r.ok) throw new Error(data.error);
@@ -313,7 +321,7 @@ function checkLink(rfbOpen) {
   reconnects = reconnects.filter((t) => now - t < 120000);
   if (!p) return;
   if (reconnects.length >= 3) {
-    disconnect(); message('Connection lost', 'Reconnecting failed 3 times in 2 minutes. Click Connect to try again.'); renderDetail(true);
+    disconnect(); message('Connection lost', 'Reconnecting failed 3 times in 2 minutes. Click the host to try again.'); renderDetail(true);
     return;
   }
   reconnects.push(now); connect(p, 'Connection lost. Reconnecting…');
@@ -332,7 +340,7 @@ function renderSessions(sessions) {
     const li = el('li'), top = el('div', 'row');
     const name = s.portId ? (s.portName ?? `Port ${s.port}`) : 'Web login';
     top.append(el('span', s.portId ? 'tag live' : 'tag', s.self ? `${name} · this dashboard` : name));
-    if (s.portId || (!s.self && s.id)) {
+    if (can('sessions') && (s.portId || (!s.self && s.id))) {
       const btn = el('button', 'mini', s.portId ? 'Disconnect' : 'Log off');
       btn.title = s.portId ? 'End this console session' : 'Force this web login off the KX';
       btn.onclick = async () => {
@@ -368,7 +376,8 @@ function disconnect() { attempt++; closeNative(); connecting = false; connected 
 try { const v = localStorage.getItem('kxc-quality'); if (v && [...$('quality').options].some((o) => o.value === v)) $('quality').value = v; } catch { /* no storage */ }
 $('quality').onchange = () => { try { localStorage.setItem('kxc-quality', $('quality').value); } catch { /* no storage */ } nativeClient?.setQuality(qualityMode()); };
 $('cfgBtn').onclick = () => openSettings();
-$('connect').onclick = () => (connected != null ? disconnect() : connect());
+$('disconnect').onclick = () => disconnect();
+$('account').onclick = (e) => { e.preventDefault(); openAccount(); };
 try { const v = localStorage.getItem('kxc-client'); if (['raritan', 'native'].includes(v)) $('clientMode').value = v; } catch { /* no storage */ }
 $('clientMode').onchange = () => {
   try { localStorage.setItem('kxc-client', clientMode()); } catch { /* no storage */ }
@@ -394,7 +403,6 @@ async function load() {
     ports = data.ports; device = data.device; $('err').style.display = 'none';
     if (selected == null) selected = ports.find((p) => p.up)?.id ?? null;
     $('ver').textContent = `KX Console v${data.version}`;
-    $('signout').hidden = !data.auth;
     $('dev').textContent = data.device.name; $('sub').textContent = `${data.device.model} · ${data.device.host}`;
     renderList(); renderDetail(); checkLink(data.rfbOpen);
   } catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
@@ -402,8 +410,12 @@ async function load() {
 
 $('q').oninput = $('all').onchange = renderList;
 addEventListener('keydown', (e) => { if (e.key === '/' && document.activeElement !== $('q') && document.activeElement?.tagName !== 'CANVAS') { e.preventDefault(); $('q').focus(); } });
-load(); setInterval(load, 5000);
-loadSessions(); setInterval(loadSessions, 10000);
+loadMe().then((ready) => {
+  if (!ready) return; // a new password has to be chosen first
+  startSettings();
+  load(); setInterval(load, 5000);
+  if (can('console') || can('sessions')) { loadSessions(); setInterval(loadSessions, 10000); }
+});
 </script>
 </body>
 </html>

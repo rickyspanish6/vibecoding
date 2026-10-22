@@ -3,3 +3,6 @@ node_modules/
 .kx-session.json
 .kx-config.json
 .kx-power.log
+.kx-users.json
+.kx-audit.log
+.claude/
