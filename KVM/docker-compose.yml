@@ -15,6 +15,8 @@ services:
       # Published on this machine only. To serve other machines use "3000:3000", set ALLOWED_HOSTS to the name people
       # browse to, and put HTTPS in front (the dashboard holds a logged-in KX admin session).
       - "127.0.0.1:3000:3000"
+    networks:
+      - default
     volumes:
       - kx-data:/data
       # Optional: the SSH key for the sessions panel when no KX web login is set (also set KX_SSH_KEY=/run/kx-ssh-key).
@@ -22,3 +24,10 @@ services:
 
 volumes:
   kx-data:
+
+networks:
+  default:
+    driver_opts:
+      # Console speed over a VPN: the container's default MTU is larger than most VPN tunnels, which stalls the video stream.
+      # Set KX_MTU in .env to your tunnel's MTU (1280 for many VPNs); 1500 is the normal Ethernet value.
+      com.docker.network.driver.mtu: ${KX_MTU:-1500}

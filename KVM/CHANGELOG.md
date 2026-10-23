@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [2.1.1] - 2026-10-23
+
+### Fixed
+- **Console speed through the proxy:** the WebSocket link to the KX and the browser now run with Nagle's algorithm off, so small input and
+  update-request packets are no longer held back (a 0.9 fps console in Docker over a VPN became 3.3 fps).
+- **Docker over a VPN:** the compose network takes an `MTU` (`KX_MTU` in `.env`). With the container at 1280 to match a VPN tunnel, the same
+  test went from a console that decayed to about 1 fps to a steady 6 to 9 fps against a real KX. Documented in the README.
+
 ## [2.1.0] - 2026-10-23
 
 ### Added

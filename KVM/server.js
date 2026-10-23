@@ -319,6 +319,9 @@ function proxy(req, res) {
 function proxyUpgrade(req, socket, head) {
   if (!req.url.startsWith('/rfb') || !sameOrigin(req) || !auth.can(currentUser(req), 'console')) return socket.destroy();
   const up = tlsConnect({ host: HOST, port: 443, rejectUnauthorized: false });
+  // The console stream is many tiny request/response messages. Nagle's algorithm holds small writes until the previous data is
+  // acknowledged, which on some network stacks (Docker Desktop's userspace NAT) adds hundreds of ms to every frame: send at once.
+  up.setNoDelay(true); socket.setNoDelay(true);
   let counted = false;
   const close = () => { if (counted) { counted = false; rfbOpen--; } up.destroy(); socket.destroy(); };
   up.on('error', close); socket.on('error', close); up.on('close', close); socket.on('close', close);

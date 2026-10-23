@@ -100,6 +100,9 @@ docker exec -it kx-console node auth-cli.js create-admin admin
   inside: `docker exec kx-console sh -c 'snmpget -v2c -c "$KX_SNMP_COMMUNITY" -t3 -r1 "$KX_HOST" 1.3.6.1.2.1.1.5.0'`. (Do not trust `nc`
   there: Docker Desktop can report a port "open" while the destination is unreachable.) If it times out, run the container on a host
   that is on the KX network, or run the dashboard directly with `npm start`.
+- **Slow console over a VPN:** set `KX_MTU` in `.env` to your tunnel's MTU (often `1280`; on a Mac check `ifconfig` for the VPN's `utun`),
+  then `docker compose down && docker compose up -d`. Docker Desktop adds its own network hop, so expect a console somewhat slower than
+  `npm start` on the same machine; a host on the KX network has no such limit.
 - **SSH key** (only for the sessions list when no KX web login is set): uncomment the key mount in `docker-compose.yml` and set `KX_SSH_KEY`.
 - `npm run docker:smoke` builds the image and checks it (health, unprivileged user, setup code, persistence, recovery CLI, clean stop) with no KX needed.
 
