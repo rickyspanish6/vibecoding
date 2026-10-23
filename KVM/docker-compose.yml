@@ -1,0 +1,24 @@
+# docker compose up -d --build        then open http://localhost:3000
+#
+# Put your settings in a .env file next to this one (copy .env.example): KX_HOST, KX_USER, KX_PASSWORD, KX_SNMP_COMMUNITY,
+# KX_DEVICE_ID, and KX_SETUP_TOKEN (a code of your choice that lets you create the first administrator from the browser).
+services:
+  kx-console:
+    build: .
+    image: kx-console:latest
+    container_name: kx-console
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    ports:
+      # Published on this machine only. To serve other machines use "3000:3000", set ALLOWED_HOSTS to the name people
+      # browse to, and put HTTPS in front (the dashboard holds a logged-in KX admin session).
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - kx-data:/data
+      # Optional: the SSH key for the sessions panel when no KX web login is set (also set KX_SSH_KEY=/run/kx-ssh-key).
+      # - ~/.ssh/kx3_rsa:/run/kx-ssh-key:ro
+
+volumes:
+  kx-data:

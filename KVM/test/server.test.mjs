@@ -205,3 +205,30 @@ test('the KX client files are open to the console right, the KX admin pages are 
     assert.notEqual((await admin.get('/home.asp')).status, 403, 'administrators may use the whole proxy');
   } finally { live.child.kill(); }
 });
+
+test('with KX_SETUP_TOKEN, the first administrator can be created from elsewhere, but only with the code (the container case)', async () => {
+  const fresh = await start({ KX_MOCK: '1', KX_SETUP_TOKEN: 'letmein-setup-code', KX_USERS_PATH: join(dir, 'users-docker.json'), KX_AUDIT_LOG: join(dir, 'audit-docker.log') });
+  try {
+    const remote = { 'x-forwarded-for': '203.0.113.9' }; // stands in for Docker's gateway: not a loopback peer
+    const c = client(fresh.base);
+    const page = await c.get('/setup', remote);
+    assert.equal(page.status, 200); assert.match(page.body, /Setup code/);
+    const body = { username: 'dockeradmin', password: PW };
+    assert.equal((await c.call('POST', '/api/setup', body, remote)).status, 403, 'no code');
+    assert.equal((await c.call('POST', '/api/setup', { ...body, token: 'wrong code' }, remote)).status, 403, 'wrong code');
+    assert.equal((await c.get('/api/me')).status, 401, 'nothing was created');
+    const ok = await c.call('POST', '/api/setup', { ...body, token: 'letmein-setup-code' }, remote);
+    assert.equal(ok.status, 200); assert.ok(c.signedIn());
+    assert.equal((await c.get('/api/me')).body.user.username, 'dockeradmin');
+    assert.equal((await client(fresh.base).call('POST', '/api/setup', { username: 'again', password: PW, token: 'letmein-setup-code' }, remote)).status, 409, 'the code cannot create a second administrator');
+  } finally { fresh.child.kill(); }
+});
+
+test('wrong setup codes are rate limited', async () => {
+  const fresh = await start({ KX_MOCK: '1', KX_SETUP_TOKEN: 'another-code', KX_USERS_PATH: join(dir, 'users-docker2.json'), KX_AUDIT_LOG: join(dir, 'audit-docker2.log') });
+  try {
+    const remote = { 'x-forwarded-for': '203.0.113.9' }, c = client(fresh.base);
+    for (let i = 0; i < 5; i++) assert.equal((await c.call('POST', '/api/setup', { username: 'x1', password: PW, token: `guess ${i}` }, remote)).status, 403);
+    assert.equal((await c.call('POST', '/api/setup', { username: 'x1', password: PW, token: 'another-code' }, remote)).status, 429, 'even the right code waits while locked');
+  } finally { fresh.child.kill(); }
+});

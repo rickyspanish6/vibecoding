@@ -1,11 +1,13 @@
 {
   "name": "kx3-dashboard",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env server.js",
     "mock": "KX_MOCK=1 node server.js",
-    "test": "node --test test/ && node public/native/selftest.mjs"
+    "test": "node --test test/ && node public/native/selftest.mjs",
+    "docker:build": "docker build -t kx-console:latest -t kx-console:$npm_package_version .",
+    "docker:smoke": "sh scripts/docker-smoke.sh"
   }
 }

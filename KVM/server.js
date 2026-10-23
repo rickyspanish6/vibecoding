@@ -8,6 +8,7 @@
 import { createServer } from 'node:http';
 import { request as httpsRequest, Agent } from 'node:https';
 import { connect as tlsConnect } from 'node:tls';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { powerRoutes } from './power.js';
 import * as auth from './auth.js';
 import { readFileSync } from 'node:fs';
@@ -41,6 +42,10 @@ let simLatency = Number(process.env.KX_SIM_LATENCY_MS ?? 0);
 const BIND = process.env.BIND ?? '127.0.0.1';
 const ALLOWED_HOSTS = (process.env.ALLOWED_HOSTS ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
 const LOOPBACK = ['127.0.0.1', 'localhost', '::1'];
+// First-run setup is normally only allowed from this machine. In a container every request arrives from Docker's gateway, so the
+// operator can set a one-time setup code instead (KX_SETUP_TOKEN): setup from elsewhere then needs that code. Unset = local only.
+const SETUP_TOKEN = process.env.KX_SETUP_TOKEN ?? '';
+const sameSecret = (a, b) => timingSafeEqual(createHash('sha256').update(String(a ?? '')).digest(), createHash('sha256').update(b).digest());
 
 // --- SNMP port list --------------------------------------------------------------------------
 
@@ -490,8 +495,14 @@ const setupPage = authPage({
   fields: `<input id="u" placeholder="User name" autocomplete="username" autofocus required><input id="p" type="password" placeholder="Password (at least ${auth.MIN_PASSWORD} characters)" autocomplete="new-password" minlength="${auth.MIN_PASSWORD}" required><input id="c" type="password" placeholder="Repeat the password" autocomplete="new-password" required>`,
   script: "if(p.value!==c.value)throw new Error('The passwords do not match');const body={username:u.value,password:p.value};",
 });
+const setupWithCode = authPage({
+  intro: 'Welcome. Create the administrator account for this dashboard. You need the setup code that was set for this server (KX_SETUP_TOKEN).',
+  button: 'Create account', endpoint: '/api/setup',
+  fields: `<input id="u" placeholder="User name" autocomplete="username" autofocus required><input id="p" type="password" placeholder="Password (at least ${auth.MIN_PASSWORD} characters)" autocomplete="new-password" minlength="${auth.MIN_PASSWORD}" required><input id="c" type="password" placeholder="Repeat the password" autocomplete="new-password" required><input id="t" type="password" placeholder="Setup code" autocomplete="off" required>`,
+  script: "if(p.value!==c.value)throw new Error('The passwords do not match');const body={username:u.value,password:p.value,token:t.value};",
+});
 const setupElsewhere = authPage({
-  intro: 'This dashboard has no account yet. The first administrator can only be created from the machine it runs on: open it there, or run <code>node auth-cli.js create-admin &lt;user&gt;</code> in the project folder.',
+  intro: 'This dashboard has no account yet. The first administrator can only be created from the machine it runs on: open it there, or run <code>node auth-cli.js create-admin &lt;user&gt;</code> (in Docker: <code>docker exec -it kx-console node auth-cli.js create-admin &lt;user&gt;</code>). A setup code (KX_SETUP_TOKEN) also allows it from here.',
   button: 'Check again', endpoint: '/api/login', fields: '', script: "location.reload();return;const body={};",
 });
 
@@ -505,12 +516,20 @@ const server = createServer(async (req, res) => {
     // Reachable without an account: first-run setup (from this machine only) and sign-in.
     if (pathname === '/setup' && req.method === 'GET') {
       if (auth.hasUsers()) return redirect('/login');
-      return html(isLocal(req) ? setupPage : setupElsewhere);
+      return html(isLocal(req) ? setupPage : SETUP_TOKEN ? setupWithCode : setupElsewhere);
     }
     if (pathname === '/api/setup' && req.method === 'POST') {
       if (auth.hasUsers()) return json(res, 409, { error: 'Setup is already done' });
-      if (!isLocal(req)) return json(res, 403, { error: 'The first administrator can only be created from the machine the dashboard runs on' });
-      const { username, password } = await readJson(req);
+      const { username, password, token } = await readJson(req);
+      if (!isLocal(req)) {
+        const keys = [`ip:${clientIp(req)}`];
+        const wait = lockedFor(keys);
+        if (wait) return json(res, 429, { error: `Too many attempts. Try again in ${wait}s.` });
+        if (!SETUP_TOKEN || !sameSecret(token, SETUP_TOKEN)) {
+          if (SETUP_TOKEN) noteFailure(keys);
+          return json(res, 403, { error: SETUP_TOKEN ? 'Wrong setup code' : 'The first administrator can only be created from the machine the dashboard runs on' });
+        }
+      }
       const user = auth.createFirstAdmin(username, password);
       auth.audit({ event: 'setup', user: user.username, ip: clientIp(req) });
       setSessionCookie(res, auth.startSession(auth.verifyLogin(username, password)));
@@ -612,8 +631,11 @@ setInterval(async () => {
 }, 60_000).unref();
 
 server.on('upgrade', proxyUpgrade);
+
+// Exit cleanly when asked to stop (docker stop, systemd, Ctrl-C) instead of dying with a signal status.
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { console.log(`${signal}: shutting down`); process.exit(0); });
 server.listen(PORT, BIND, () => {
   console.log(`KX Console v${VERSION} on http://${BIND}:${PORT}${MOCK ? ' (mock data)' : ''}`);
-  if (!auth.hasUsers()) console.log(`No accounts yet: open http://127.0.0.1:${PORT}/setup on this machine to create the administrator (or run: node auth-cli.js create-admin <user>).`);
+  if (!auth.hasUsers()) console.log(`No accounts yet: open http://127.0.0.1:${PORT}/setup on this machine to create the administrator${SETUP_TOKEN ? ' (from elsewhere, with the setup code)' : ''}, or run: node auth-cli.js create-admin <user>.`);
   if (!LOOPBACK.includes(BIND)) console.log(`Listening beyond this machine (${BIND}): put HTTPS in front, and set ALLOWED_HOSTS to the name people browse to.`);
 });

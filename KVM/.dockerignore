@@ -1,0 +1,23 @@
+# Never send secrets or local state into the build context.
+.env
+.env.*
+!.env.example
+.kx-*
+.claude
+.git
+node_modules
+
+# Not needed at run time.
+test
+**/*.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Developer tools in public/native: protocol probes, a page that types on a real target, and capture helpers.
+public/native/index.html
+public/native/selftest.mjs
+public/native/probe.mjs
+public/native/input-check.html
+public/native/pointer-check.html
+public/native/hkc-capture.html

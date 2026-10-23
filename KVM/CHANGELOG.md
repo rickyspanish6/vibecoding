@@ -4,6 +4,32 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [2.1.0] - 2026-10-23
+
+### Added
+- **Docker packaging:** `Dockerfile`, `.dockerignore` and `docker-compose.yml`. Node 22 on Alpine with `net-snmp-tools`, `openssh-client` and
+  `tini`; about 175 MB; runs as an unprivileged user; no build step. All state lives in one `/data` volume (accounts, PDU config, KX
+  session, audit and power logs). A health check, the port published on this machine only, and the optional SSH key mount are in the compose
+  file. Developer-only pages (protocol probes, the page that types on a target) and all Markdown are left out of the image.
+- **`KX_SETUP_TOKEN`:** an optional setup code that allows the first administrator to be created from outside the machine, which a container
+  needs because every request reaches it from Docker's gateway. Wrong codes are rate limited, and the code can never create a second
+  administrator. Unset, setup remains local-only as before.
+- `npm run docker:smoke` (`scripts/docker-smoke.sh`): builds the image and checks health, the unprivileged user, a clean image, setup with and
+  without the code, the owner-only accounts file, persistence across a restart, the recovery CLI through `docker exec`, and a clean stop.
+- `npm run docker:build`.
+
+### Changed
+- The server exits with code 0 on SIGTERM and SIGINT (it used to die with the signal status, 143, on `docker stop`).
+
+### Verified
+- 41 automated tests (two new for the setup code) plus the 16 native-client tests pass, and the Docker smoke test passes (image built on arm64
+  with Docker Desktop 29.9).
+
+### Not verified
+- **The container talking to the real KX.** The test machine's VPN was disconnected during the Docker tests, so neither the machine nor the
+  container could reach the KX. Docker Desktop on a Mac or Windows machine may not follow a VPN into the container's VM; the README explains how
+  to check from inside the container. The same code runs unchanged outside Docker, where it is verified. The amd64 image was not built.
+
 ## [2.0.0] - 2026-10-22
 
 **Breaking:** accounts are now mandatory. The old optional single `DASH_PASSWORD` is gone (remove it from `.env`), and the

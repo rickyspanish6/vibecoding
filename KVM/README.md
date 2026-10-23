@@ -46,6 +46,8 @@ npm run mock           # fake data, no KX needed
 npm test               # unit and integration tests and the native-client self-test (no hardware)
 ```
 
+Or in Docker: see [Docker](#docker).
+
 **First launch:** open http://127.0.0.1:3000 **on the machine that runs the server**. With no accounts yet it opens a setup
 page where you create the administrator (user name and a password of at least 10 characters). That page only works from
 the machine itself, never through a reverse proxy.
@@ -61,11 +63,45 @@ the machine itself, never through a reverse proxy.
 | `KX_CONFIG_PATH` | `.kx-config.json` | Where PDU devices, outlet mappings and per-host settings are stored |
 | `BIND` | `127.0.0.1` | Address to listen on. Beyond this machine, put HTTPS in front and set `ALLOWED_HOSTS` |
 | `ALLOWED_HOSTS` | | Extra Host names (comma separated) accepted besides localhost |
+| `KX_SETUP_TOKEN` | unset | A code that lets the first administrator be created from another machine (used for Docker; see below) |
 | `KX_USERS_PATH` | `.kx-users.json` | Accounts (salted password hashes, owner-only) |
 | `KX_AUDIT_LOG` | `.kx-audit.log` | Sign-ins, user changes, KX session actions (never passwords) |
 
 **Harden the KX too:** the SNMP community defaults to `public`. Change it in the KX (Device Settings > Device Services),
 then set the same value as `KX_SNMP_COMMUNITY`; the app does not change KX settings itself.
+
+## Docker
+
+The image is small (about 175 MB: Node 22 on Alpine, plus `net-snmp-tools`, `openssh-client` and `tini`), runs as an
+unprivileged user, has no npm dependencies, and keeps everything it writes in one volume, `/data`.
+
+```bash
+cp .env.example .env     # set KX_HOST, KX_USER, KX_PASSWORD, KX_SNMP_COMMUNITY, KX_DEVICE_ID and KX_SETUP_TOKEN
+docker compose up -d --build
+```
+
+Then open http://localhost:3000. With no accounts yet it shows the setup page; in a container every request arrives from Docker's
+gateway, so it asks for the **setup code** (`KX_SETUP_TOKEN`) before creating the administrator. Once you have signed in, remove
+`KX_SETUP_TOKEN` from `.env` and run `docker compose up -d` again. Without a setup code, create the first administrator from the
+command line instead:
+
+```bash
+docker exec -it kx-console node auth-cli.js create-admin admin
+```
+
+- **Lost password:** `docker exec -it kx-console node auth-cli.js reset <user>`.
+- **Your data** (accounts, PDU config, the KX session, audit and power logs) is in the `kx-data` volume. Back it up with
+  `docker run --rm -v kx-data:/data -v "$PWD":/backup alpine tar czf /backup/kx-data.tgz -C /data .`
+- **Upgrade:** `git pull && docker compose up -d --build`. **Logs:** `docker logs kx-console`.
+- **Serving other machines:** the compose file publishes the port on this machine only (`127.0.0.1:3000`). To serve others change it
+  to `3000:3000`, set `ALLOWED_HOSTS` to the name people browse to, and put HTTPS in front.
+- **Network:** the container must reach the KX (SNMP on UDP 161, HTTPS on 443) and any PDUs (Telnet on 23). Docker Desktop on a Mac or
+  Windows machine runs containers in a VM, so a KX reachable only through a VPN may not be reachable from the container. Check from
+  inside: `docker exec kx-console sh -c 'snmpget -v2c -c "$KX_SNMP_COMMUNITY" -t3 -r1 "$KX_HOST" 1.3.6.1.2.1.1.5.0'`. (Do not trust `nc`
+  there: Docker Desktop can report a port "open" while the destination is unreachable.) If it times out, run the container on a host
+  that is on the KX network, or run the dashboard directly with `npm start`.
+- **SSH key** (only for the sessions list when no KX web login is set): uncomment the key mount in `docker-compose.yml` and set `KX_SSH_KEY`.
+- `npm run docker:smoke` builds the image and checks it (health, unprivileged user, setup code, persistence, recovery CLI, clean stop) with no KX needed.
 
 ## Accounts and rights
 
