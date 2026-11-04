@@ -1,4 +1,4 @@
-# KX Console
+# KVM Console
 
 A clean web front end for a Raritan Dominion KX III KVM-over-IP switch (developed against firmware 3.10).
 It lists targets with live status, embeds Raritan's own HTML KVM client in the page, and shows who else is
@@ -143,7 +143,7 @@ new features MINOR, fixes PATCH. `package.json` is the single source of truth (s
 `/api/ports`). To release: bump `version`, add a section to [CHANGELOG.md](CHANGELOG.md), commit, then tag it:
 
 ```bash
-git tag -a vX.Y.Z -m "KX Console vX.Y.Z"
+git tag -a vX.Y.Z -m "KVM Console vX.Y.Z"
 ```
 
 ## Known limits

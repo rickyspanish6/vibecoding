@@ -26,8 +26,8 @@ async function start(extraEnv) {
   const child = spawn('node', ['server.js'], { cwd: root, env });
   let out = '';
   child.stdout.on('data', (d) => { out += d; }); child.stderr.on('data', (d) => { out += d; });
-  for (let i = 0; i < 100 && !out.includes('KX Console v'); i++) await new Promise((r) => setTimeout(r, 50));
-  assert.ok(out.includes('KX Console v'), `the server did not start: ${out}`);
+  for (let i = 0; i < 100 && !out.includes('KVM Console v'); i++) await new Promise((r) => setTimeout(r, 50));
+  assert.ok(out.includes('KVM Console v'), `the server did not start: ${out}`);
   return { child, base: `http://127.0.0.1:${port}`, out: () => out };
 }
 

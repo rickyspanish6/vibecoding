@@ -1,4 +1,4 @@
-// MTA Dashboard v3.3.0 - Client Application
+// MTA Subway Dashboard v3.3.0 - Client Application
 // Enhanced with error handling, better weather, and service alerts
 
 let CONFIG = {};
