@@ -1,10 +1,10 @@
-// server.js — PowerHub
+// server.js — Power Monitor
 // ─────────────────────
-// Serves the PowerHub dashboard and talks to the power equipment for it:
+// Serves the Power Monitor dashboard and talks to the power equipment for it:
 //   • CyberPower UPS through its RMCARD205 network card (SNMP v1/v2c, CyberPower MIB)
 //   • Synaccess netBooter NP-1601DU PDU (HTTP/HTTPS cmd.cgi "$A" commands)
 //   • a telnet console to the netBooter's own command line (WebSocket ↔ TCP 23)
-// Everything except the sign-in screen needs a PowerHub user (the first one is created on first visit).
+// Everything except the sign-in screen needs a Power Monitor user (the first one is created on first visit).
 // The server polls both devices, keeps an event log (events.json) and stores the
 // settings (settings.json). Browsers only ever talk to this server.
 //
@@ -19,7 +19,7 @@
 //   http://localhost:8090
 //
 // Forgot a password?  docker exec powerhub node server.js --reset-password [username]
-//                      (prints a new password for that user, default admin; then restart PowerHub)
+//                      (prints a new password for that user, default admin; then restart Power Monitor)
 //
 // Env: PORT (default 8090), DATA_DIR (folder for settings.json / events.json, default: this folder),
 //      MOCK=1 (simulated UPS and PDU — for trying the dashboard without hardware)
@@ -159,7 +159,7 @@ if (settings.auth && settings.auth.hash && !settings.users.length) {
   settings.users.push({ username: 'admin', salt: settings.auth.salt, hash: settings.auth.hash, created: Date.now() });
   delete settings.auth;
   saveSettings();
-  console.log('[Auth] The PowerHub password is now the "admin" account');
+  console.log('[Auth] The Power Monitor password is now the "admin" account');
 }
 
 const findUser = name => settings.users.find(u => u.username.toLowerCase() === String(name || '').toLowerCase());
@@ -250,7 +250,7 @@ function loginFailed() {
   if (loginGuard.fails.length >= 10) {
     loginGuard.lockedUntil = now + 10 * 60000;
     loginGuard.fails = [];
-    logEvent('alarm', 'PowerHub', 'Too many wrong passwords — sign-in paused for 10 minutes');
+    logEvent('alarm', 'Power Monitor', 'Too many wrong passwords — sign-in paused for 10 minutes');
   }
 }
 
@@ -262,14 +262,14 @@ if (process.argv.includes('--reset-password')) {
   if (!u) {
     console.log(settings.users.length
       ? `No such user. Users: ${settings.users.map(x => x.username).join(', ')}`
-      : 'There are no users yet — open PowerHub to create the first one.');
+      : 'There are no users yet — open Power Monitor to create the first one.');
     process.exit(1);
   }
   const password = crypto.randomBytes(9).toString('base64url');
   Object.assign(u, hashPassword(password));
   saveSettings();
   endSessions(u.username);
-  console.log(`New password for "${u.username}": ${password}\nNow restart PowerHub (docker restart powerhub), sign in with it, and change it in Settings › Users.`);
+  console.log(`New password for "${u.username}": ${password}\nNow restart Power Monitor (docker restart powerhub), sign in with it, and change it in Settings › Users.`);
   process.exit(0);
 }
 
@@ -447,13 +447,13 @@ function upsAction(cfg, action) {
 // embedded web server does not cope well with concurrent requests.
 let pduQueue = Promise.resolve();
 
-function pduCommand(cfg, cmd, timeoutMs) {
+function pduGet(cfg, reqPath, timeoutMs) {
   const run = () => new Promise((resolve, reject) => {
     const mod  = cfg.protocol === 'https' ? https : http;
     const req  = mod.request({
       host:     cfg.host,
       port:     cfg.port || (cfg.protocol === 'https' ? 443 : 80),
-      path:     '/cmd.cgi?' + cmd.replace(/ /g, '+'),
+      path:     reqPath,
       method:   'GET',
       auth:     `${cfg.username}:${cfg.password}`,
       timeout:  timeoutMs,
@@ -462,11 +462,11 @@ function pduCommand(cfg, cmd, timeoutMs) {
     }, res => {
       let body = '';
       res.setEncoding('latin1');
-      res.on('data', c => { body += c; if (body.length > 65536) req.destroy(); });
+      res.on('data', c => { body += c; if (body.length > 262144) req.destroy(); });
       res.on('end', () => {
         if (res.statusCode === 401) return reject(new Error('Wrong username or password'));
         if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
-        resolve(body.replace(/<[^>]*>/g, '').trim());
+        resolve(body);
       });
     });
     req.on('timeout', () => req.destroy(new Error('No response — timed out')));
@@ -476,6 +476,11 @@ function pduCommand(cfg, cmd, timeoutMs) {
   const p = pduQueue.then(run, run);
   pduQueue = p.catch(() => {});
   return p;
+}
+
+function pduCommand(cfg, cmd, timeoutMs) {
+  return pduGet(cfg, '/cmd.cgi?' + cmd.replace(/ /g, '+'), timeoutMs)
+    .then(body => body.replace(/<[^>]*>/g, '').trim());
 }
 
 // Reading status changes nothing, so a dropped or timed-out request is retried once.
@@ -543,6 +548,165 @@ function mockPdu() {
   const on = mock.outlets.filter(Boolean).length;
   const bits = mock.outlets.slice().reverse().map(b => (b ? '1' : '0')).join('');
   return parsePduStatus(`$A0,${bits},${(on * 0.31).toFixed(2)},${(on * 0.12).toFixed(2)},29`);
+}
+
+// ── Outlet names and AutoPing, read from the netBooter ──
+// The $A commands don't expose these. Names and AutoPing targets are on the
+// netBooter's status page; AutoPing counters are in status.xml. Best effort:
+// firmware differs, so anything missing is simply not shown.
+const PDU_PAGE_PATHS = ['/status.htm', '/status.html', '/index.htm', '/index.html', '/'];
+const PDU_EXTRAS_MS  = 30000;
+const emptyPduExtras = () => ({ names: {}, autoping: {}, pagePath: null });
+let pduExtras = MOCK ? mockPduExtras() : emptyPduExtras();
+
+function decodeHtml(text) {
+  const named = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  return text.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+    if (e[0] !== '#') return named[e.toLowerCase()] ?? m;
+    const code = /^#x/i.test(e) ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+  });
+}
+const cleanText = text => decodeHtml(text).replace(/\s+/g, ' ').trim();
+
+// Every table on the page as rows of { text, inputs }. Tolerates unclosed tags.
+function parseHtmlTables(html) {
+  const tables = [], stack = [];
+  let cell = null, last = 0, m;
+  const re = /<(\/?)(table|tr|td|th|input)\b([^>]*)>/gi;
+  const addText = upTo => {
+    if (cell) cell.text += html.slice(last, upTo).replace(/<[^>]*>/g, ' ');
+  };
+  while ((m = re.exec(html))) {
+    addText(m.index);
+    last = re.lastIndex;
+    const close = m[1] === '/', tag = m[2].toLowerCase();
+    if (tag === 'table' && !close) { stack.push([]); cell = null; }
+    else if (tag === 'table') { const t = stack.pop(); if (t && t.length) tables.push(t); cell = null; }
+    else if (tag === 'tr' && !close && stack.length) { stack[stack.length - 1].push([]); cell = null; }
+    else if ((tag === 'td' || tag === 'th') && close) cell = null;
+    else if ((tag === 'td' || tag === 'th') && stack.length) {
+      const rows = stack[stack.length - 1];
+      if (rows.length) { cell = { text: '', inputs: [] }; rows[rows.length - 1].push(cell); }
+    } else if (tag === 'input' && cell) {
+      const v = /\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(m[3]);
+      const value = v ? cleanText(v[1] ?? v[2] ?? v[3] ?? '') : '';
+      if (value) cell.inputs.push(value);
+    }
+  }
+  while (stack.length) { const t = stack.pop(); if (t.length) tables.push(t); }
+  tables.forEach(t => t.forEach(r => r.forEach(c => { c.text = cleanText(c.text); })));
+  return tables;
+}
+
+function findHtmlTable(tables, ...terms) {
+  return tables.find(t => t.slice(0, 2).some(row => {
+    const text = row.map(c => c.text).join(' ').toLowerCase();
+    return terms.every(term => text.includes(term));
+  }));
+}
+
+function parsePduPage(html, count) {
+  const tables = parseHtmlTables(html), names = {}, targets = {};
+  for (const row of findHtmlTable(tables, 'outlet', 'name') || []) {
+    if (!row.length || !/^\d+$/.test(row[0].text)) continue;
+    const n = parseInt(row[0].text, 10);
+    if (n < 1 || n > count) continue;
+    const inputs = row.flatMap(c => c.inputs);
+    const texts = row.slice(1).map(c => c.text).filter(t => t && !/^[\d.\s-]*$/.test(t));
+    const name = inputs[0] || texts[0];
+    if (name) names[n] = name;
+  }
+  for (const row of findHtmlTable(tables, 'destination ip') || []) {
+    if (row.length < 2 || row.map(c => c.text).join(' ').toLowerCase().includes('destination')) continue;
+    const n = parseInt((/\d+/.exec(row[1].text) || [])[0], 10);
+    if (!(n >= 1 && n <= count)) continue;
+    if (/^[\w.:-]+$/.test(row[0].text)) targets[n] = row[0].text;
+  }
+  return { names, targets };
+}
+
+function parsePduXml(xml, count) {
+  const field = tag => {
+    const m = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(xml);
+    return m ? m[1].trim() : null;
+  };
+  const counters = {};
+  for (let i = 0; i < count; i++) {
+    const pings = /(\d+)\s*\/\s*(\d+)/.exec(field(`apa${30 + i}`) || '');
+    const reboots = field(`apa${50 + i}`);
+    if (!pings && !/^\d+$/.test(reboots || '')) continue;
+    counters[i + 1] = {
+      echoes:  pings ? parseInt(pings[1], 10) : null,
+      total:   pings ? parseInt(pings[2], 10) : null,
+      reboots: /^\d+$/.test(reboots || '') ? parseInt(reboots, 10) : null,
+    };
+  }
+  return counters;
+}
+
+async function fetchPduPage(cfg) {
+  const paths = pduExtras.pagePath
+    ? [pduExtras.pagePath, ...PDU_PAGE_PATHS.filter(p => p !== pduExtras.pagePath)]
+    : PDU_PAGE_PATHS;
+  for (const p of paths) {
+    try {
+      const html = await pduGet(cfg, p, 6000);
+      if (html.includes('<')) { pduExtras.pagePath = p; return html; }
+    } catch (e) {
+      if (/username or password/i.test(e.message)) throw e;
+    }
+  }
+  return null;
+}
+
+let pduExtrasBusy = false;
+async function pollPduExtras() {
+  if (MOCK || pduExtrasBusy || !configured('pdu') || state.pdu.online !== true) return;
+  pduExtrasBusy = true;
+  try {
+    const count = state.pdu.outletStates.length || 16;
+    const next = { names: pduExtras.names, autoping: {}, pagePath: pduExtras.pagePath };
+    let targets = {};
+    try {
+      const html = await fetchPduPage(settings.pdu);
+      if (html) {
+        const page = parsePduPage(html, count);
+        if (Object.keys(page.names).length) next.names = page.names;
+        targets = page.targets;
+      }
+    } catch (e) {}
+    if (!Object.keys(targets).length)
+      for (const [n, a] of Object.entries(pduExtras.autoping)) if (a.target) targets[n] = a.target;
+    let counters = {};
+    try {
+      counters = parsePduXml(await pduGet(settings.pdu, '/status.xml', 6000), count);
+    } catch (e) {}
+    for (const [n, target] of Object.entries(targets)) next.autoping[n] = { target, ...(counters[n] || {}) };
+    next.pagePath = pduExtras.pagePath;
+    pduExtras = next;
+  } finally {
+    pduExtrasBusy = false;
+  }
+}
+
+function mockPduExtras() {
+  const names = { 1: 'Modem', 2: 'Router', 3: 'Rack switch' };
+  const autoping = {
+    1: { target: '1.1.1.1', echoes: 412, total: 412, reboots: 0 },
+    3: { target: '10.0.0.1', echoes: 398, total: 412, reboots: 1 },
+  };
+  return { names, autoping, pagePath: null };
+}
+
+// Lowest and highest reading per current sensor since the last reset (kept in memory)
+let pduCurrentStats = [];
+function recordPduCurrents(currents) {
+  currents.forEach((a, i) => {
+    const s = pduCurrentStats[i];
+    pduCurrentStats[i] = s ? { min: Math.min(s.min, a), max: Math.max(s.max, a) } : { min: a, max: a };
+  });
+  pduCurrentStats.length = currents.length;
 }
 
 // ── Polling & state ──────────────────────────────────────────────────────────
@@ -613,7 +777,10 @@ async function pollPdu() {
       });
     }
     Object.assign(state.pdu, s, { updatedAt: Date.now() });
+    recordPduCurrents(s.currents);
+    const firstContact = state.pdu.online !== true;
     setOnline('pdu', true);
+    if (firstContact) pollPduExtras();
   } catch (e) {
     setOnline('pdu', false, netErrorText(e));
   }
@@ -633,9 +800,14 @@ function netErrorText(e) {
   return codes[e.code] || e.message || String(e);
 }
 
-function outletLabel(n) {
+function outletName(n) {
   const o = settings.pdu.outlets[n - 1];
-  return o && o.name ? `Outlet ${n} “${o.name}”` : `Outlet ${n}`;
+  return (o && o.name) || pduExtras.names[n] || '';
+}
+
+function outletLabel(n) {
+  const name = outletName(n);
+  return name ? `Outlet ${n} “${name}”` : `Outlet ${n}`;
 }
 
 // ── Power history (history.json) ─────────────────────────────────────────────
@@ -765,6 +937,8 @@ async function pollLoop() {
   pollTimer = setTimeout(pollLoop, Math.max(2, Math.min(60, settings.pollSeconds || 5)) * 1000);
 }
 
+setInterval(() => { pollPduExtras().catch(() => {}); }, PDU_EXTRAS_MS);
+
 function pollSoon() {
   clearTimeout(pollTimer);
   pollTimer = setTimeout(pollLoop, 700);
@@ -806,11 +980,16 @@ function statusPayload() {
       configured: configured('pdu'), name: settings.pdu.name,
       online: state.pdu.online, error: state.pdu.error, updatedAt: state.pdu.updatedAt,
       currents: state.pdu.currents, tempC: state.pdu.tempC,
+      currentStats: pduCurrentStats,
       outlets: state.pdu.outletStates.map((on, i) => ({
         n: i + 1, on,
-        name:   (settings.pdu.outlets[i] && settings.pdu.outlets[i].name) || '',
+        name:   outletName(i + 1),
         locked: !!(settings.pdu.outlets[i] && settings.pdu.outlets[i].locked),
         rebooting: !!state.pendingReboots[i + 1],
+        rebootLeft: state.pendingReboots[i + 1]
+          ? Math.max(0, Math.ceil((state.pendingReboots[i + 1] + (settings.pdu.rebootSeconds || 15) * 1000 - Date.now()) / 1000))
+          : 0,
+        autoping: pduExtras.autoping[i + 1] || null,
       })),
     },
     events: events.slice(0, 50),
@@ -823,7 +1002,7 @@ async function handleApi(req, res, url) {
 
   if (url === '/api/health') return sendJson(res, 200, { ok: true, version: VERSION });
 
-  // Requests that change something must come from PowerHub's own page
+  // Requests that change something must come from Power Monitor's own page
   if (req.method !== 'GET' && req.headers.origin) {
     let same = false;
     try { same = new URL(req.headers.origin).host === req.headers.host; } catch (e) {}
@@ -837,14 +1016,14 @@ async function handleApi(req, res, url) {
 
   // First visit: create the first account
   if (url === '/api/auth/setup' && req.method === 'POST') {
-    if (usersExist()) return sendJson(res, 409, { ok: false, message: 'PowerHub already has users' });
+    if (usersExist()) return sendJson(res, 409, { ok: false, message: 'Power Monitor already has users' });
     const { username, password } = await readBody(req);
     if (!USERNAME_RE.test(username || '')) return sendJson(res, 400, { ok: false, message: 'Usernames use letters, numbers, . _ - (up to 32)' });
     if (!validPassword(password)) return sendJson(res, 400, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
     settings.users.push({ username, ...hashPassword(password), created: Date.now() });
     saveSettings();
     newSession(res, username, ip);
-    logEvent('info', 'PowerHub', `First user “${username}” created (from ${ip})`);
+    logEvent('info', 'Power Monitor', `First user “${username}” created (from ${ip})`);
     return sendJson(res, 200, { ok: true, user: username });
   }
 
@@ -859,7 +1038,7 @@ async function handleApi(req, res, url) {
       return sendJson(res, 401, { ok: false, message: 'Wrong username or password' });
     }
     newSession(res, u.username, ip);
-    logEvent('info', 'PowerHub', `${u.username} signed in (from ${ip})`);
+    logEvent('info', 'Power Monitor', `${u.username} signed in (from ${ip})`);
     return sendJson(res, 200, { ok: true, user: u.username });
   }
 
@@ -885,7 +1064,7 @@ async function handleApi(req, res, url) {
     Object.assign(findUser(who), hashPassword(password));
     saveSettings();
     endSessions(who, sess.id);
-    logEvent('info', 'PowerHub', `${who} changed their password — their other devices were signed out`);
+    logEvent('info', 'Power Monitor', `${who} changed their password — their other devices were signed out`);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -893,7 +1072,7 @@ async function handleApi(req, res, url) {
     const before = Object.keys(sessions).length;
     endSessions(who, sess.id);
     const n = before - Object.keys(sessions).length;
-    logEvent('info', 'PowerHub', `${who} signed out ${n} other device${n === 1 ? '' : 's'}`);
+    logEvent('info', 'Power Monitor', `${who} signed out ${n} other device${n === 1 ? '' : 's'}`);
     return sendJson(res, 200, { ok: true, count: n });
   }
 
@@ -916,7 +1095,7 @@ async function handleApi(req, res, url) {
     if (!validPassword(password)) return sendJson(res, 200, { ok: false, message: `Use at least ${MIN_PASSWORD} characters` });
     settings.users.push({ username, ...hashPassword(password), created: Date.now() });
     saveSettings();
-    logEvent('info', 'PowerHub', `User “${username}” added by ${who}`);
+    logEvent('info', 'Power Monitor', `User “${username}” added by ${who}`);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -931,7 +1110,7 @@ async function handleApi(req, res, url) {
       Object.assign(target, hashPassword(password));
       saveSettings();
       endSessions(target.username, sess.id);
-      logEvent('info', 'PowerHub', `Password of “${target.username}” set by ${who} — their devices were signed out`);
+      logEvent('info', 'Power Monitor', `Password of “${target.username}” set by ${who} — their devices were signed out`);
       return sendJson(res, 200, { ok: true });
     }
 
@@ -940,7 +1119,7 @@ async function handleApi(req, res, url) {
       settings.users = settings.users.filter(u => u !== target);
       saveSettings();
       endSessions(target.username);
-      logEvent('info', 'PowerHub', `User “${target.username}” removed by ${who}`);
+      logEvent('info', 'Power Monitor', `User “${target.username}” removed by ${who}`);
       return sendJson(res, 200, { ok: true });
     }
   }
@@ -962,7 +1141,7 @@ async function handleApi(req, res, url) {
       pdu: mergeDevice('pdu', settings.pdu, body.pdu),
     };
     saveSettings();
-    logEvent('info', 'PowerHub', `Settings saved (by ${who})`);
+    logEvent('info', 'Power Monitor', `Settings saved (by ${who})`);
     pollSoon();
     return sendJson(res, 200, publicSettings());
   }
@@ -1073,10 +1252,16 @@ async function handleApi(req, res, url) {
     }
   }
 
+  if (url === '/api/pdu/reset-stats' && req.method === 'POST') {
+    pduCurrentStats = [];
+    logEvent('action', settings.pdu.name, `Min/max current readings reset by ${who}`);
+    return sendJson(res, 200, { ok: true });
+  }
+
   if (url === '/api/events' && req.method === 'DELETE') {
     events = [];
     eventsDirty = true;
-    logEvent('info', 'PowerHub', `Event log cleared (by ${who})`);
+    logEvent('info', 'Power Monitor', `Event log cleared (by ${who})`);
     return sendJson(res, 200, { ok: true });
   }
 
@@ -1114,7 +1299,7 @@ const server = http.createServer(async (req, res) => {
 
 // ── netBooter telnet console (WebSocket /api/console ↔ TCP telnet) ───────────
 // A plain relay: the person at the console logs in to the netBooter themselves —
-// PowerHub never sends the saved password here, and never logs what is typed.
+// Power Monitor never sends the saved password here, and never logs what is typed.
 // Only one console at a time (the netBooter allows a single telnet session);
 // opening a new one closes the previous one. Idle sessions close after 10 minutes.
 const IAC = 255, DONT = 254, DO = 253, WONT = 252, WILL = 251, SB = 250, SE = 240;
@@ -1230,7 +1415,7 @@ server.on('upgrade', (req, socket, head) => {
 
 // docker stop / restart: save what's in memory first
 function shutdown(signal) {
-  console.log(`[PowerHub] ${signal} — saving and exiting`);
+  console.log(`[Power Monitor] ${signal} — saving and exiting`);
   saveHistory();
   if (sessionsDirty) saveSessions();
   try { fs.writeFileSync(EVENTS_FILE, JSON.stringify(events)); } catch (e) {}
@@ -1240,8 +1425,8 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(HTTP_PORT, () => {
-  console.log(`\n  PowerHub v${VERSION}${MOCK ? '  (MOCK devices)' : ''}`);
+  console.log(`\n  Power Monitor v${VERSION}${MOCK ? '  (MOCK devices)' : ''}`);
   console.log(`  Dashboard:  http://localhost:${HTTP_PORT}\n`);
-  logEvent('info', 'PowerHub', `Server started (v${VERSION})`);
+  logEvent('info', 'Power Monitor', `Server started (v${VERSION})`);
   pollLoop();
 });

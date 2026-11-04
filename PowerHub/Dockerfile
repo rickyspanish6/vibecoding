@@ -1,4 +1,4 @@
-# PowerHub — CyberPower UPS (RMCARD205) + Synaccess netBooter dashboard
+# Power Monitor — CyberPower UPS (RMCARD205) + Synaccess netBooter dashboard
 FROM node:22-alpine
 
 ENV NODE_ENV=production \
