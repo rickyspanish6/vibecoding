@@ -1,6 +1,6 @@
 // --- VERSION 3.3.0 ---
 // Optimized with: Server-side caching, Async GPIO, Error handling, Service alerts, Enhanced weather
-console.log("Starting MTA Dashboard v3.3.0...");
+console.log("Starting MTA Subway Dashboard v3.3.0...");
 
 import express from "express";
 import fetch from "node-fetch";
@@ -708,7 +708,7 @@ async function checkMotionSensor() {
 // Start server
 app.listen(PORT, () => {
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`🚇 MTA Dashboard v3.3.0`);
+  console.log(`🚇 MTA Subway Dashboard v3.3.0`);
   console.log(`${'='.repeat(60)}`);
   console.log(`📍 Server running on http://localhost:${PORT}`);
   console.log(`🌐 Network access: http://${DISCOVERED_IP}:${PORT}`);

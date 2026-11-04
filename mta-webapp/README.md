@@ -1,4 +1,4 @@
-# MTA Dashboard v3.4.0
+# MTA Subway Dashboard v3.4.0
 
 A real-time NYC subway departure dashboard for Raspberry Pi, optimized for 800x480 touchscreen displays.
 

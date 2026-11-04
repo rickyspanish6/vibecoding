@@ -472,7 +472,7 @@ async function usersRoutes(req, res, pathname, actor) {
 // --- Sign-in and first-run pages ------------------------------------------------------------------------------------------
 
 const authPage = ({ intro, fields, button, endpoint, script = '', extra = '' }) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KX Console</title><style>
+<title>KVM Console</title><style>
 :root{--bg:#f6f7f9;--panel:#fff;--line:#e3e6eb;--text:#14181f;--muted:#667085;--accent:#2563eb;--accent-text:#fff}
 @media (prefers-color-scheme:dark){:root{--bg:#0d1016;--panel:#151921;--line:#252b36;--text:#e8ebf0;--muted:#8b95a7;--accent:#5b8cff;--accent-text:#0b1020}}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif}
@@ -481,7 +481,7 @@ h1{margin:0;font-size:18px}p{margin:0;color:var(--muted);font-size:12px}code{bac
 input{padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}input:focus{outline:2px solid var(--accent);outline-offset:-1px}
 button{padding:10px;border:0;border-radius:8px;background:var(--accent);color:var(--accent-text);font:inherit;font-weight:600;cursor:pointer}button:disabled{opacity:.5}
 #e{color:#b42318;min-height:1.2em;font-size:13px}</style></head><body>
-<form id="f"><h1>KX Console</h1><p>${intro}</p>${fields}<div id="e" role="alert"></div><button id="b">${button}</button>${extra}</form>
+<form id="f"><h1>KVM Console</h1><p>${intro}</p>${fields}<div id="e" role="alert"></div><button id="b">${button}</button>${extra}</form>
 <script>f.onsubmit=async(ev)=>{ev.preventDefault();b.disabled=true;e.textContent='';try{${script}
 const r=await fetch('${endpoint}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 const d=await r.json();if(!r.ok)throw new Error(d.error);location.href='/'}catch(x){e.textContent=x.message;b.disabled=false}};</script></body></html>`;
@@ -638,7 +638,7 @@ server.on('upgrade', proxyUpgrade);
 // Exit cleanly when asked to stop (docker stop, systemd, Ctrl-C) instead of dying with a signal status.
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => { console.log(`${signal}: shutting down`); process.exit(0); });
 server.listen(PORT, BIND, () => {
-  console.log(`KX Console v${VERSION} on http://${BIND}:${PORT}${MOCK ? ' (mock data)' : ''}`);
+  console.log(`KVM Console v${VERSION} on http://${BIND}:${PORT}${MOCK ? ' (mock data)' : ''}`);
   if (!auth.hasUsers()) console.log(`No accounts yet: open http://127.0.0.1:${PORT}/setup on this machine to create the administrator${SETUP_TOKEN ? ' (from elsewhere, with the setup code)' : ''}, or run: node auth-cli.js create-admin <user>.`);
   if (!LOOPBACK.includes(BIND)) console.log(`Listening beyond this machine (${BIND}): put HTTPS in front, and set ALLOWED_HOSTS to the name people browse to.`);
 });

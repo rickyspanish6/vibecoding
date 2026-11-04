@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>PowerHub</title>
+<title>Power Monitor</title>
 <link rel="icon" type="image/svg+xml" href="images/icons/icon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="images/icons/favicon-32.png">
 <link rel="apple-touch-icon" href="images/icons/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="PowerHub">
+<meta name="apple-mobile-web-app-title" content="Power Monitor">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0d0f12">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -137,6 +137,11 @@ details.more .inner { padding-top: 12px; display: flex; flex-direction: column; 
 /* ── PDU ── */
 .pdu-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .pdu-summary .metric { flex: 1 1 110px; }
+.sensor-range { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.sensor-chip { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text-2); background: var(--bg-2); border-radius: 8px; padding: 4px 8px; }
+.autoping { margin-top: 16px; display: grid; gap: 8px; }
+.autoping-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.autoping-name { flex: 1 1 180px; min-width: 0; overflow-wrap: anywhere; }
 .outlets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .outlet { position: relative; background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; transition: border-color .2s, background .2s; }
 .outlet.on { border-color: rgba(79,209,139,0.28); }
@@ -328,7 +333,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
   <div class="brand">
     <img src="images/icons/icon-192.png" alt="">
     <div>
-      <div class="brand-name">PowerHub</div>
+      <div class="brand-name">Power Monitor</div>
       <div class="brand-sub" id="versionLabel"></div>
     </div>
   </div>
@@ -448,7 +453,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
       </div>
 
       <div class="pane" id="paneOutlets">
-        <p class="note" style="margin-bottom:14px">Name each outlet after what it powers. <b>Locked</b> outlets can't be turned off from the dashboard, but can still be power-cycled (they come back on by themselves) (use it for the network switch, the server running PowerHub, …).</p>
+        <p class="note" style="margin-bottom:14px">Name each outlet after what it powers. <b>Locked</b> outlets can't be turned off from the dashboard, but can still be power-cycled (they come back on by themselves) (use it for the network switch, the server running Power Monitor, …).</p>
         <div id="outletEditList"></div>
       </div>
 
@@ -522,7 +527,7 @@ body.locked .topbar, body.locked main, body.locked #banners { visibility: hidden
   <form class="auth-box" id="authForm" autocomplete="on">
     <div class="auth-brand">
       <img src="images/icons/icon-192.png" alt="">
-      <h1>PowerHub</h1>
+      <h1>Power Monitor</h1>
       <p id="authLead">Enter the password to continue</p>
     </div>
     <div class="field"><label for="authUser">Username</label><input id="authUser" type="text" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="32" required></div>
@@ -732,6 +737,11 @@ function upsMetrics(d) {
     `<div class="metric${i === tiles.length - 1 && tiles.length % 2 ? ' wide' : ''}"><div class="l">${l}</div><div class="v">${v}</div></div>`).join('');
 }
 
+function pingHealth(a) {
+  if (!a.total) return { cls: '', text: 'no data yet' };
+  return a.echoes === a.total ? { cls: 'ok', text: 'healthy' } : { cls: 'bad', text: `${a.echoes}/${a.total} replies` };
+}
+
 function renderPdu() {
   const p = status.pdu;
   const c = pduCondition(p);
@@ -754,6 +764,7 @@ function renderPdu() {
 
   const stale = p.online === false;
   const onCount = p.outlets.filter(o => o.on).length;
+  const pings = p.outlets.filter(o => o.autoping);
   const total = p.currents.reduce((a, b) => a + b, 0);
   const currentsText = p.currents.length ? `${total.toFixed(2)}<small> A</small>` : '—';
   // The netBooter only measures amps: watts ≈ amps × mains voltage (read from the UPS, else 120 V nominal)
@@ -769,6 +780,11 @@ function renderPdu() {
       <div class="metric" title="${wattsHint}"><div class="l">Power ≈</div><div class="v">${wattsText}</div></div>
       ${p.tempC != null ? `<div class="metric"><div class="l">Temperature</div><div class="v">${fmt(p.tempC, '°C')}</div></div>` : ''}
     </div>
+    ${p.currentStats?.length ? `<div class="sensor-range">
+      <span class="note">Lowest and highest since reset:</span>
+      ${p.currentStats.map((s, i) => `<span class="sensor-chip">${p.currentStats.length > 1 ? `Sensor ${i + 1}: ` : ''}${s.min.toFixed(2)} – ${s.max.toFixed(2)} A</span>`).join('')}
+      <button class="btn small" id="resetStats">Reset</button>
+    </div>` : ''}
     <div class="btn-row" style="margin-bottom:14px">
       <button class="btn good" id="allOn" ${stale || busy.has('all') ? 'disabled' : ''}>${ICONS.power}All on</button>
       <button class="btn danger" id="allOff" ${stale || busy.has('all') ? 'disabled' : ''}>${ICONS.power}All off</button>
@@ -777,13 +793,15 @@ function renderPdu() {
       ${p.outlets.map(o => {
         const b = busy.has('outlet:' + o.n) || busy.has('all');
         const cls = o.rebooting ? 'rebooting' : o.on ? 'on' : '';
-        const stateText = o.rebooting ? 'Power-cycling…' : o.on ? 'On' : 'Off';
+        const stateText = o.rebooting ? (o.rebootLeft ? `Power-cycling… ${o.rebootLeft}s` : 'Power-cycling…') : o.on ? 'On' : 'Off';
+        const ping = o.autoping ? pingHealth(o.autoping) : null;
         const lockedBlocksOff = o.locked && o.on;
         return `
         <div class="outlet ${cls}">
           <div class="outlet-top">
             <span class="outlet-num">${o.n}</span>
             <span class="outlet-name ${o.name ? '' : 'unnamed'}" title="${esc(o.name)}">${esc(o.name || 'Outlet ' + o.n)}</span>
+            ${ping ? `<span class="dot ${ping.cls}" title="AutoPing ${esc(o.autoping.target)}: ${esc(ping.text)}"></span>` : ''}
             ${o.locked ? `<span class="outlet-lock" title="Locked — can be power-cycled, but not turned off from here">${ICONS.lock}</span>` : ''}
           </div>
           <div class="outlet-bottom">
@@ -793,8 +811,20 @@ function renderPdu() {
           </div>
         </div>`;
       }).join('')}
-    </div>`;
+    </div>
+    ${pings.length ? `<div class="autoping">
+      <div class="card-kind">AutoPing</div>
+      ${pings.map(o => {
+        const a = o.autoping, ph = pingHealth(a);
+        return `<div class="autoping-row">
+          <span class="dot ${ph.cls}"></span>
+          <span class="autoping-name">${esc(o.name || 'Outlet ' + o.n)} <span class="note">→ ${esc(a.target)}</span></span>
+          <span class="note">${a.total != null ? `${a.echoes}/${a.total} replies` : 'no data yet'} · ${a.reboots ?? 0} reboots</span>
+        </div>`;
+      }).join('')}
+    </div>` : ''}`;
 
+  if ($('resetStats')) $('resetStats').onclick = resetPduStats;
   $('allOn').onclick = () => pduAll('on');
   $('allOff').onclick = () => pduAll('off');
   $('pduCard').querySelectorAll('[data-toggle]').forEach(el => el.onclick = () => {
@@ -848,7 +878,7 @@ async function upsCommand(action, title, text, okLabel, danger) {
     const r = await api('POST', '/api/ups/action', { action });
     if (r.ok) toast('Command sent to the UPS');
     else toast(r.message || 'The UPS refused the command', true);
-  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  } catch (e) { toast('Could not reach Power Monitor: ' + e.message, true); }
   busy.delete('ups:' + action);
   refresh();
 }
@@ -861,8 +891,16 @@ async function outletCommand(o, action) {
     const r = await api('POST', '/api/pdu/outlet', { outlet: o.n, action });
     if (!r.ok) toast(r.message || 'Command failed', true);
     else if (action === 'reboot') toast(`Power-cycling ${o.name || 'outlet ' + o.n}`);
-  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  } catch (e) { toast('Could not reach Power Monitor: ' + e.message, true); }
   busy.delete('outlet:' + o.n);
+  refresh();
+}
+
+async function resetPduStats() {
+  try {
+    const r = await api('POST', '/api/pdu/reset-stats', {});
+    if (!r.ok) toast(r.message || 'Command failed', true);
+  } catch (e) { toast('Could not reach Power Monitor: ' + e.message, true); }
   refresh();
 }
 
@@ -876,7 +914,7 @@ async function pduAll(want) {
   try {
     const r = await api('POST', '/api/pdu/all', { state: want });
     if (!r.ok) toast(r.message || 'Command failed', true);
-  } catch (e) { toast('Could not reach PowerHub: ' + e.message, true); }
+  } catch (e) { toast('Could not reach Power Monitor: ' + e.message, true); }
   busy.delete('all');
   refresh();
 }
@@ -899,7 +937,7 @@ async function refresh() {
   } catch (e) {
     if (++failCount >= 2) {
       $('overallDot').className = 'dot bad';
-      $('overallText').textContent = 'PowerHub offline';
+      $('overallText').textContent = 'Power Monitor offline';
     }
   }
   if (signedIn) refreshTimer = setTimeout(refresh, document.hidden ? 10000 : 2000);
@@ -1219,7 +1257,7 @@ function drawPower() {
   if (!hasData) {
     const empty = document.createElement('div');
     empty.className = 'pw-empty';
-    empty.textContent = 'No readings in this period yet — PowerHub records power every minute.';
+    empty.textContent = 'No readings in this period yet — Power Monitor records power every minute.';
     $('pwChart').appendChild(empty);
     renderPowerTable();
     return;
@@ -1370,7 +1408,7 @@ function showAuth(mode) {
   $('confirmOverlay').classList.remove('open');
   authMode = mode;
   const setup = mode === 'setup';
-  $('authLead').textContent = setup ? 'Create the first user to protect PowerHub' : 'Sign in to continue';
+  $('authLead').textContent = setup ? 'Create the first user to protect Power Monitor' : 'Sign in to continue';
   $('authPasswordLabel').textContent = setup ? 'New password (at least 8 characters)' : 'Password';
   $('authPassword').autocomplete = setup ? 'new-password' : 'current-password';
   $('authConfirmField').hidden = !setup;
@@ -1412,7 +1450,7 @@ $('authForm').addEventListener('submit', async e => {
     if (r.ok) enterApp(r.user);
     else $('authError').textContent = r.message || 'Could not sign in';
   } catch (err) {
-    $('authError').textContent = 'Could not reach PowerHub';
+    $('authError').textContent = 'Could not reach Power Monitor';
   }
   $('authSubmit').disabled = false;
 });
@@ -1521,7 +1559,7 @@ $('addUser').onclick = async () => {
     else showAuth(a.usersExist ? 'login' : 'setup');
   } catch (e) {
     showAuth('login');
-    $('authError').textContent = 'Could not reach PowerHub';
+    $('authError').textContent = 'Could not reach Power Monitor';
   }
 })();
 </script>

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Blocks automatic Windows updates but keeps driver updates available on demand.
+  Windows Update Blocker: blocks automatic Windows updates but keeps driver updates available on demand.
 
 .DESCRIPTION
   -Disable      Apply policies: no automatic updates, feature-update version pinned,

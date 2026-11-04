@@ -1,4 +1,4 @@
-# 25 Broadway — Experience Controller
+# 25 Broadway AV Control
 # Single container: dashboard HTML + Barco WS↔TCP bridge + Matrox HTTPS proxy + settings store
 
 FROM node:22-alpine

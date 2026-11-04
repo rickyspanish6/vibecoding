@@ -1,13 +1,13 @@
 <img src="images/icons/icon-192.png" width="96" alt="App icon">
 
-# PowerHub · v3.1.1
+# Power Monitor · v3.2.0
 
 A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card) and a **Synaccess netBooter NP-1601DU** switched PDU. Open it from any browser, iPad or iPhone on the network to:
 
 - see whether the building has power, the UPS battery level, the remaining runtime and the load
 - run a UPS self-test, and reboot or turn the UPS output off and on
 - switch each of the 16 netBooter outlets on or off, power-cycle them, or switch them all at once
-- name the outlets and **lock** the critical ones (modem, router, network switch, the server running PowerHub, …) so nobody can turn them off from the dashboard — they can still be power-cycled
+- name the outlets and **lock** the critical ones (modem, router, network switch, the server running Power Monitor, …) so nobody can turn them off from the dashboard — they can still be power-cycled
 - open the netBooter's own command line (telnet) in a **Console** window, right in the dashboard
 - give each person their own **username and password** (everyone has the same rights; the event log shows who did what), and stay signed in for 30 days on each device
 - track **power usage over time** on a graph (last hour to last year), with average, peak and energy used (kWh)
@@ -18,7 +18,7 @@ A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card
           │  http://<server>:8090
           ▼
  ┌──────────────────────────┐
- │  PowerHub server         │  Docker container running server.js
+ │  Power Monitor server         │  Docker container running server.js
  │  • serves the dashboard  │  • polls both devices, stores settings + event log
  └──────────────────────────┘
         │                         │
@@ -28,7 +28,7 @@ A web dashboard for a **CyberPower UPS** (through its **RMCARD205** network card
  UDP 161                     telnet console (TCP 23)
 ```
 
-Screens never talk to the equipment directly, so only the PowerHub server needs to reach the devices.
+Screens never talk to the equipment directly, so only the Power Monitor server needs to reach the devices.
 
 ---
 
@@ -43,7 +43,7 @@ Screens never talk to the equipment directly, so only the PowerHub server needs 
 ### Install
 
 ```bash
-cd vibecoding/PowerHub
+cd vibecoding/Power Monitor
 ```
 ```bash
 docker compose up -d --build
@@ -59,17 +59,17 @@ Without Docker: `npm install`, then `npm start`.
 
 **RMCARD205** (card's web page):
 1. **Network Service › SNMPv1 Service**: enable SNMPv1.
-2. Set a **read community** (default `public`) and a **write community** (default `private`), and allow the PowerHub server's IP address — or `0.0.0.0` for any — in the access list. Write access is only needed for self-test and power commands.
+2. Set a **read community** (default `public`) and a **write community** (default `private`), and allow the Power Monitor server's IP address — or `0.0.0.0` for any — in the access list. Write access is only needed for self-test and power commands.
 
 **netBooter NP-1601DU** (its web page):
 1. Note its address (factory default `192.168.1.100`) and login (factory default `admin` / `admin` — change it).
-2. Set the **reboot delay** there; PowerHub's power-cycle uses it.
-3. DU models can also use HTTPS; PowerHub accepts the netBooter's self-signed certificate.
-4. Avoid leaving the netBooter's own web page open: while it is, the netBooter barely answers PowerHub, and PowerHub may show it as not responding. Use PowerHub (or its Console) instead.
+2. Set the **reboot delay** there; Power Monitor's power-cycle uses it.
+3. DU models can also use HTTPS; Power Monitor accepts the netBooter's self-signed certificate.
+4. Avoid leaving the netBooter's own web page open: while it is, the netBooter barely answers Power Monitor, and Power Monitor may show it as not responding. Use Power Monitor (or its Console) instead.
 
-### Configure PowerHub
+### Configure Power Monitor
 
-The first time you open PowerHub it asks you to **create the first user** (username, default `admin`, and a password of at least 8 characters). Do this straight away after installing: until a user exists, whoever opens the page first gets to create it. Add everyone else in **Settings › Users**.
+The first time you open Power Monitor it asks you to **create the first user** (username, default `admin`, and a password of at least 8 characters). Do this straight away after installing: until a user exists, whoever opens the page first gets to create it. Add everyone else in **Settings › Users**.
 
 Then open **Settings** (gear icon, top right):
 
@@ -90,9 +90,9 @@ The UPS write community and the netBooter password are stored on the server and 
 - **Top right**: one overall status: *All good*, *Check UPS* (e.g. battery needs replacing), *On battery* or *Needs attention*. A red banner appears across the top during a power failure.
 - **UPS card**: battery %, runtime, load, input/output voltage, temperature. Self-test, reboot/off/on and runtime calibration are under **Power controls & details**, together with model, serial and firmware.
 - **netBooter card**: total current draw and its approximate wattage, temperature, **All on / All off**, and one tile per outlet with a switch and a power-cycle button.
-- **Power usage** (bottom): UPS output watts and netBooter watts over the last hour, 24 hours, 7 days, 30 days or year, with the average, peak and energy (kWh) for the period. Hover (or focus the graph and use ←/→) to read exact values; **Show table** lists every point. Gaps in the lines are periods without readings (e.g. PowerHub was off). The netBooter only measures current, so its watts are amps × the mains voltage from the UPS. If the netBooter is plugged into the UPS, its load is part of the UPS output too — don't add the two.
+- **Power usage** (bottom): UPS output watts and netBooter watts over the last hour, 24 hours, 7 days, 30 days or year, with the average, peak and energy (kWh) for the period. Hover (or focus the graph and use ←/→) to read exact values; **Show table** lists every point. Gaps in the lines are periods without readings (e.g. Power Monitor was off). The netBooter only measures current, so its watts are amps × the mains voltage from the UPS. If the netBooter is plugged into the UPS, its load is part of the UPS output too — don't add the two.
 - **Top right**: who you're signed in as, and the sign-out button.
-- **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (PowerHub doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
+- **Console** (netBooter card header): the netBooter's telnet command line in a terminal window. Log in with the netBooter's username and password (Power Monitor doesn't do it for you), then use e.g. `pshow`, `pset 3 1`, `rb 4`, `sysshow`, `ver`, `logout`. The buttons under the terminal send common commands. Only one console can be open at a time (opening one elsewhere closes the other), and it closes after 10 minutes without activity. **Local echo** and **Backspace = ^H** are there in case typing doesn't show or Backspace doesn't erase.
 - Turning a single outlet off is immediate; power-cycling, **All off** and the UPS power controls ask for confirmation first. Locked outlets can be turned on and power-cycled, but not turned off; **All off** skips them.
 
 ---
@@ -108,7 +108,7 @@ The UPS write community and the netBooter password are stored on the server and 
 | `settings.json` | Saved settings (created on first save; in the Docker volume at `/data`) |
 | `events.json` | Last 500 events (same place) |
 | `sessions.json` | Signed-in devices (only a hash of each session token; same place) |
-| `history.json` | Power history: 1-minute averages for 7 days, hourly averages for ~13 months (under 1 MB; same place). Saved every 5 minutes and when PowerHub stops |
+| `history.json` | Power history: 1-minute averages for 7 days, hourly averages for ~13 months (under 1 MB; same place). Saved every 5 minutes and when Power Monitor stops |
 
 Environment: `PORT` (default 8090), `DATA_DIR` (default: app folder; `/data` in Docker), `MOCK=1`.
 
@@ -125,7 +125,7 @@ Environment: `PORT` (default 8090), `DATA_DIR` (default: app folder; `/data` in 
 | Output status | `.4.1.1` | | | | |
 | Output V / load % / A / W | `.4.2.1` / `.4.2.3` / `.4.2.4` / `.4.2.5` | | | | |
 
-If the UPS model lacks some objects, PowerHub reads the rest one by one and shows "—" for the missing ones.
+If the UPS model lacks some objects, Power Monitor reads the rest one by one and shows "—" for the missing ones.
 
 ### Synaccess netBooter — HTTP
 
@@ -165,7 +165,7 @@ Everything except `/api/health` and `/api/auth/*` needs a signed-in session (the
 | GET / DELETE | `/api/events` | — |
 | WebSocket | `/api/console` | JSON messages `{ type: 'data', data }` both ways; the server also sends `{ type: 'status', state, message }`. Same-origin and signed-in only |
 
-The console is a plain relay to the netBooter's telnet port. PowerHub strips telnet control codes, never sends the saved password to it, and never records what is typed (the event log only notes when a console opens and closes). The terminal emulator is [xterm.js](https://xtermjs.org), served from the app itself.
+The console is a plain relay to the netBooter's telnet port. Power Monitor strips telnet control codes, never sends the saved password to it, and never records what is typed (the event log only notes when a console opens and closes). The terminal emulator is [xterm.js](https://xtermjs.org), served from the app itself.
 
 ### Security
 
@@ -173,7 +173,7 @@ The console is a plain relay to the netBooter's telnet port. PowerHub strips tel
 - Passwords are stored as salted scrypt hashes in `settings.json`; they are never stored or sent back in clear. A wrong username and a wrong password give the same answer and take the same time.
 - Signing in sets an HttpOnly, SameSite=Strict cookie valid for 30 days after the last visit. Signing out, changing a password, removing a user or **Sign out my other devices** ends sessions immediately.
 - Each wrong password waits 1 s; after 10 wrong passwords within 10 minutes, signing in is paused for 10 minutes (for everyone, since behind Docker all browsers share one address).
-- PowerHub serves plain HTTP, so the password crosses your network unencrypted — keep it on a trusted network, or put it behind a reverse proxy with HTTPS.
+- Power Monitor serves plain HTTP, so the password crosses your network unencrypted — keep it on a trusted network, or put it behind a reverse proxy with HTTPS.
 
 **Forgot a password?** Another user can set a new one in **Settings › Users**. If nobody can sign in, on the server:
 
@@ -194,24 +194,29 @@ The first command prints a new random password for that user (default `admin`) a
 
 ## Changelog
 
+### 3.2.0 — 2026-11-03
+- Renamed PowerHub to **Power Monitor** (display name only; the folder, container and service are still `powerhub`).
+- Merged the features of the separate netBooter web app: outlet names read from the netBooter when none is set here, AutoPing targets and counters, lowest and highest current per sensor with a reset, and a countdown while an outlet power-cycles (`pdu.rebootSeconds` in `settings.json`, default 15).
+- `POST /api/pdu/reset-stats` clears the current readings.
+
 ### 3.1.1 — 2026-09-25
 - The event log fills the space under the UPS card, so it ends level with the netBooter card; older events scroll inside it.
 
 ### 3.1.0 — 2026-09-25
 - **Power usage graph**: UPS output and netBooter watts over 1 hour / 24 hours / 7 days / 30 days / 1 year, with average, peak and energy (kWh), a hover/keyboard crosshair with both values, and a table view. Recorded every poll, stored as 1-minute averages (7 days) and hourly averages (~13 months) in `history.json`.
-- PowerHub now saves its history, sessions and event log when the container stops.
+- Power Monitor now saves its history, sessions and event log when the container stops.
 
 ### 3.0.1 — 2026-09-25
 - Settings keeps the same size on every tab: the tab bar stays put and only the content below it scrolls, with a visible scrollbar.
 
 ### 3.0.0 — 2026-09-25
 - **Users**: each person signs in with their own username and password; all users have the same rights. Settings › Users (replaces Security) to change your password, sign out your other devices, and add users, set their passwords or remove them. The top bar shows who is signed in, and the event log records actions *by* user.
-- The existing PowerHub password becomes the **admin** account automatically, and devices already signed in stay signed in as admin.
+- The existing Power Monitor password becomes the **admin** account automatically, and devices already signed in stay signed in as admin.
 - `--reset-password [username]` now prints a new password for one user instead of removing all passwords.
 - **Breaking (API):** `/api/auth/setup` and `/api/auth/login` take `{ username, password }`; `/api/auth/status` returns `{ usersExist, authenticated, user }` instead of `passwordSet`; new `/api/users` endpoints.
 
 ### 2.0.0 — 2026-09-25
-- **Password protection**: PowerHub asks to create a password on first visit, then requires signing in (30-day sessions per device). Sign-out button in the top bar; Settings › Security to change the password or sign out other devices; `--reset-password` for a forgotten password.
+- **Password protection**: Power Monitor asks to create a password on first visit, then requires signing in (30-day sessions per device). Sign-out button in the top bar; Settings › Security to change the password or sign out other devices; `--reset-password` for a forgotten password.
 - **Breaking (API):** every API endpoint and the console now need a signed-in session; new `/api/auth/*` endpoints and `/api/health` (the Docker health check now uses it).
 - Requests that change something are refused when they come from another website.
 

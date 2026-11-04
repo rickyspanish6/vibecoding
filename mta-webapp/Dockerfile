@@ -1,4 +1,4 @@
-# MTA Dashboard: Express server plus static front end
+# MTA Subway Dashboard: Express server plus static front end
 FROM node:22-alpine
 
 ENV NODE_ENV=production \

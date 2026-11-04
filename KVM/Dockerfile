@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# KX Console: web front end for a Raritan Dominion KX III. No npm dependencies, so there is no build step.
+# KVM Console: web front end for a Raritan Dominion KX III. No npm dependencies, so there is no build step.
 FROM node:22-alpine
 
 # net-snmp-tools: snmpbulkwalk / snmpget read the KX's port table.

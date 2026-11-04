@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KX Console</title>
+<title>KVM Console</title>
 <style>
   :root {
     --bg: #f6f7f9; --panel: #fff; --line: #e3e6eb; --text: #14181f; --muted: #667085;
@@ -130,7 +130,7 @@
 </head>
 <body>
 <aside>
-  <div class="brand"><div><h1 id="dev">KX Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p id="who" hidden><a class="link" id="account" href="#">Account</a> · <a class="link" id="signout" href="/login">Sign out</a></p></div>
+  <div class="brand"><div><h1 id="dev">KVM Console</h1><p id="sub">Connecting…</p><p id="ver"></p><p id="who" hidden><a class="link" id="account" href="#">Account</a> · <a class="link" id="signout" href="/login">Sign out</a></p></div>
     <button class="icon" id="cfgBtn" title="Settings: power devices, users and rights" aria-label="Settings">⚙︎</button></div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search targets  ( / )" aria-label="Search targets">
@@ -402,7 +402,7 @@ async function load() {
     if (!r.ok) throw new Error(data.error);
     ports = data.ports; device = data.device; $('err').style.display = 'none';
     if (selected == null) selected = ports.find((p) => p.up)?.id ?? null;
-    $('ver').textContent = `KX Console v${data.version}`;
+    $('ver').textContent = `KVM Console v${data.version}`;
     $('dev').textContent = data.device.name; $('sub').textContent = `${data.device.model} · ${data.device.host}`;
     renderList(); renderDetail(); checkLink(data.rfbOpen);
   } catch (e) { $('err').textContent = e.message; $('err').style.display = 'block'; }
